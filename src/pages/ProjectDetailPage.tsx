@@ -1,0 +1,173 @@
+import { useParams, Link } from 'react-router-dom';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { mockProjects } from '@/data/mockData';
+import { StatusBadge } from '@/components/shared/StatusBadge';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, MessageSquare, Plug } from 'lucide-react';
+import { toast } from 'sonner';
+
+const tabs = [
+  { id: 'overview', label: 'סקירה', icon: FileText },
+  { id: 'script', label: 'סקריפט', icon: FileText },
+  { id: 'scenes', label: 'סצנות', icon: Layers },
+  { id: 'outputs', label: 'תוצאות', icon: PlayCircle },
+  { id: 'timeline', label: 'ציר זמן', icon: Clock },
+  { id: 'versions', label: 'גרסאות', icon: GitBranch },
+];
+
+export default function ProjectDetailPage() {
+  const { id } = useParams();
+  const project = mockProjects.find(p => p.id === id);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  if (!project) return <AppLayout><div className="text-center py-20"><p className="text-muted-foreground">הפרויקט לא נמצא</p></div></AppLayout>;
+
+  return (
+    <AppLayout>
+      <div className="space-y-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-rubik font-bold flex items-center gap-3">{project.name} <StatusBadge status={project.status} size="md" /></h1>
+            <p className="text-muted-foreground text-sm mt-1">{project.avatarName} • {project.videoType} • {project.aspectRatio} • גרסה {project.currentVersion}</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {project.tags.map(t => <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">{t}</span>)}
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
+            <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Copy className="w-3.5 h-3.5" /> שכפול</button>
+            <button onClick={() => toast.info('המערכת מכינה את הבקשה...')} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><RefreshCw className="w-3.5 h-3.5" /> יצירה מחדש</button>
+            <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Archive className="w-3.5 h-3.5" /> ארכוב</button>
+          </div>
+        </div>
+
+        {/* Video Preview */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="aspect-video bg-muted flex items-center justify-center max-h-64">
+            <div className="text-center">
+              <Video className="w-16 h-16 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">תצוגה מקדימה של הסרטון</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-border overflow-x-auto">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={cn('flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap',
+                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+              <tab.icon className="w-4 h-4" />{tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <h3 className="font-semibold text-sm">פרטי פרויקט</h3>
+              {[['סוג סרטון', project.videoType], ['אווטאר', project.avatarName], ['ספק', project.provider || '—'], ['יחס מסך', project.aspectRatio], ['תאריך יצירה', project.createdAt]].map(([l, v]) => (
+                <div key={l} className="flex justify-between text-sm"><span className="text-muted-foreground">{l}</span><span>{v}</span></div>
+              ))}
+            </div>
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <h3 className="font-semibold text-sm">תוכן</h3>
+              <p className="text-sm text-muted-foreground">{project.content.whatToSay || '—'}</p>
+              {project.content.cta && <p className="text-sm"><span className="text-muted-foreground">CTA:</span> {project.content.cta}</p>}
+              {project.content.targetAudience && <p className="text-sm"><span className="text-muted-foreground">קהל יעד:</span> {project.content.targetAudience}</p>}
+            </div>
+            {project.enhancedPrompt && (
+              <div className="md:col-span-2 bg-card border border-border rounded-lg p-4">
+                <h3 className="font-semibold text-sm mb-2">פרומפט משופר</h3>
+                <p className="text-sm text-muted-foreground">{project.enhancedPrompt}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'script' && (
+          <div className="bg-card border border-border rounded-lg p-6">
+            <h3 className="font-semibold mb-3">סקריפט</h3>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{project.script || 'אין סקריפט עדיין'}</p>
+          </div>
+        )}
+
+        {activeTab === 'scenes' && (
+          <div className="space-y-3">
+            {project.scenes.length > 0 ? project.scenes.map((s, i) => (
+              <div key={s.id} className="bg-card border border-border rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">סצנה {i + 1}</span>
+                  <span className="font-medium text-sm">{s.title}</span>
+                  <span className="text-xs text-muted-foreground mr-auto">{s.duration} שניות • {s.shotType}</span>
+                </div>
+                {s.spokenText && <p className="text-sm mb-1"><span className="text-muted-foreground">טקסט:</span> {s.spokenText}</p>}
+                {s.visualDescription && <p className="text-sm"><span className="text-muted-foreground">ויזואל:</span> {s.visualDescription}</p>}
+              </div>
+            )) : <p className="text-center py-10 text-muted-foreground">אין סצנות בפרויקט זה</p>}
+          </div>
+        )}
+
+        {activeTab === 'outputs' && (
+          <div className="space-y-3">
+            {project.outputs.length > 0 ? project.outputs.map(o => (
+              <div key={o.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{o.name}</p>
+                  <p className="text-xs text-muted-foreground">{o.description} • {o.estimatedLength} • {o.createdAt}</p>
+                </div>
+                <StatusBadge status={o.status} />
+              </div>
+            )) : <p className="text-center py-10 text-muted-foreground">אין תוצאות עדיין</p>}
+          </div>
+        )}
+
+        {activeTab === 'timeline' && (
+          <div className="space-y-0">
+            {project.timeline.map((t, i) => (
+              <div key={t.id} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 rounded-full bg-primary flex-shrink-0" />
+                  {i < project.timeline.length - 1 && <div className="w-0.5 h-full bg-border" />}
+                </div>
+                <div className="pb-6">
+                  <p className="text-sm font-medium">{t.description}</p>
+                  <p className="text-xs text-muted-foreground">{t.timestamp}</p>
+                  <StatusBadge status={t.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'versions' && (
+          <div className="space-y-2">
+            {project.versions.map(v => (
+              <div key={v.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">גרסה {v.version}</p>
+                  <p className="text-xs text-muted-foreground">{v.changes} • {v.createdAt}</p>
+                </div>
+                <StatusBadge status={v.status} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="font-rubik font-semibold mb-3">פעולות מהירות</h3>
+          <div className="flex flex-wrap gap-2">
+            {['שנה רק Hook', 'שנה רק CTA', 'צור 3 גרסאות', 'צור וריאציה', 'החלף סגנון', 'צור מחדש עם ספק אחר'].map(action => (
+              <button key={action} onClick={() => toast.info(`${action} - פעולה תתבצע בעתיד`)}
+                className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted hover:border-primary/30 transition-colors">
+                {action}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
