@@ -2,28 +2,48 @@ import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Wand2, Copy, FileText, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
-const mockVariations = [
-  { type: 'גרסת מכירה', text: 'עצרו הכל! 🛑 יש לנו משהו שישנה לכם את העסק. תארו לעצמכם שאתם יכולים ליצור סרטון מקצועי ב-3 דקות, בלי צלם, בלי עורך, בלי סטודיו. פשוט כותבים מה לומר - ומקבלים סרטון מוכן. הצטרפו עכשיו ותקבלו 50% הנחה!' },
-  { type: 'גרסת UGC', text: 'אוקיי חברים אני חייב לספר לכם על הדבר הזה... ניסיתי לעשות סרטון לעסק שלי וחשבתי שזה ייקח לי שבוע. הכנסתי טקסט, בחרתי דמות, ובום - סרטון מטורף תוך 3 דקות! אתם מוכרחים לנסות 🤯' },
-  { type: 'גרסת תוכן אישי', text: 'היי, אני רוצה לשתף אתכם בכלי שמשנה לי את כל העבודה. כבעל עסק, תמיד הייתי צריך לשלם אלפי שקלים על סרטונים. עכשיו אני מייצר תוכן מקצועי בעצמי, כל יום, בלי צוות. אם גם אתם רוצים - הכנסו לפרטים בלינק.' },
-];
+interface Variation {
+  type: string;
+  text: string;
+}
 
 export default function PromptGeneratorPage() {
   const [input, setInput] = useState('');
-  const [results, setResults] = useState<typeof mockVariations>([]);
+  const [results, setResults] = useState<Variation[]>([]);
   const [loading, setLoading] = useState(false);
   const [enhanced, setEnhanced] = useState('');
 
-  const handleEnhance = () => {
+  const handleEnhance = async () => {
     if (!input.trim()) { toast.error('נא להזין רעיון לשיפור'); return; }
     setLoading(true);
-    setTimeout(() => {
-      setEnhanced(`הוק: ${input.split(' ').slice(0, 5).join(' ')}...?\n\nגוף: ${input}\n\nהוכחה: מעל 10,000 משתמשים מרוצים כבר נהנים מהפתרון.\n\nCTA: התחילו עכשיו - בחינם לתקופת ניסיון!`);
-      setResults(mockVariations);
+    setEnhanced('');
+    setResults([]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+        body: { text: input, type: 'enhance' },
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setEnhanced(data.enhanced || '');
+      setResults(data.variations || []);
+      if (data.variations?.length > 0) {
+        toast.success(`נוצרו עבורך ${data.variations.length} וריאציות`);
+      }
+    } catch (err: any) {
+      console.error('Enhance error:', err);
+      toast.error('אירעה שגיאה, נסה שוב');
+    } finally {
       setLoading(false);
-      toast.success('נוצרו עבורך 3 וריאציות');
-    }, 1500);
+    }
   };
 
   return (
@@ -31,7 +51,7 @@ export default function PromptGeneratorPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-rubik font-bold flex items-center gap-2"><Wand2 className="w-6 h-6 text-primary" /> מחולל פרומפטים</h1>
-          <p className="text-muted-foreground text-sm mt-1">הכניסו רעיון גולמי וקבלו בריף מסודר עם וריאציות מותאמות</p>
+          <p className="text-muted-foreground text-sm mt-1">הכניסו רעיון גולמי וקבלו בריף מסודר עם וריאציות מותאמות – מופעל על ידי AI</p>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
@@ -42,7 +62,7 @@ export default function PromptGeneratorPage() {
           <button onClick={handleEnhance} disabled={loading}
             className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 hover:opacity-90 disabled:opacity-50">
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {loading ? 'המערכת עובדת...' : 'שפר לי את הבריף'}
+            {loading ? 'ה-AI עובד על זה...' : 'שפר לי את הבריף'}
           </button>
         </div>
 
@@ -80,8 +100,8 @@ export default function PromptGeneratorPage() {
                 <p className="text-sm leading-relaxed">{r.text}</p>
               </div>
             ))}
-            <button onClick={handleEnhance} className="w-full py-2.5 border border-border rounded-lg text-sm hover:bg-muted transition-colors flex items-center justify-center gap-2">
-              <RefreshCw className="w-4 h-4" /> צור עוד וריאציות
+            <button onClick={handleEnhance} disabled={loading} className="w-full py-2.5 border border-border rounded-lg text-sm hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> צור עוד וריאציות
             </button>
           </div>
         )}
