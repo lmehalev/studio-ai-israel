@@ -2,3 +2,9 @@ project_id = "fyfqyeouyxotohtxlbdg"
 
 [functions.enhance-prompt]
 verify_jwt = false
+
+[functions.text-to-speech]
+verify_jwt = false
+
+[functions.heygen-video]
+verify_jwt = false
