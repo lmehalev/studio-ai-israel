@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Wand2, Copy, FileText, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface Variation {
   type: string;
