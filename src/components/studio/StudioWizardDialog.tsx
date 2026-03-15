@@ -628,7 +628,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 3 && result?.videoUrl) return <ResultView />;
+      if (wizardStep === 3 && result?.videoUrl) return renderResultView();
     }
 
     // ====== VIDEO AI ======
