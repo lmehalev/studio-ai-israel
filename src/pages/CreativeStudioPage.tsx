@@ -2,18 +2,16 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useEffect } from 'react';
 import {
-  Plus, Trash2, Building2, Wand2
+  Plus, Trash2, Building2, Wand2, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { brandService, type Brand } from '@/services/creativeService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { StudioActionCards, type StudioAction } from '@/components/studio/StudioActionCards';
-import { WizardFlow } from '@/components/studio/WizardFlow';
+import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
 export default function CreativeStudioPage() {
-  // Selected action (null = show action cards)
-  const [selectedAction, setSelectedAction] = useState<StudioAction | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -66,14 +64,14 @@ export default function CreativeStudioPage() {
   return (
     <AppLayout>
       <GuidedTour />
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-rubik font-bold flex items-center gap-2">
             <Wand2 className="w-6 h-6 text-primary" />
             סטודיו קריאייטיב
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">בחר פעולה ואנחה אותך צעד אחר צעד</p>
+          <p className="text-muted-foreground text-sm mt-1">צור תוכן שיווקי מקצועי בלחיצת כפתור</p>
         </div>
 
         {/* Brand Selector */}
@@ -109,7 +107,6 @@ export default function CreativeStudioPage() {
                       />
                     </div>
                   ))}
-                  {/* Departments */}
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">מחלקות / תתי-חברות</label>
                     <div className="flex gap-2">
@@ -181,17 +178,33 @@ export default function CreativeStudioPage() {
           )}
         </div>
 
-        {/* Main content: Action cards OR Wizard */}
-        {!selectedAction ? (
-          <StudioActionCards onSelect={setSelectedAction} />
-        ) : (
-          <WizardFlow
-            action={selectedAction}
-            activeBrand={activeBrand}
-            onBack={() => setSelectedAction(null)}
-            buildPrompt={buildPrompt}
-          />
-        )}
+        {/* Big CTA */}
+        <div className="flex flex-col items-center justify-center py-12 space-y-6">
+          <div className="w-20 h-20 rounded-3xl gradient-gold flex items-center justify-center shadow-gold">
+            <Sparkles className="w-10 h-10 text-primary-foreground" />
+          </div>
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-rubik font-bold">מה תרצה ליצור היום?</h2>
+            <p className="text-muted-foreground text-sm max-w-md">
+              לחץ על הכפתור ואנחה אותך צעד אחר צעד — תמונות, סרטונים, אווטארים, דיבוב, תסריטים וכתוביות
+            </p>
+          </div>
+          <button
+            onClick={() => setWizardOpen(true)}
+            className="gradient-gold text-primary-foreground px-10 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 shadow-gold hover:scale-[1.03] transition-transform"
+          >
+            <Wand2 className="w-6 h-6" />
+            בוא נתחיל
+          </button>
+        </div>
+
+        {/* Wizard Dialog */}
+        <StudioWizardDialog
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          activeBrand={activeBrand}
+          buildPrompt={buildPrompt}
+        />
       </div>
     </AppLayout>
   );
