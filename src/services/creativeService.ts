@@ -28,15 +28,41 @@ export const voiceService = {
       body: { text, voiceId },
     });
     if (error) throw new Error(error.message || "שגיאה ביצירת קול");
-    
-    // The edge function returns audio/mpeg as ArrayBuffer
-    // Convert to blob URL for playback
     if (data instanceof Blob) {
       return URL.createObjectURL(data);
     }
-    // If it's JSON with error
     if (data?.error) throw new Error(data.error);
     throw new Error("תגובה לא צפויה מהשרת");
+  },
+};
+
+// ====== D-ID Avatar Service ======
+export const didService = {
+  createTalk: async (imageUrl: string, text: string, voiceId?: string): Promise<{ id: string; status: string }> => {
+    const { data, error } = await supabase.functions.invoke("did-avatar", {
+      body: { action: "create_talk", imageUrl, text, voiceId },
+    });
+    if (error) throw new Error(error.message || "שגיאה ביצירת אווטאר מדבר");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  checkStatus: async (talkId: string): Promise<{ status: string; resultUrl: string | null; thumbnailUrl: string | null }> => {
+    const { data, error } = await supabase.functions.invoke("did-avatar", {
+      body: { action: "check_status", talkId },
+    });
+    if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  listPresenters: async () => {
+    const { data, error } = await supabase.functions.invoke("did-avatar", {
+      body: { action: "list_presenters" },
+    });
+    if (error) throw new Error(error.message || "שגיאה בטעינת דמויות");
+    if (data?.error) throw new Error(data.error);
+    return data.actors || [];
   },
 };
 
@@ -61,6 +87,7 @@ export interface Brand {
   tone: string;
   targetAudience: string;
   industry: string;
+  departments?: string[];
 }
 
 const BRANDS_KEY = "creative_studio_brands";
@@ -80,6 +107,12 @@ export const brandService = {
   add: (brand: Brand) => {
     const brands = brandService.getAll();
     brands.push(brand);
+    brandService.save(brands);
+    return brands;
+  },
+
+  update: (id: string, updates: Partial<Brand>) => {
+    const brands = brandService.getAll().map(b => b.id === id ? { ...b, ...updates } : b);
     brandService.save(brands);
     return brands;
   },

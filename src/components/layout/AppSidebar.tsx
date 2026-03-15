@@ -1,25 +1,16 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, Users, Video, Wand2, FileText, FolderOpen, Settings,
-  Plug, Palette, Shield, PlayCircle, Zap, ChevronRight, ChevronLeft, Sparkles
+  LayoutDashboard, Sparkles, FolderOpen, Settings,
+  ChevronRight, ChevronLeft, Video
 } from 'lucide-react';
 import { useState } from 'react';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
-  { title: 'ספריית אווטארים', icon: Users, path: '/avatars' },
   { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
-  { title: 'יצירת סרטון', icon: Video, path: '/create-video' },
-  { title: 'מחולל פרומפטים', icon: Wand2, path: '/prompt-generator' },
-  { title: 'ספריית תבניות', icon: FileText, path: '/templates' },
   { title: 'פרויקטים', icon: FolderOpen, path: '/projects' },
-  { title: 'תוצאות', icon: PlayCircle, path: '/outputs' },
-  { title: 'משימות', icon: Zap, path: '/jobs' },
-  { divider: true },
-  { title: 'חיבורי API', icon: Plug, path: '/providers' },
-  { title: 'הגדרות מותג', icon: Palette, path: '/brand-settings' },
-  { title: 'הגדרות מערכת', icon: Shield, path: '/system-settings' },
+  { title: 'הגדרות', icon: Settings, path: '/settings' },
 ];
 
 export function AppSidebar() {
@@ -30,7 +21,7 @@ export function AppSidebar() {
     <aside
       className={cn(
         'fixed top-0 right-0 h-screen bg-sidebar border-l border-sidebar-border flex flex-col z-50 transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64'
+        collapsed ? 'w-16' : 'w-60'
       )}
     >
       {/* Logo */}
@@ -54,17 +45,14 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 overflow-y-auto">
         <ul className="space-y-1">
-          {menuItems.map((item, i) => {
-            if ('divider' in item) {
-              return <li key={i} className="my-3 mx-2 border-t border-sidebar-border" />;
-            }
-            const Icon = item.icon!;
+          {menuItems.map((item) => {
+            const Icon = item.icon;
             const isActive = location.pathname === item.path ||
-              (item.path !== '/' && location.pathname.startsWith(item.path!));
+              (item.path !== '/' && location.pathname.startsWith(item.path));
             return (
               <li key={item.path}>
                 <Link
-                  to={item.path!}
+                  to={item.path}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                     isActive
@@ -81,11 +69,10 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {/* Footer */}
       {!collapsed && (
         <div className="p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent p-3">
-            <p className="text-xs text-muted-foreground">גרסה 1.0.0 • מצב דמו</p>
+            <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>
         </div>
       )}
