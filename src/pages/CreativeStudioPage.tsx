@@ -410,7 +410,86 @@ export default function CreativeStudioPage() {
           })}
         </div>
 
-        {/* Input Area */}
+        {/* Subtitles Tab */}
+        {activeTab === 'subtitles' && (
+          <div className="space-y-4">
+            {/* Upload area */}
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                'bg-card border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all',
+                isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-border hover:border-primary/40'
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }}
+              />
+              <Upload className={cn('w-10 h-10 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
+              <p className="text-sm font-medium">{videoFile ? videoFile.name : 'גרור סרטון לכאן או לחץ לבחירה'}</p>
+              <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
+            </div>
+
+            {/* Video preview */}
+            {videoPreviewUrl && (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <video src={videoPreviewUrl} controls className="w-full max-h-[300px]" />
+              </div>
+            )}
+
+            {/* Transcribe button */}
+            {videoFile && (
+              <div className="flex gap-3">
+                <button
+                  onClick={handleTranscribe}
+                  disabled={loading}
+                  className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Subtitles className="w-4 h-4" />}
+                  {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
+                </button>
+                {subtitleSegments.length > 0 && (
+                  <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
+                    <Download className="w-4 h-4" /> הורד SRT
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Editable subtitles */}
+            {subtitleSegments.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+                <h3 className="font-rubik font-semibold flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
+                </h3>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {subtitleSegments.map((seg, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap pt-2 min-w-[80px]">
+                        {seg.start.toFixed(1)}s — {seg.end.toFixed(1)}s
+                      </div>
+                      <input
+                        value={seg.text}
+                        onChange={e => updateSegmentText(i, e.target.value)}
+                        className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        dir="rtl"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input Area (for non-subtitle tabs) */}
+        {activeTab !== 'subtitles' && (
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
@@ -482,6 +561,7 @@ export default function CreativeStudioPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Image Result */}
         {result?.imageUrl && (
