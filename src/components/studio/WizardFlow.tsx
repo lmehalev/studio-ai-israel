@@ -17,6 +17,7 @@ import { FileUploadZone } from '@/components/FileUploadZone';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { UrlImportInput } from '@/components/UrlImportInput';
 import type { StudioAction } from './StudioActionCards';
+import { SubtitleEditor as SubtitleEditorInline } from './SubtitleEditor';
 
 const hebrewVoices = [
   { id: 'onwK4e9ZLuTAKqWW03F9', name: 'דניאל (גברי)' },
