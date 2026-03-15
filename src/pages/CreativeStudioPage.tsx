@@ -146,6 +146,51 @@ export default function CreativeStudioPage() {
         const data = await promptEnhanceService.enhance(buildPrompt(prompt), 'script');
         setScriptResult(data);
         toast.success('התסריט מוכן!');
+      } else if (activeTab === 'video') {
+        if (runwayMode === 'image_to_video' && !runwayImageUrl.trim()) {
+          toast.error('יש להזין קישור לתמונה'); setLoading(false); return;
+        }
+        let taskData;
+        if (runwayMode === 'image_to_video') {
+          taskData = await runwayService.imageToVideo(runwayImageUrl, buildPrompt(prompt));
+        } else {
+          taskData = await runwayService.textToVideo(buildPrompt(prompt));
+        }
+        toast.success('הסרטון בהכנה...');
+        setLoading(false);
+        // Poll RunwayML
+        setRunwayPolling(true);
+        setRunwayProgress(0);
+        const pollRunway = async () => {
+          let attempts = 0;
+          const maxAttempts = 120;
+          const poll = async () => {
+            try {
+              const status = await runwayService.checkStatus(taskData.taskId);
+              setRunwayProgress(status.progress * 100);
+              if (status.status === 'SUCCEEDED' && status.resultUrl) {
+                setResult({ videoUrl: status.resultUrl });
+                setRunwayPolling(false);
+                toast.success('הסרטון מוכן!');
+                return;
+              }
+              if (status.status === 'FAILED') {
+                setRunwayPolling(false);
+                toast.error(status.failureReason || 'שגיאה ביצירת הסרטון');
+                return;
+              }
+              attempts++;
+              if (attempts < maxAttempts) setTimeout(poll, 5000);
+              else { setRunwayPolling(false); toast.error('תם הזמן – נסה שוב'); }
+            } catch {
+              setRunwayPolling(false);
+              toast.error('שגיאה בבדיקת סטטוס');
+            }
+          };
+          poll();
+        };
+        pollRunway();
+        return;
       }
     } catch (err: any) {
       toast.error(err.message || 'שגיאה ביצירה');
