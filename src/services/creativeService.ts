@@ -23,12 +23,20 @@ export const imageService = {
 
 // ====== Voice Generation Service (ElevenLabs) ======
 export const voiceService = {
-  generate: async (text: string, voiceId?: string): Promise<Blob> => {
+  generate: async (text: string, voiceId?: string): Promise<string> => {
     const { data, error } = await supabase.functions.invoke("text-to-speech", {
       body: { text, voiceId },
     });
     if (error) throw new Error(error.message || "שגיאה ביצירת קול");
-    return data;
+    
+    // The edge function returns audio/mpeg as ArrayBuffer
+    // Convert to blob URL for playback
+    if (data instanceof Blob) {
+      return URL.createObjectURL(data);
+    }
+    // If it's JSON with error
+    if (data?.error) throw new Error(data.error);
+    throw new Error("תגובה לא צפויה מהשרת");
   },
 };
 
@@ -41,5 +49,44 @@ export const promptEnhanceService = {
     if (error) throw new Error(error.message || "שגיאה בשיפור הפרומפט");
     if (data?.error) throw new Error(data.error);
     return data;
+  },
+};
+
+// ====== Brand Management (Local Storage) ======
+export interface Brand {
+  id: string;
+  name: string;
+  logo?: string;
+  colors: string[];
+  tone: string;
+  targetAudience: string;
+  industry: string;
+}
+
+const BRANDS_KEY = "creative_studio_brands";
+
+export const brandService = {
+  getAll: (): Brand[] => {
+    try {
+      const raw = localStorage.getItem(BRANDS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  },
+
+  save: (brands: Brand[]) => {
+    localStorage.setItem(BRANDS_KEY, JSON.stringify(brands));
+  },
+
+  add: (brand: Brand) => {
+    const brands = brandService.getAll();
+    brands.push(brand);
+    brandService.save(brands);
+    return brands;
+  },
+
+  remove: (id: string) => {
+    const brands = brandService.getAll().filter(b => b.id !== id);
+    brandService.save(brands);
+    return brands;
   },
 };
