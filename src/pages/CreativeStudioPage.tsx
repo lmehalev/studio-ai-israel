@@ -614,7 +614,13 @@ export default function CreativeStudioPage() {
                   {/* Subtitle overlay */}
                   {showPreview && currentSubtitle && (
                     <div className="absolute bottom-12 left-0 right-0 flex justify-center pointer-events-none px-4">
-                      <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center" dir="rtl">
+                      <div
+                        className={cn(
+                          'bg-background/85 text-foreground border border-border/70 px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center',
+                          subtitleFontClass,
+                        )}
+                        dir="rtl"
+                      >
                         {currentSubtitle}
                       </div>
                     </div>
