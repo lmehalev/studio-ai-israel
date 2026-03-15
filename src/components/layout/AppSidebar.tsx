@@ -71,7 +71,8 @@ export function AppSidebar() {
       </nav>
 
       {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border space-y-2">
+          <OpenGuideButton />
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>
