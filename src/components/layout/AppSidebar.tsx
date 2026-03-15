@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronLeft, Video, HelpCircle
 } from 'lucide-react';
 import { useState } from 'react';
-import { OpenGuideButton } from '@/components/OnboardingDialog';
+import { OpenGuideTourButton } from '@/components/GuidedTour';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
