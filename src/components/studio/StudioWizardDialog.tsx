@@ -714,7 +714,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'dubbing') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <PromptInput placeholder='הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"' rows={5} />
+          {renderPromptInput({ placeholder: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"', rows: 5 })}
           <VoiceRecorder label="🎙️ הקלט את הקול שלך" onSaved={url => toast.success('ההקלטה נשמרה: ' + url)} />
           <FileUploadZone accept="audio/*" label="או העלה קובץ קול" hint="MP3, WAV, M4A"
             onUploaded={url => toast.success('קובץ הקול הועלה: ' + url)} />
