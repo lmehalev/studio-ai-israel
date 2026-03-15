@@ -505,7 +505,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               <img src={editImageUrl} alt="תמונה מקורית" className="max-h-[180px] object-contain" />
             </div>
           )}
-          <PromptInput placeholder='תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"' />
+          {renderPromptInput({ placeholder: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"' })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
