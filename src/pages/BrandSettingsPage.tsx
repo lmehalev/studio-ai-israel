@@ -3,6 +3,7 @@ import { mockBrandSettings } from '@/data/mockData';
 import { useState } from 'react';
 import { Palette, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 export default function BrandSettingsPage() {
   const [form, setForm] = useState(mockBrandSettings);
