@@ -1,21 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { mockProjects } from '@/data/mockData';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Search, Grid3X3, List, Video, Filter } from 'lucide-react';
+import { Search, Grid3X3, List, Video, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { projectService, type ProjectRow } from '@/services/projectService';
+import { toast } from 'sonner';
 
 export default function ProjectsPage() {
   const [view, setView] = useState<'grid' | 'list'>('list');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = mockProjects.filter(p => {
-    if (search && !p.name.includes(search)) return false;
+  useEffect(() => {
+    projectService.getAll()
+      .then(setProjects)
+      .catch(e => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = projects.filter(p => {
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter && p.status !== statusFilter) return false;
     return true;
   });
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
   return (
     <AppLayout>
@@ -23,7 +35,7 @@ export default function ProjectsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-rubik font-bold">פרויקטים</h1>
-            <p className="text-muted-foreground text-sm mt-1">{mockProjects.length} פרויקטים במערכת</p>
+            <p className="text-muted-foreground text-sm mt-1">{projects.length} פרויקטים במערכת</p>
           </div>
           <Link to="/create-video" className="gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2">
             <Video className="w-4 h-4" /> סרטון חדש
@@ -48,7 +60,12 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {view === 'list' ? (
+        {loading ? (
+          <div className="text-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+            <p className="text-sm text-muted-foreground mt-2">טוען פרויקטים...</p>
+          </div>
+        ) : view === 'list' ? (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <table className="w-full">
               <thead><tr className="border-b border-border bg-muted/30">
@@ -63,11 +80,11 @@ export default function ProjectsPage() {
                 {filtered.map(p => (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3"><Link to={`/projects/${p.id}`} className="text-sm font-medium hover:text-primary">{p.name}</Link></td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.avatarName}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.videoType}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.avatar_name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.video_type}</td>
                     <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.createdAt}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.outputCount}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.output_count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -81,19 +98,24 @@ export default function ProjectsPage() {
                   <h3 className="font-medium text-sm">{p.name}</h3>
                   <StatusBadge status={p.status} />
                 </div>
-                <p className="text-xs text-muted-foreground">{p.avatarName} • {p.videoType} • {p.aspectRatio}</p>
+                <p className="text-xs text-muted-foreground">{p.avatar_name || '—'} • {p.video_type} • {p.aspect_ratio}</p>
                 <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-                  <span>{p.createdAt}</span>
-                  <span>{p.outputCount} תוצאות • גרסה {p.currentVersion}</span>
+                  <span>{formatDate(p.created_at)}</span>
+                  <span>{p.output_count} תוצאות • גרסה {p.current_version}</span>
                 </div>
               </Link>
             ))}
           </div>
         )}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-20 bg-card border border-border rounded-xl">
-            <p className="text-lg text-muted-foreground">לא נמצאו פרויקטים</p>
+            <Video className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-lg text-muted-foreground mb-2">לא נמצאו פרויקטים</p>
+            <p className="text-sm text-muted-foreground mb-4">צרו את הסרטון הראשון שלכם</p>
+            <Link to="/create-video" className="gradient-gold text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+              <Video className="w-4 h-4" /> סרטון חדש
+            </Link>
           </div>
         )}
       </div>

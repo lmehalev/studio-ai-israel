@@ -1,11 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { mockProjects } from '@/data/mockData';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, MessageSquare, Plug } from 'lucide-react';
+import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { projectService, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 
 const tabs = [
   { id: 'overview', label: 'סקירה', icon: FileText },
@@ -18,21 +18,51 @@ const tabs = [
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
-  const project = mockProjects.find(p => p.id === id);
+  const [project, setProject] = useState<ProjectRow | null>(null);
+  const [outputs, setOutputs] = useState<ProjectOutputRow[]>([]);
+  const [timeline, setTimeline] = useState<TimelineRow[]>([]);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      projectService.getById(id),
+      projectService.getOutputs(id),
+      projectService.getTimeline(id),
+      projectService.getVersions(id),
+    ]).then(([p, o, t, v]) => {
+      setProject(p);
+      setOutputs(o);
+      setTimeline(t);
+      setVersions(v);
+    }).catch(e => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
+  const formatDateTime = (d: string) => new Date(d).toLocaleString('he-IL');
+
+  if (loading) return <AppLayout><div className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></div></AppLayout>;
   if (!project) return <AppLayout><div className="text-center py-20"><p className="text-muted-foreground">הפרויקט לא נמצא</p></div></AppLayout>;
+
+  const content = (project.content || {}) as Record<string, any>;
+  const scenes = (project.scenes || []) as any[];
+  const tags = project.tags || [];
 
   return (
     <AppLayout>
       <div className="space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-rubik font-bold flex items-center gap-3">{project.name} <StatusBadge status={project.status} size="md" /></h1>
-            <p className="text-muted-foreground text-sm mt-1">{project.avatarName} • {project.videoType} • {project.aspectRatio} • גרסה {project.currentVersion}</p>
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {project.tags.map(t => <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">{t}</span>)}
-            </div>
+            <h1 className="text-2xl font-rubik font-bold flex items-center gap-3">{project.name} <StatusBadge status={project.status} /></h1>
+            <p className="text-muted-foreground text-sm mt-1">{project.avatar_name || '—'} • {project.video_type} • {project.aspect_ratio} • גרסה {project.current_version}</p>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {tags.map(t => <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">{t}</span>)}
+              </div>
+            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
@@ -67,20 +97,20 @@ export default function ProjectDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-card border border-border rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-sm">פרטי פרויקט</h3>
-              {[['סוג סרטון', project.videoType], ['אווטאר', project.avatarName], ['ספק', project.provider || '—'], ['יחס מסך', project.aspectRatio], ['תאריך יצירה', project.createdAt]].map(([l, v]) => (
+              {[['סוג סרטון', project.video_type], ['אווטאר', project.avatar_name || '—'], ['ספק', project.provider || '—'], ['יחס מסך', project.aspect_ratio], ['תאריך יצירה', formatDate(project.created_at)]].map(([l, v]) => (
                 <div key={l} className="flex justify-between text-sm"><span className="text-muted-foreground">{l}</span><span>{v}</span></div>
               ))}
             </div>
             <div className="bg-card border border-border rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-sm">תוכן</h3>
-              <p className="text-sm text-muted-foreground">{project.content.whatToSay || '—'}</p>
-              {project.content.cta && <p className="text-sm"><span className="text-muted-foreground">CTA:</span> {project.content.cta}</p>}
-              {project.content.targetAudience && <p className="text-sm"><span className="text-muted-foreground">קהל יעד:</span> {project.content.targetAudience}</p>}
+              <p className="text-sm text-muted-foreground">{content.whatToSay || '—'}</p>
+              {content.cta && <p className="text-sm"><span className="text-muted-foreground">CTA:</span> {content.cta}</p>}
+              {content.targetAudience && <p className="text-sm"><span className="text-muted-foreground">קהל יעד:</span> {content.targetAudience}</p>}
             </div>
-            {project.enhancedPrompt && (
+            {project.enhanced_prompt && (
               <div className="md:col-span-2 bg-card border border-border rounded-lg p-4">
                 <h3 className="font-semibold text-sm mb-2">פרומפט משופר</h3>
-                <p className="text-sm text-muted-foreground">{project.enhancedPrompt}</p>
+                <p className="text-sm text-muted-foreground">{project.enhanced_prompt}</p>
               </div>
             )}
           </div>
@@ -95,8 +125,8 @@ export default function ProjectDetailPage() {
 
         {activeTab === 'scenes' && (
           <div className="space-y-3">
-            {project.scenes.length > 0 ? project.scenes.map((s, i) => (
-              <div key={s.id} className="bg-card border border-border rounded-lg p-4">
+            {scenes.length > 0 ? scenes.map((s: any, i: number) => (
+              <div key={s.id || i} className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">סצנה {i + 1}</span>
                   <span className="font-medium text-sm">{s.title}</span>
@@ -111,11 +141,11 @@ export default function ProjectDetailPage() {
 
         {activeTab === 'outputs' && (
           <div className="space-y-3">
-            {project.outputs.length > 0 ? project.outputs.map(o => (
+            {outputs.length > 0 ? outputs.map(o => (
               <div key={o.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <p className="font-medium text-sm">{o.name}</p>
-                  <p className="text-xs text-muted-foreground">{o.description} • {o.estimatedLength} • {o.createdAt}</p>
+                  <p className="text-xs text-muted-foreground">{o.description} • {o.estimated_length} • {formatDate(o.created_at)}</p>
                 </div>
                 <StatusBadge status={o.status} />
               </div>
@@ -125,33 +155,33 @@ export default function ProjectDetailPage() {
 
         {activeTab === 'timeline' && (
           <div className="space-y-0">
-            {project.timeline.map((t, i) => (
+            {timeline.length > 0 ? timeline.map((t, i) => (
               <div key={t.id} className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className="w-3 h-3 rounded-full bg-primary flex-shrink-0" />
-                  {i < project.timeline.length - 1 && <div className="w-0.5 h-full bg-border" />}
+                  {i < timeline.length - 1 && <div className="w-0.5 h-full bg-border" />}
                 </div>
                 <div className="pb-6">
                   <p className="text-sm font-medium">{t.description}</p>
-                  <p className="text-xs text-muted-foreground">{t.timestamp}</p>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(t.timestamp)}</p>
                   <StatusBadge status={t.status} />
                 </div>
               </div>
-            ))}
+            )) : <p className="text-center py-10 text-muted-foreground">אין אירועים בציר הזמן</p>}
           </div>
         )}
 
         {activeTab === 'versions' && (
           <div className="space-y-2">
-            {project.versions.map(v => (
+            {versions.length > 0 ? versions.map(v => (
               <div key={v.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <p className="font-medium text-sm">גרסה {v.version}</p>
-                  <p className="text-xs text-muted-foreground">{v.changes} • {v.createdAt}</p>
+                  <p className="text-xs text-muted-foreground">{v.changes} • {formatDate(v.created_at)}</p>
                 </div>
                 <StatusBadge status={v.status} />
               </div>
-            ))}
+            )) : <p className="text-center py-10 text-muted-foreground">אין גרסאות נוספות</p>}
           </div>
         )}
 
