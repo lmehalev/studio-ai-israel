@@ -65,24 +65,23 @@ async function checkDID(apiKey: string): Promise<ServiceCredits> {
 
 async function checkRunway(apiKey: string): Promise<ServiceCredits> {
   try {
-    const res = await fetch("https://api.dev.runwayml.com/v1/credits", {
+    // Runway API doesn't have a credits endpoint - validate the key with a lightweight call
+    const res = await fetch("https://api.dev.runwayml.com/v1/tasks?limit=1", {
       headers: { Authorization: `Bearer ${apiKey}`, "X-Runway-Version": "2024-11-06" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const used = data.creditsUsed ?? 0;
-    const total = data.creditsTotal ?? 125;
+    // Key is valid - credits are managed on Runway's dashboard
     return {
       service: "runway",
-      used,
-      limit: total,
+      used: 0,
+      limit: -1,
       unit: "קרדיטים",
-      plan: data.plan || "trial",
-      canGenerate: used < total,
-      dashboardUrl: "https://app.runwayml.com/settings/billing",
+      plan: "API מחובר",
+      canGenerate: true,
+      dashboardUrl: "https://app.runwayml.com/video-tools/teams/info27720/settings/billing",
     };
   } catch (e) {
-    return { service: "runway", used: 0, limit: 0, unit: "קרדיטים", plan: "unknown", canGenerate: false, dashboardUrl: "https://app.runwayml.com/settings/billing", error: e.message };
+    return { service: "runway", used: 0, limit: 0, unit: "קרדיטים", plan: "unknown", canGenerate: false, dashboardUrl: "https://app.runwayml.com/video-tools/teams/info27720/settings/billing", error: e.message };
   }
 }
 
