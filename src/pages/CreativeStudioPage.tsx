@@ -2,15 +2,16 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
-  Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check
+  Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
+  Upload, Subtitles, Edit3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { imageService, voiceService, didService, promptEnhanceService, brandService, type Brand } from '@/services/creativeService';
+import { imageService, voiceService, didService, promptEnhanceService, subtitleService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script';
+type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles';
 
 const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'תמונה', icon: ImageIcon, desc: 'צור תמונות שיווקיות מטקסט' },
@@ -18,6 +19,7 @@ const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string
   { id: 'avatar', label: 'אווטאר מדבר', icon: UserCircle, desc: 'צור סרטון עם דמות מדברת (D-ID)' },
   { id: 'voice', label: 'דיבוב', icon: Mic, desc: 'המר טקסט לדיבור מקצועי בעברית' },
   { id: 'script', label: 'תסריט', icon: FileText, desc: 'כתוב וערוך תסריט שיווקי עם AI' },
+  { id: 'subtitles', label: 'כתוביות', icon: Subtitles, desc: 'העלה סרטון וקבל כתוביות אוטומטיות בעברית' },
 ];
 
 const hebrewVoices = [
@@ -47,6 +49,13 @@ export default function CreativeStudioPage() {
 
   // Script
   const [scriptResult, setScriptResult] = useState<{ enhanced?: string; scenes?: any[]; hook?: string; cta?: string } | null>(null);
+
+  // Subtitles
+  const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([]);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -196,12 +205,61 @@ export default function CreativeStudioPage() {
     toast.success('המותג הוסר');
   };
 
+  // Subtitle handling
+  const handleVideoUpload = (file: File) => {
+    setVideoFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setSubtitleSegments([]);
+    toast.success(`"${file.name}" הועלה בהצלחה`);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('video/')) handleVideoUpload(file);
+    else toast.error('יש להעלות קובץ וידאו');
+  };
+
+  const handleTranscribe = async () => {
+    if (!videoFile) { toast.error('יש להעלות סרטון קודם'); return; }
+    setLoading(true);
+    try {
+      // Extract audio from video as base64
+      const arrayBuffer = await videoFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer).slice(0, 500000))); // Limit size
+      const data = await subtitleService.transcribe(base64);
+      setSubtitleSegments(data.segments);
+      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות');
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה בתמלול');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadSRT = () => {
+    if (subtitleSegments.length === 0) return;
+    const srt = subtitleService.toSRT(subtitleSegments);
+    const blob = new Blob([srt], { type: 'text/srt;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${activeBrand?.name || 'subtitles'}-${Date.now()}.srt`;
+    link.click();
+    toast.success('קובץ SRT הורד');
+  };
+
+  const updateSegmentText = (index: number, text: string) => {
+    setSubtitleSegments(prev => prev.map((seg, i) => i === index ? { ...seg, text } : seg));
+  };
+
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
     edit: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"',
     avatar: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש שלנו..."',
     voice: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"',
     script: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"',
+    subtitles: '',
   };
 
   const buttonLabels: Record<StudioTab, string> = {
@@ -210,6 +268,7 @@ export default function CreativeStudioPage() {
     avatar: 'צור אווטאר מדבר',
     voice: 'צור דיבוב',
     script: 'צור תסריט',
+    subtitles: 'תמלל',
   };
 
   return (
@@ -351,7 +410,86 @@ export default function CreativeStudioPage() {
           })}
         </div>
 
-        {/* Input Area */}
+        {/* Subtitles Tab */}
+        {activeTab === 'subtitles' && (
+          <div className="space-y-4">
+            {/* Upload area */}
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                'bg-card border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all',
+                isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-border hover:border-primary/40'
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }}
+              />
+              <Upload className={cn('w-10 h-10 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
+              <p className="text-sm font-medium">{videoFile ? videoFile.name : 'גרור סרטון לכאן או לחץ לבחירה'}</p>
+              <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
+            </div>
+
+            {/* Video preview */}
+            {videoPreviewUrl && (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <video src={videoPreviewUrl} controls className="w-full max-h-[300px]" />
+              </div>
+            )}
+
+            {/* Transcribe button */}
+            {videoFile && (
+              <div className="flex gap-3">
+                <button
+                  onClick={handleTranscribe}
+                  disabled={loading}
+                  className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Subtitles className="w-4 h-4" />}
+                  {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
+                </button>
+                {subtitleSegments.length > 0 && (
+                  <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
+                    <Download className="w-4 h-4" /> הורד SRT
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Editable subtitles */}
+            {subtitleSegments.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+                <h3 className="font-rubik font-semibold flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
+                </h3>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {subtitleSegments.map((seg, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap pt-2 min-w-[80px]">
+                        {seg.start.toFixed(1)}s — {seg.end.toFixed(1)}s
+                      </div>
+                      <input
+                        value={seg.text}
+                        onChange={e => updateSegmentText(i, e.target.value)}
+                        className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        dir="rtl"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input Area (for non-subtitle tabs) */}
+        {activeTab !== 'subtitles' && (
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
@@ -423,6 +561,7 @@ export default function CreativeStudioPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Image Result */}
         {result?.imageUrl && (
