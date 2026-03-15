@@ -560,7 +560,58 @@ export default function CreativeStudioPage() {
                 className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
-          )}
+           )}
+
+          {activeTab === 'video' && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRunwayMode('image_to_video')}
+                  className={cn(
+                    'px-4 py-2 rounded-lg border text-xs font-medium transition-all',
+                    runwayMode === 'image_to_video' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
+                  )}
+                >
+                  🖼️ תמונה → וידאו
+                </button>
+                <button
+                  onClick={() => setRunwayMode('text_to_video')}
+                  className={cn(
+                    'px-4 py-2 rounded-lg border text-xs font-medium transition-all',
+                    runwayMode === 'text_to_video' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
+                  )}
+                >
+                  ✍️ טקסט → וידאו
+                </button>
+              </div>
+              {runwayMode === 'image_to_video' && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
+                  <input
+                    value={runwayImageUrl}
+                    onChange={e => setRunwayImageUrl(e.target.value)}
+                    placeholder="https://example.com/product.jpg"
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
+              {runwayPolling && (
+                <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> מייצר סרטון...
+                    </span>
+                    <span className="text-xs font-medium text-primary">{Math.round(runwayProgress)}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-l from-primary to-accent rounded-full transition-all duration-500"
+                      style={{ width: `${runwayProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
           {activeTab === 'avatar' && (
             <div>
