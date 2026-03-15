@@ -57,99 +57,159 @@ export interface VersionRow {
   created_at: string;
 }
 
+// Use rpc or raw fetch for tables not yet in generated types
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+async function query<T>(table: string, options?: {
+  select?: string;
+  filter?: Record<string, any>;
+  order?: { column: string; ascending?: boolean };
+  single?: boolean;
+}): Promise<T> {
+  const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
+  url.searchParams.set('select', options?.select || '*');
+  
+  if (options?.filter) {
+    for (const [key, value] of Object.entries(options.filter)) {
+      url.searchParams.set(key, `eq.${value}`);
+    }
+  }
+  if (options?.order) {
+    url.searchParams.set('order', `${options.order.column}.${options.order.ascending ? 'asc' : 'desc'}`);
+  }
+
+  const headers: Record<string, string> = {
+    'apikey': supabaseKey,
+    'Authorization': `Bearer ${supabaseKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (options?.single) {
+    headers['Accept'] = 'application/vnd.pgrst.object+json';
+  }
+
+  const res = await fetch(url.toString(), { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאה בטעינת ${table}`);
+  }
+  return res.json();
+}
+
+async function insert<T>(table: string, data: Record<string, any>): Promise<T> {
+  const url = `${supabaseUrl}/rest/v1/${table}?select=*`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאה בהוספת נתונים ל-${table}`);
+  }
+  const result = await res.json();
+  return Array.isArray(result) ? result[0] : result;
+}
+
+async function update<T>(table: string, id: string, data: Record<string, any>): Promise<T> {
+  const url = `${supabaseUrl}/rest/v1/${table}?id=eq.${id}&select=*`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאה בעדכון ${table}`);
+  }
+  const result = await res.json();
+  return Array.isArray(result) ? result[0] : result;
+}
+
+async function remove(table: string, id: string): Promise<void> {
+  const url = `${supabaseUrl}/rest/v1/${table}?id=eq.${id}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאה במחיקת ${table}`);
+  }
+}
+
 export const projectService = {
   async getAll(): Promise<ProjectRow[]> {
-    const { data, error } = await supabase
-      .from("projects" as any)
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data as any) || [];
+    return query<ProjectRow[]>('projects', { order: { column: 'created_at', ascending: false } });
   },
 
   async getById(id: string): Promise<ProjectRow | null> {
-    const { data, error } = await supabase
-      .from("projects" as any)
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as any;
+    try {
+      return await query<ProjectRow>('projects', { filter: { id }, single: true });
+    } catch {
+      return null;
+    }
   },
 
   async create(project: Partial<ProjectRow>): Promise<ProjectRow> {
-    const { data, error } = await supabase
-      .from("projects" as any)
-      .insert(project as any)
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
+    const created = await insert<ProjectRow>('projects', project);
 
-    // Add initial timeline event
-    await supabase.from("project_timeline" as any).insert({
-      project_id: (data as any).id,
-      type: "created",
-      description: "הפרויקט נוצר",
-      status: "טיוטה",
-    } as any);
-
-    // Add initial version
-    await supabase.from("project_versions" as any).insert({
-      project_id: (data as any).id,
+    // Add initial timeline event and version
+    await insert('project_timeline', {
+      project_id: created.id,
+      type: 'created',
+      description: 'הפרויקט נוצר',
+      status: 'טיוטה',
+    });
+    await insert('project_versions', {
+      project_id: created.id,
       version: 1,
-      changes: "גרסה ראשונית",
-      status: "טיוטה",
-    } as any);
+      changes: 'גרסה ראשונית',
+      status: 'טיוטה',
+    });
 
-    return data as any;
+    return created;
   },
 
   async update(id: string, updates: Partial<ProjectRow>): Promise<ProjectRow> {
-    const { data, error } = await supabase
-      .from("projects" as any)
-      .update(updates as any)
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
-    return data as any;
+    return update<ProjectRow>('projects', id, updates);
   },
 
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
-      .from("projects" as any)
-      .delete()
-      .eq("id", id);
-    if (error) throw new Error(error.message);
+    return remove('projects', id);
   },
 
   async getOutputs(projectId: string): Promise<ProjectOutputRow[]> {
-    const { data, error } = await supabase
-      .from("project_outputs" as any)
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data as any) || [];
+    return query<ProjectOutputRow[]>('project_outputs', {
+      filter: { project_id: projectId },
+      order: { column: 'created_at', ascending: false },
+    });
   },
 
   async getTimeline(projectId: string): Promise<TimelineRow[]> {
-    const { data, error } = await supabase
-      .from("project_timeline" as any)
-      .select("*")
-      .eq("project_id", projectId)
-      .order("timestamp", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data as any) || [];
+    return query<TimelineRow[]>('project_timeline', {
+      filter: { project_id: projectId },
+      order: { column: 'timestamp', ascending: false },
+    });
   },
 
   async getVersions(projectId: string): Promise<VersionRow[]> {
-    const { data, error } = await supabase
-      .from("project_versions" as any)
-      .select("*")
-      .eq("project_id", projectId)
-      .order("version", { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data as any) || [];
+    return query<VersionRow[]>('project_versions', {
+      filter: { project_id: projectId },
+      order: { column: 'version', ascending: false },
+    });
   },
 };
