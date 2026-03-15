@@ -274,6 +274,7 @@ export default function CreativeStudioPage() {
 
   return (
     <AppLayout>
+      <GuidedTour />
       <div className="space-y-5">
         {/* Header */}
         <div>
