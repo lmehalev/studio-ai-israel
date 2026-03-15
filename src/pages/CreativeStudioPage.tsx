@@ -543,6 +543,7 @@ export default function CreativeStudioPage() {
 
           <div className="flex items-center gap-3">
             <button
+              data-tour="generate-btn"
               onClick={handleGenerate}
               disabled={loading || polling}
               className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
