@@ -752,13 +752,36 @@ export default function CreativeStudioPage() {
             </div>
           )}
 
-          <textarea
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder={placeholders[activeTab]}
-            rows={activeTab === 'script' ? 6 : 4}
-            className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder={placeholders[activeTab]}
+              rows={activeTab === 'script' ? 6 : 4}
+              className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 pl-12 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleSpeech}
+                className={cn(
+                  'absolute left-3 top-3 p-1.5 rounded-lg transition-all',
+                  isListening
+                    ? 'bg-destructive/10 text-destructive animate-pulse'
+                    : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+                title={isListening ? 'עצור הקלטה' : 'דבר במקום לכתוב'}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
+            {isListening && (
+              <div className="absolute left-3 bottom-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                <span className="text-xs text-destructive font-medium">מקליט...</span>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <button
