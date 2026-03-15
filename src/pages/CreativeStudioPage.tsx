@@ -685,12 +685,22 @@ export default function CreativeStudioPage() {
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
-            <FileUploadZone
-              accept="image/*"
-              label="העלה תמונה לעריכה"
-              hint="JPG, PNG, WebP"
-              onUploaded={(url) => setEditImageUrl(url)}
-            />
+            <div className="space-y-3">
+              <FileUploadZone
+                accept="image/*"
+                label="העלה תמונה לעריכה"
+                hint="JPG, PNG, WebP"
+                onUploaded={(url) => setEditImageUrl(url)}
+              />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+              </div>
+              <UrlImportInput
+                onSubmit={(url) => setEditImageUrl(url)}
+                placeholder="הדבק קישור לתמונה..."
+                label=""
+              />
+            </div>
            )}
 
           {activeTab === 'video' && (
