@@ -254,7 +254,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   };
 
   // ============ PROMPT INPUT WITH SPEECH ============
-  const PromptInput = ({ placeholder, rows = 4 }: { placeholder: string; rows?: number }) => (
+  const renderPromptInput = ({ placeholder, rows = 4 }: { placeholder: string; rows?: number }) => (
     <div className="relative">
       <textarea
         value={prompt}
@@ -287,7 +287,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   );
 
   // ============ RESULT VIEW ============
-  const ResultView = () => (
+  const renderResultView = () => (
     <div className="space-y-4">
       {result?.imageUrl && (
         <div className="rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
@@ -318,7 +318,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   );
 
   // ============ IMAGE RESULT WITH ITERATIVE EDITING ============
-  const ImageResultWithEdit = () => (
+  const renderImageResultWithEdit = () => (
     <div className="space-y-4">
       {/* Edit history */}
       {editHistory.length > 1 && (
