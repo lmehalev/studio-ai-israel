@@ -36,6 +36,14 @@ const hebrewVoices = [
   { id: 'ErXwobaYiN019PkySvjV', name: 'אנטוני (גברי)' },
 ];
 
+const subtitleFontOptions = [
+  { value: 'font-heebo', label: 'Heebo (ברירת מחדל)' },
+  { value: 'font-rubik', label: 'Rubik' },
+  { value: 'font-sans', label: 'Sans' },
+  { value: 'font-serif', label: 'Serif' },
+  { value: 'font-mono', label: 'Mono' },
+] as const;
+
 export default function CreativeStudioPage() {
   const [activeTab, setActiveTab] = useState<StudioTab>('image');
   const [prompt, setPrompt] = useState('');
@@ -73,6 +81,8 @@ export default function CreativeStudioPage() {
   const [savingSrt, setSavingSrt] = useState(false);
   const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const [subtitleOffset, setSubtitleOffset] = useState(0.3);
+  const [subtitleFontClass, setSubtitleFontClass] = useState<(typeof subtitleFontOptions)[number]['value']>('font-heebo');
 
   // RunwayML Video
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
@@ -292,6 +302,7 @@ export default function CreativeStudioPage() {
     setSubtitleSegments([]);
     setShowPreview(false);
     setSavedSrtUrl(null);
+    setSubtitleOffset(0.3);
     toast.success(`"${file.name}" הועלה בהצלחה`);
   };
 
@@ -330,7 +341,7 @@ export default function CreativeStudioPage() {
     if (subtitleSegments.length === 0) return;
     setSavingSrt(true);
     try {
-      const srt = subtitleService.toSRT(subtitleSegments);
+      const srt = subtitleService.toSRT(getAdjustedSegments());
       const bom = '\uFEFF';
       const content = bom + srt;
       
@@ -366,7 +377,7 @@ export default function CreativeStudioPage() {
 
   const handleDownloadSRT = () => {
     if (subtitleSegments.length === 0) return;
-    const srt = subtitleService.toSRT(subtitleSegments);
+    const srt = subtitleService.toSRT(getAdjustedSegments());
     const bom = '\uFEFF';
     const blob = new Blob([bom + srt], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -384,7 +395,7 @@ export default function CreativeStudioPage() {
   const handleVideoTimeUpdate = () => {
     if (!videoPreviewRef.current) return;
     const currentTime = videoPreviewRef.current.currentTime;
-    const active = subtitleSegments.find(seg => currentTime >= seg.start && currentTime <= seg.end);
+    const active = getAdjustedSegments().find(seg => currentTime >= seg.start && currentTime <= seg.end);
     setCurrentSubtitle(active?.text || '');
   };
 
@@ -392,6 +403,16 @@ export default function CreativeStudioPage() {
     setSubtitleSegments(prev => prev.map((seg, i) => i === index ? { ...seg, text } : seg));
     setSavedSrtUrl(null); // Mark as unsaved
   };
+
+  const getAdjustedSegments = useCallback(() => {
+    return subtitleSegments
+      .map((seg) => {
+        const start = Math.max(0, Number((seg.start + subtitleOffset).toFixed(2)));
+        const end = Math.max(start + 0.1, Number((seg.end + subtitleOffset).toFixed(2)));
+        return { ...seg, start, end };
+      })
+      .sort((a, b) => a.start - b.start);
+  }, [subtitleSegments, subtitleOffset]);
 
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
@@ -594,7 +615,13 @@ export default function CreativeStudioPage() {
                   {/* Subtitle overlay */}
                   {showPreview && currentSubtitle && (
                     <div className="absolute bottom-12 left-0 right-0 flex justify-center pointer-events-none px-4">
-                      <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center" dir="rtl">
+                      <div
+                        className={cn(
+                          'bg-background/85 text-foreground border border-border/70 px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center',
+                          subtitleFontClass,
+                        )}
+                        dir="rtl"
+                      >
                         {currentSubtitle}
                       </div>
                     </div>
@@ -630,7 +657,7 @@ export default function CreativeStudioPage() {
                       disabled={savingSrt}
                       className={cn(
                         'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
-                        savedSrtUrl ? 'border-green-500 bg-green-500/10 text-green-600' : 'border-border hover:bg-muted',
+                        savedSrtUrl ? 'border-success bg-success/10 text-success' : 'border-border hover:bg-muted',
                         savingSrt && 'opacity-50'
                       )}
                     >
@@ -642,6 +669,63 @@ export default function CreativeStudioPage() {
                     </button>
                   </>
                 )}
+              </div>
+            )}
+
+            {subtitleSegments.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">פונט כתוביות</label>
+                  <select
+                    value={subtitleFontClass}
+                    onChange={(e) => setSubtitleFontClass(e.target.value as (typeof subtitleFontOptions)[number]['value'])}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    {subtitleFontOptions.map((font) => (
+                      <option key={font.value} value={font.value}>{font.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">השהיית כתוביות</label>
+                    <span className="text-xs font-medium text-primary">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={subtitleOffset}
+                    onChange={(e) => {
+                      setSubtitleOffset(Number(e.target.value));
+                      setSavedSrtUrl(null);
+                    }}
+                    className="w-full accent-primary"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSubtitleOffset((prev) => Math.max(-2, Number((prev - 0.2).toFixed(1))));
+                        setSavedSrtUrl(null);
+                      }}
+                      className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted"
+                    >
+                      מוקדם יותר
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSubtitleOffset((prev) => Math.min(2, Number((prev + 0.2).toFixed(1))));
+                        setSavedSrtUrl(null);
+                      }}
+                      className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted"
+                    >
+                      מאוחר יותר
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">הסנכרון חל גם על התצוגה וגם על קובץ ה-SRT.</p>
+                </div>
               </div>
             )}
 
@@ -658,7 +742,7 @@ export default function CreativeStudioPage() {
                   {subtitleSegments.map((seg, i) => (
                     <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
                       <div className="text-xs text-muted-foreground whitespace-nowrap pt-2 min-w-[80px]">
-                        {seg.start.toFixed(1)}s — {seg.end.toFixed(1)}s
+                        {Math.max(0, seg.start + subtitleOffset).toFixed(1)}s — {Math.max(Math.max(0, seg.start + subtitleOffset) + 0.1, seg.end + subtitleOffset).toFixed(1)}s
                       </div>
                       <input
                         value={seg.text}
@@ -670,7 +754,7 @@ export default function CreativeStudioPage() {
                   ))}
                 </div>
                 {!savedSrtUrl && (
-                  <p className="text-xs text-amber-500 flex items-center gap-1">
+                  <p className="text-xs text-warning flex items-center gap-1">
                     ⚠️ שינויים לא נשמרו — לחץ "שמור באחסון" כדי לשמור
                   </p>
                 )}
