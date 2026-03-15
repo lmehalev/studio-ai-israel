@@ -432,13 +432,41 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
       if (wizardStep === 0) return (
         <div className="space-y-4">
           <PromptInput placeholder='תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' />
+          
+          {/* Reference images */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5" /> הוסף תמונות רפרנס (אופציונלי)
+            </p>
+            {imageRefPhotos.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {imageRefPhotos.map((url, i) => (
+                  <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border">
+                    <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                    <button onClick={() => setImageRefPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {imageRefPhotos.length < 3 && (
+              <div className="flex gap-2">
+                <FileUploadZone accept="image/*" label={`העלה תמונה (${imageRefPhotos.length}/3)`} hint="JPG, PNG — אווטאר, לוגו, מוצר"
+                  onUploaded={url => { if (url && imageRefPhotos.length < 3) setImageRefPhotos(prev => [...prev, url]); }} />
+              </div>
+            )}
+          </div>
+
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
               setLoading(true);
               try {
-                const data = await imageService.generate(buildPrompt(prompt));
+                const data = await imageService.generate(buildPrompt(prompt), imageRefPhotos.length > 0 ? imageRefPhotos : undefined);
                 setResult({ imageUrl: data.imageUrl });
+                setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
                 setStep(step + 1);
                 toast.success('התמונה נוצרה!');
               } catch (e: any) { toast.error(e.message); }
@@ -452,7 +480,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 1 && result?.imageUrl) return <ResultView />;
+      if (wizardStep === 1 && result?.imageUrl) return <ImageResultWithEdit />;
     }
 
     // ====== EDIT IMAGE ======
