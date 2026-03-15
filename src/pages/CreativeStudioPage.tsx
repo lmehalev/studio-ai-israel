@@ -852,20 +852,124 @@ export default function CreativeStudioPage() {
           )}
 
           {activeTab === 'avatar' && (
-            <div className="space-y-3">
-              <FileUploadZone
-                accept="image/*"
-                label="העלה תמונת פנים חזיתית"
-                hint="תמונה ברורה של הפנים — JPG, PNG"
-                onUploaded={(url) => setAvatarImageUrl(url)}
-              />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+            <div className="space-y-4">
+              {/* Multi-photo avatar generator */}
+              <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <UserCircle className="w-4 h-4 text-primary" /> יצירת אווטאר מתמונות
+                </h3>
+                <p className="text-xs text-muted-foreground">העלה תמונות של אותו אדם — המערכת תייצר אווטאר מקצועי על בסיס התמונות</p>
+                
+                {/* Uploaded photos grid */}
+                {avatarRefPhotos.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {avatarRefPhotos.map((url, i) => (
+                      <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border">
+                        <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setAvatarRefPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                <FileUploadZone
+                  accept="image/*"
+                  label={`העלה תמונה (${avatarRefPhotos.length}/5)`}
+                  hint="JPG, PNG — ניתן להעלות עד 5 תמונות"
+                  onUploaded={(url) => {
+                    if (url && avatarRefPhotos.length < 5) {
+                      setAvatarRefPhotos(prev => [...prev, url]);
+                    }
+                  }}
+                />
+
+                {/* Style selector */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">סגנון האווטאר</label>
+                  <select
+                    value={avatarStyle}
+                    onChange={e => setAvatarStyle(e.target.value)}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <option value="professional headshot">פורטרט מקצועי</option>
+                    <option value="cinematic portrait with dramatic lighting">סינמטי דרמטי</option>
+                    <option value="friendly casual portrait, warm tones">ידידותי וחם</option>
+                    <option value="corporate business photo, clean background">תאגידי עסקי</option>
+                    <option value="modern social media avatar, vibrant">מודרני לרשתות חברתיות</option>
+                  </select>
+                </div>
+
+                {/* Generate button */}
+                <button
+                  onClick={async () => {
+                    if (avatarRefPhotos.length === 0) { toast.error('יש להעלות לפחות תמונה אחת'); return; }
+                    setGeneratingAvatar(true);
+                    setGeneratedAvatarUrl(null);
+                    try {
+                      const result = await avatarGenService.generate(avatarRefPhotos, avatarStyle);
+                      if (result.imageUrl) {
+                        setGeneratedAvatarUrl(result.imageUrl);
+                        setAvatarImageUrl(result.imageUrl);
+                        toast.success('האווטאר נוצר בהצלחה! ניתן להמשיך ליצירת סרטון');
+                      } else {
+                        toast.error('לא התקבלה תמונה — נסה שוב');
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || 'שגיאה ביצירת אווטאר');
+                    } finally {
+                      setGeneratingAvatar(false);
+                    }
+                  }}
+                  disabled={generatingAvatar || avatarRefPhotos.length === 0}
+                  className="w-full gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {generatingAvatar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {generatingAvatar ? 'מייצר אווטאר...' : `צור אווטאר מ-${avatarRefPhotos.length} תמונות`}
+                </button>
+
+                {/* Generated avatar preview */}
+                {generatedAvatarUrl && (
+                  <div className="rounded-lg overflow-hidden border border-primary/30 bg-muted/30">
+                    <img src={generatedAvatarUrl} alt="אווטאר שנוצר" className="w-full max-h-[300px] object-contain" />
+                    <div className="p-2 flex items-center justify-between bg-primary/5">
+                      <span className="text-xs text-primary font-medium flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" /> האווטאר מוכן — כתוב טקסט למטה וצור סרטון
+                      </span>
+                      <button
+                        onClick={() => { setGeneratedAvatarUrl(null); setAvatarImageUrl(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        נקה
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <UrlImportInput
-                onSubmit={(url) => setAvatarImageUrl(url)}
-                placeholder="הדבק קישור לתמונת פנים..."
-              />
+
+              {/* Or use single image directly */}
+              {!generatedAvatarUrl && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" /> או השתמש בתמונה ישירה <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <FileUploadZone
+                    accept="image/*"
+                    label="העלה תמונת פנים חזיתית"
+                    hint="תמונה ברורה של הפנים — JPG, PNG"
+                    onUploaded={(url) => setAvatarImageUrl(url)}
+                  />
+                  <UrlImportInput
+                    onSubmit={(url) => setAvatarImageUrl(url)}
+                    placeholder="הדבק קישור לתמונת פנים..."
+                  />
+                </div>
+              )}
             </div>
           )}
 
