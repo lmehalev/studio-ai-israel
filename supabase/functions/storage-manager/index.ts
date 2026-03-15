@@ -74,6 +74,34 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'list') {
+      const { data, error: listError } = await supabase.storage
+        .from('media')
+        .list('uploads', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
+      if (listError) throw listError;
+      return new Response(
+        JSON.stringify({ files: data || [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === 'delete') {
+      if (!fileName) {
+        return new Response(
+          JSON.stringify({ error: "חסר שם קובץ למחיקה" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const { error: delError } = await supabase.storage
+        .from('media')
+        .remove([`uploads/${fileName}`]);
+      if (delError) throw delError;
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ status: 'ok', bucketExists: true }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
