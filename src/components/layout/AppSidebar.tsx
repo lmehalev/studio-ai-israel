@@ -2,13 +2,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, Video, Wand2, FileText, FolderOpen, Settings,
-  Plug, Palette, Shield, PlayCircle, Zap, ChevronRight, ChevronLeft
+  Plug, Palette, Shield, PlayCircle, Zap, ChevronRight, ChevronLeft, Sparkles
 } from 'lucide-react';
 import { useState } from 'react';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
   { title: 'ספריית אווטארים', icon: Users, path: '/avatars' },
+  { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
   { title: 'יצירת סרטון', icon: Video, path: '/create-video' },
   { title: 'מחולל פרומפטים', icon: Wand2, path: '/prompt-generator' },
   { title: 'ספריית תבניות', icon: FileText, path: '/templates' },

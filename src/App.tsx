@@ -16,6 +16,7 @@ import JobsPage from "./pages/JobsPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import BrandSettingsPage from "./pages/BrandSettingsPage";
 import SystemSettingsPage from "./pages/SystemSettingsPage";
+import CreativeStudioPage from "./pages/CreativeStudioPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/avatars/:id" element={<AvatarDetailPage />} />
           <Route path="/create-video" element={<CreateVideoPage />} />
           <Route path="/prompt-generator" element={<PromptGeneratorPage />} />
+          <Route path="/creative-studio" element={<CreativeStudioPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
