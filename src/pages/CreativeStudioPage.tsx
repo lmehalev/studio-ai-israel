@@ -552,15 +552,12 @@ export default function CreativeStudioPage() {
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
-              <input
-                value={editImageUrl}
-                onChange={e => setEditImageUrl(e.target.value)}
-                placeholder="https://example.com/image.jpg"
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            <FileUploadZone
+              accept="image/*"
+              label="העלה תמונה לעריכה"
+              hint="JPG, PNG, WebP"
+              onUploaded={(url) => setEditImageUrl(url)}
+            />
            )}
 
           {activeTab === 'video' && (
