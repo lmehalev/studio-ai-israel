@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { mockAvatars } from '@/data/mockData';
 import { VideoType } from '@/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { Check, ChevronLeft, ChevronRight, Plus, Trash2, Copy, GripVertical } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Plus, Trash2, Copy, GripVertical, Loader2 } from 'lucide-react';
+import { projectService } from '@/services/projectService';
 
 const steps = ['בחירת אווטאר', 'סוג סרטון', 'תוכן', 'בונה סצנות', 'הגדרות מתקדמות', 'סקירה'];
 const videoTypes: { type: VideoType; desc: string }[] = [
@@ -29,7 +31,9 @@ const promptExamples = [
 ];
 
 export default function CreateVideoPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [selectedType, setSelectedType] = useState<VideoType | ''>('');
   const [content, setContent] = useState({
@@ -50,8 +54,60 @@ export default function CreateVideoPage() {
 
   const avatar = mockAvatars.find(a => a.id === selectedAvatar);
 
-  const handleCreate = () => {
-    toast.success('הפרויקט נוצר בהצלחה! המערכת מכינה את הבקשה...');
+  const handleCreate = async (asDraft = false) => {
+    setSaving(true);
+    try {
+      const project = await projectService.create({
+        name: content.projectName || 'פרויקט ללא שם',
+        avatar_id: selectedAvatar || null,
+        avatar_name: avatar?.name || null,
+        video_type: selectedType || 'פרומפט חופשי',
+        status: asDraft ? 'טיוטה' : 'ממתין',
+        aspect_ratio: settings.aspectRatio,
+        content: {
+          whatToSay: content.whatToSay,
+          description: content.description,
+          visualDescription: content.visualDescription,
+          productDescription: content.productDescription,
+          targetAudience: content.targetAudience,
+          painPoint: content.painPoint,
+          solution: content.solution,
+          cta: content.cta,
+          speakingStyle: content.speakingStyle,
+          mood: content.mood,
+          keywords: content.keywords ? content.keywords.split(',').map(k => k.trim()) : [],
+        },
+        scenes: scenes.map((s, i) => ({
+          id: s.id,
+          order: i,
+          title: s.title,
+          spokenText: s.text,
+          visualDescription: s.visual,
+          duration: s.duration,
+          shotType: s.shotType,
+        })),
+        settings: {
+          videoLength: settings.videoLength,
+          voiceType: settings.voiceType,
+          energyLevel: settings.energyLevel,
+          subtitleStyle: settings.subtitleStyle,
+          music: settings.music,
+          musicStyle: settings.musicStyle,
+          logo: settings.logo,
+          variationsCount: settings.variationsCount,
+          preferredProvider: settings.preferredProvider,
+        },
+        script: content.whatToSay || null,
+        tags: [],
+      });
+      
+      toast.success(asDraft ? 'נשמר כטיוטה!' : 'הפרויקט נוצר בהצלחה!');
+      navigate(`/projects/${project.id}`);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה ביצירת הפרויקט');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -80,19 +136,23 @@ export default function CreateVideoPage() {
           {step === 0 && (
             <div className="space-y-4">
               <h2 className="font-rubik font-semibold text-lg">בחרו אווטאר</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {mockAvatars.filter(a => a.status === 'מוכן').map(a => (
-                  <button key={a.id} onClick={() => setSelectedAvatar(a.id)}
-                    className={cn('p-4 rounded-xl border text-right transition-all',
-                      selectedAvatar === a.id ? 'border-primary bg-primary/5 shadow-gold' : 'border-border hover:border-primary/30')}>
-                    <div className="w-12 h-12 rounded-full gradient-gold flex items-center justify-center text-lg font-bold text-primary-foreground mb-2">
-                      {a.name[0]}
-                    </div>
-                    <p className="font-medium text-sm">{a.name}</p>
-                    <p className="text-xs text-muted-foreground">{a.role} • {a.qualityScore}% מוכנות</p>
-                  </button>
-                ))}
-              </div>
+              {mockAvatars.filter(a => a.status === 'מוכן').length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">אין אווטארים מוכנים. ניתן לדלג על שלב זה.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {mockAvatars.filter(a => a.status === 'מוכן').map(a => (
+                    <button key={a.id} onClick={() => setSelectedAvatar(a.id)}
+                      className={cn('p-4 rounded-xl border text-right transition-all',
+                        selectedAvatar === a.id ? 'border-primary bg-primary/5 shadow-gold' : 'border-border hover:border-primary/30')}>
+                      <div className="w-12 h-12 rounded-full gradient-gold flex items-center justify-center text-lg font-bold text-primary-foreground mb-2">
+                        {a.name[0]}
+                      </div>
+                      <p className="font-medium text-sm">{a.name}</p>
+                      <p className="text-xs text-muted-foreground">{a.role} • {a.qualityScore}% מוכנות</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -318,8 +378,15 @@ export default function CreateVideoPage() {
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => toast.success('נשמר כטיוטה')} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">שמור כטיוטה</button>
-              <button onClick={handleCreate} className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg text-sm font-semibold animate-pulse-gold">צור סרטון 🎬</button>
+              <button onClick={() => handleCreate(true)} disabled={saving}
+                className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'שמור כטיוטה'}
+              </button>
+              <button onClick={() => handleCreate(false)} disabled={saving}
+                className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg text-sm font-semibold animate-pulse-gold disabled:opacity-50 flex items-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                צור סרטון 🎬
+              </button>
             </div>
           )}
         </div>
