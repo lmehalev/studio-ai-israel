@@ -707,7 +707,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 2 && result?.videoUrl) return <ResultView />;
+      if (wizardStep === 2 && result?.videoUrl) return renderResultView();
     }
 
     // ====== DUBBING ======
