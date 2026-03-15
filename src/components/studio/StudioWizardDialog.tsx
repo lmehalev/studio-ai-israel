@@ -527,7 +527,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 2 && result?.imageUrl) return <ImageResultWithEdit />;
+      if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
     // ====== AVATAR VIDEO ======
