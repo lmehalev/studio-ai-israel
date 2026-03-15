@@ -110,27 +110,37 @@ export default function SettingsPage() {
                 {connectedServices.map(s => {
                   const Icon = s.icon;
                   return (
-                    <div key={s.name} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-success/20 text-success flex items-center justify-center">
-                          <Check className="w-5 h-5" />
+                    <div key={s.name} className="p-4 bg-muted/30 rounded-lg border border-border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-success/20 text-success flex items-center justify-center">
+                            <Check className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium flex items-center gap-2">
+                              <Icon className="w-4 h-4 text-primary" />
+                              {s.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{s.desc}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            <Icon className="w-4 h-4 text-primary" />
-                            {s.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{s.desc}</p>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full font-medium",
+                            s.free ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning"
+                          )}>
+                            {s.plan}
+                          </span>
+                          <span className="text-xs px-2.5 py-1 rounded-full bg-success/10 text-success font-medium">
+                            מחובר
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {s.free && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">מובנה</span>
-                        )}
-                        <span className="text-xs px-2.5 py-1 rounded-full bg-success/10 text-success font-medium">
-                          פעיל
-                        </span>
-                      </div>
+                      {s.planNote && (
+                        <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 mr-13">
+                          {s.planNote}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
