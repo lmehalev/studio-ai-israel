@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Check, ChevronLeft, ChevronRight, Plus, Trash2, Copy, GripVertical, Loader2 } from 'lucide-react';
 import { projectService } from '@/services/projectService';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const steps = ['בחירת אווטאר', 'סוג סרטון', 'תוכן', 'בונה סצנות', 'הגדרות מתקדמות', 'סקירה'];
 const videoTypes: { type: VideoType; desc: string }[] = [
@@ -182,12 +183,18 @@ export default function CreateVideoPage() {
                     placeholder="סרטון השקה - מוצר חדש" className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">מה האווטאר אומר</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium">מה האווטאר אומר</label>
+                    <VoiceDictationButton onResult={(text) => setContent(c => ({...c, whatToSay: c.whatToSay ? c.whatToSay + ' ' + text : text}))} />
+                  </div>
                   <textarea value={content.whatToSay} onChange={e => setContent(c => ({...c, whatToSay: e.target.value}))}
                     rows={3} placeholder="כתבו כאן את הטקסט שהאווטאר יגיד..." className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">תיאור הסרטון</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium">תיאור הסרטון</label>
+                    <VoiceDictationButton onResult={(text) => setContent(c => ({...c, description: c.description ? c.description + ' ' + text : text}))} />
+                  </div>
                   <textarea value={content.description} onChange={e => setContent(c => ({...c, description: e.target.value}))}
                     rows={2} placeholder="תארו מה צריך לקרות בסרטון..." className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />
                 </div>
@@ -243,7 +250,10 @@ export default function CreateVideoPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-muted-foreground">טקסט שנאמר</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-muted-foreground">טקסט שנאמר</label>
+                        <VoiceDictationButton onResult={(text) => { const s = [...scenes]; s[i].text = s[i].text ? s[i].text + ' ' + text : text; setScenes(s); }} />
+                      </div>
                       <textarea value={scene.text} onChange={e => { const s = [...scenes]; s[i].text = e.target.value; setScenes(s); }}
                         rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none mt-1" />
                     </div>

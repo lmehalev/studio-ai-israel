@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Upload, X, Plus } from 'lucide-react';
 import { AvatarRole } from '@/types';
 import { toast } from 'sonner';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const roles: AvatarRole[] = ['בעל עסק', 'יוצר תוכן', 'איש מכירות', 'מומחה', 'פרזנטור', 'משפיען', 'אחר'];
 
@@ -52,7 +53,10 @@ export default function CreateAvatarPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1.5">תיאור קצר</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium">תיאור קצר</label>
+              <VoiceDictationButton onResult={(text) => setForm(f => ({ ...f, description: f.description ? f.description + ' ' + text : text }))} />
+            </div>
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               rows={2} placeholder="תארו את האווטאר בכמה מילים..."
               className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />
@@ -84,7 +88,10 @@ export default function CreateAvatarPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1.5">הערות</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium">הערות</label>
+              <VoiceDictationButton onResult={(text) => setForm(f => ({ ...f, notes: f.notes ? f.notes + ' ' + text : text }))} />
+            </div>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={2} placeholder="הערות נוספות..."
               className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />

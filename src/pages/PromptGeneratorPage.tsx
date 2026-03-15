@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Wand2, Copy, FileText, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface Variation {
   type: string;
@@ -55,7 +56,10 @@ export default function PromptGeneratorPage() {
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <label className="block text-sm font-medium">הרעיון שלך</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium">הרעיון שלך</label>
+            <VoiceDictationButton onResult={(text) => setInput(prev => prev ? prev + ' ' + text : text)} />
+          </div>
           <textarea value={input} onChange={e => setInput(e.target.value)} rows={4}
             placeholder="למשל: אני רוצה סרטון שבו הדמות מסבירה על מוצר טיפוח בעברית בטון משכנע, עם פתיח חד ו-CTA חזק"
             className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />
