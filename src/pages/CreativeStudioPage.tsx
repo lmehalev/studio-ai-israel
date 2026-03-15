@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
-  Upload, Subtitles, Edit3, Video
+  Upload, Subtitles, Edit3, Video, Eye, Save
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
