@@ -775,7 +775,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'script') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <PromptInput placeholder='תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"' rows={6} />
+          {renderPromptInput({ placeholder: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"', rows: 6 })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
