@@ -403,6 +403,16 @@ export default function CreativeStudioPage() {
     setSavedSrtUrl(null); // Mark as unsaved
   };
 
+  const getAdjustedSegments = useCallback(() => {
+    return subtitleSegments
+      .map((seg) => {
+        const start = Math.max(0, Number((seg.start + subtitleOffset).toFixed(2)));
+        const end = Math.max(start + 0.1, Number((seg.end + subtitleOffset).toFixed(2)));
+        return { ...seg, start, end };
+      })
+      .sort((a, b) => a.start - b.start);
+  }, [subtitleSegments, subtitleOffset]);
+
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
     edit: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"',
