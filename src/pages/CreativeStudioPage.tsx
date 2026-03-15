@@ -37,6 +37,11 @@ const hebrewVoices = [
 export default function CreativeStudioPage() {
   const [activeTab, setActiveTab] = useState<StudioTab>('image');
   const [prompt, setPrompt] = useState('');
+
+  const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechToText({
+    language: 'he-IL',
+    onResult: (text) => setPrompt(prev => prev ? `${prev} ${text}` : text),
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ imageUrl?: string; text?: string; audioUrl?: string; videoUrl?: string; talkId?: string } | null>(null);
 
