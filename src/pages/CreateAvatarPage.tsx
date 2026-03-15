@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Upload, X, Plus } from 'lucide-react';
 import { AvatarRole } from '@/types';
 import { toast } from 'sonner';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const roles: AvatarRole[] = ['בעל עסק', 'יוצר תוכן', 'איש מכירות', 'מומחה', 'פרזנטור', 'משפיען', 'אחר'];
 
