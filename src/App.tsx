@@ -16,6 +16,7 @@ import JobsPage from "./pages/JobsPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import BrandSettingsPage from "./pages/BrandSettingsPage";
 import SystemSettingsPage from "./pages/SystemSettingsPage";
+import CreativeStudioPage from "./pages/CreativeStudioPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
