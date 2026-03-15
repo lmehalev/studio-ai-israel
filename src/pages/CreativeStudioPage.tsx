@@ -309,6 +309,7 @@ export default function CreativeStudioPage() {
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
     edit: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"',
+    video: 'תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"',
     avatar: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש שלנו..."',
     voice: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"',
     script: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"',
@@ -318,6 +319,7 @@ export default function CreativeStudioPage() {
   const buttonLabels: Record<StudioTab, string> = {
     image: 'צור תמונה',
     edit: 'ערוך תמונה',
+    video: 'צור סרטון',
     avatar: 'צור אווטאר מדבר',
     voice: 'צור דיבוב',
     script: 'צור תסריט',
