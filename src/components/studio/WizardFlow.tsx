@@ -118,7 +118,6 @@ export function WizardFlow({ action, activeBrand, onBack, buildPrompt }: WizardF
   const [runwayProgress, setRunwayProgress] = useState(0);
 
 
-  }, [subtitleSegments, subtitleOffset]);
 
   // Poll D-ID
   const pollTalkStatus = useCallback(async (talkId: string) => {
