@@ -62,7 +62,7 @@ start = רגע תחילת הדיבור של המשפט, end = רגע סיום ה
               },
               {
                 type: "text",
-                text: `תמלל את האודיו הזה ל${language || "עברית"}. החזר JSON עם segments שכוללים start, end, text.`,
+                text: `תמלל את האודיו הזה ל${language || "עברית"}. החזר JSON עם segments שכוללים start, end, text לפי תזמון דיבור אמיתי ומדויק, לא חלוקה של 2-4 שניות.`,
               },
             ],
           },
