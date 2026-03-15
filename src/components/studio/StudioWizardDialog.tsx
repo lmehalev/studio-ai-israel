@@ -607,7 +607,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
       );
       if (wizardStep === 2) return (
         <div className="space-y-4">
-          <PromptInput placeholder='מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש..."' rows={5} />
+          {renderPromptInput({ placeholder: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש..."', rows: 5 })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין טקסט'); return; }
