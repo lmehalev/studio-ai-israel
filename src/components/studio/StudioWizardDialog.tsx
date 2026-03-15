@@ -486,7 +486,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 1 && result?.imageUrl) return <ImageResultWithEdit />;
+      if (wizardStep === 1 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
     // ====== EDIT IMAGE ======
