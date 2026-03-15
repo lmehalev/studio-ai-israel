@@ -301,11 +301,16 @@ export default function CreativeStudioPage() {
   const handleDownloadSRT = () => {
     if (subtitleSegments.length === 0) return;
     const srt = subtitleService.toSRT(subtitleSegments);
-    const blob = new Blob([srt], { type: 'text/srt;charset=utf-8' });
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + srt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    link.href = url;
     link.download = `${activeBrand?.name || 'subtitles'}-${Date.now()}.srt`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     toast.success('קובץ SRT הורד');
   };
 
