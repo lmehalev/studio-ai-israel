@@ -65,6 +65,18 @@ export const voiceService = {
   },
 };
 
+// ====== Avatar Generation Service (AI) ======
+export const avatarGenService = {
+  generate: async (imageUrls: string[], style?: string): Promise<{ imageUrl: string | null; text: string }> => {
+    const { data, error } = await supabase.functions.invoke("generate-avatar", {
+      body: { imageUrls, style },
+    });
+    if (error) throw new Error(error.message || "שגיאה ביצירת אווטאר");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+};
+
 // ====== D-ID Avatar Service ======
 export const didService = {
   createTalk: async (imageUrl: string, text: string, voiceId?: string): Promise<{ id: string; status: string }> => {
