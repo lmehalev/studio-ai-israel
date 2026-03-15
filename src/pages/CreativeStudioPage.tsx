@@ -612,6 +612,7 @@ export default function CreativeStudioPage() {
                 </div>
               )}
             </div>
+          )}
 
           {activeTab === 'avatar' && (
             <div>
