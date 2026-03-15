@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { OnboardingDialog } from "@/components/OnboardingDialog";
+import { GuidedTour } from "@/components/GuidedTour";
 import DashboardPage from "./pages/DashboardPage";
 import CreativeStudioPage from "./pages/CreativeStudioPage";
 import ProjectsPage from "./pages/ProjectsPage";
