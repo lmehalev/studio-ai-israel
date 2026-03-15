@@ -662,7 +662,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
       );
       if (wizardStep === 1) return (
         <div className="space-y-4">
-          <PromptInput placeholder='תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"' />
+          {renderPromptInput({ placeholder: 'תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"' })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
