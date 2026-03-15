@@ -159,11 +159,13 @@ export function ConnectionsTab() {
                 </div>
               )}
 
-              {/* Shotstack unlimited */}
-              {s.id === 'shotstack' && credit && credit.limit === -1 && (
+              {/* Unlimited / dashboard-managed credits */}
+              {s.hasCredits && credit && !credit.error && credit.limit === -1 && (
                 <div className="mr-13">
                   <p className="text-xs text-muted-foreground">
-                    ✅ Sandbox ללא הגבלה (עם ווטרמארק). להסרת ווטרמארק — שדרג חבילה.
+                    ✅ {s.id === 'shotstack' 
+                      ? 'Sandbox ללא הגבלה (עם ווטרמארק). להסרת ווטרמארק — שדרג חבילה.'
+                      : 'מחובר ופעיל. ניהול קרדיטים דרך הדשבורד של הספק.'}
                   </p>
                 </div>
               )}
