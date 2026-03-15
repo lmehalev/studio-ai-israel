@@ -59,6 +59,11 @@ export default function CreativeStudioPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [currentSubtitle, setCurrentSubtitle] = useState('');
+  const [savingSrt, setSavingSrt] = useState(false);
+  const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
   // RunwayML Video
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');

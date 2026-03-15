@@ -29,6 +29,7 @@ serve(async (req) => {
           'image/jpeg', 'image/png', 'image/webp', 'image/gif',
           'video/mp4', 'video/webm', 'video/quicktime',
           'audio/mpeg', 'audio/wav', 'audio/mp3',
+          'text/plain', 'application/x-subrip',
         ],
       });
       if (error) throw error;
