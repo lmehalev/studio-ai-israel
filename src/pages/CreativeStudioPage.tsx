@@ -726,12 +726,21 @@ export default function CreativeStudioPage() {
                 </button>
               </div>
               {runwayMode === 'image_to_video' && (
-                <FileUploadZone
-                  accept="image/*"
-                  label="העלה תמונה להפיכה לסרטון"
-                  hint="JPG, PNG, WebP"
-                  onUploaded={(url) => setRunwayImageUrl(url)}
-                />
+                <div className="space-y-3">
+                  <FileUploadZone
+                    accept="image/*"
+                    label="העלה תמונה להפיכה לסרטון"
+                    hint="JPG, PNG, WebP"
+                    onUploaded={(url) => setRunwayImageUrl(url)}
+                  />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <UrlImportInput
+                    onSubmit={(url) => setRunwayImageUrl(url)}
+                    placeholder="הדבק קישור לתמונה..."
+                  />
+                </div>
               )}
               {runwayPolling && (
                 <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
