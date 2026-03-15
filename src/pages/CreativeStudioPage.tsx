@@ -376,7 +376,7 @@ export default function CreativeStudioPage() {
 
   const handleDownloadSRT = () => {
     if (subtitleSegments.length === 0) return;
-    const srt = subtitleService.toSRT(subtitleSegments);
+    const srt = subtitleService.toSRT(getAdjustedSegments());
     const bom = '\uFEFF';
     const blob = new Blob([bom + srt], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
