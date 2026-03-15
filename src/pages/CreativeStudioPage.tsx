@@ -2,10 +2,11 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
+  ImageIcon, Film, Mic, MicOff, Wand2, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
   Upload, Subtitles, Edit3, Video, Eye, Save
 } from 'lucide-react';
+import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
@@ -36,6 +37,11 @@ const hebrewVoices = [
 export default function CreativeStudioPage() {
   const [activeTab, setActiveTab] = useState<StudioTab>('image');
   const [prompt, setPrompt] = useState('');
+
+  const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechToText({
+    language: 'he-IL',
+    onResult: (text) => setPrompt(prev => prev ? `${prev} ${text}` : text),
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ imageUrl?: string; text?: string; audioUrl?: string; videoUrl?: string; talkId?: string } | null>(null);
 
@@ -746,13 +752,36 @@ export default function CreativeStudioPage() {
             </div>
           )}
 
-          <textarea
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder={placeholders[activeTab]}
-            rows={activeTab === 'script' ? 6 : 4}
-            className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder={placeholders[activeTab]}
+              rows={activeTab === 'script' ? 6 : 4}
+              className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 pl-12 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleSpeech}
+                className={cn(
+                  'absolute left-3 top-3 p-1.5 rounded-lg transition-all',
+                  isListening
+                    ? 'bg-destructive/10 text-destructive animate-pulse'
+                    : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+                title={isListening ? 'עצור הקלטה' : 'דבר במקום לכתוב'}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
+            {isListening && (
+              <div className="absolute left-3 bottom-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                <span className="text-xs text-destructive font-medium">מקליט...</span>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <button
