@@ -12,11 +12,12 @@ import { imageService, voiceService, didService, promptEnhanceService, subtitleS
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles';
+type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles' | 'video';
 
 const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'תמונה', icon: ImageIcon, desc: 'צור תמונות שיווקיות מטקסט' },
   { id: 'edit', label: 'עריכת תמונה', icon: Wand2, desc: 'ערוך תמונה קיימת עם AI' },
+  { id: 'video', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט עם RunwayML' },
   { id: 'avatar', label: 'אווטאר מדבר', icon: UserCircle, desc: 'צור סרטון עם דמות מדברת (D-ID)' },
   { id: 'voice', label: 'דיבוב', icon: Mic, desc: 'המר טקסט לדיבור מקצועי בעברית' },
   { id: 'script', label: 'תסריט', icon: FileText, desc: 'כתוב וערוך תסריט שיווקי עם AI' },
