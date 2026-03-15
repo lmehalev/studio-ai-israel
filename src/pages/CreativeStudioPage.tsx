@@ -302,6 +302,7 @@ export default function CreativeStudioPage() {
     setSubtitleSegments([]);
     setShowPreview(false);
     setSavedSrtUrl(null);
+    setSubtitleOffset(0.3);
     toast.success(`"${file.name}" הועלה בהצלחה`);
   };
 
