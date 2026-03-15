@@ -45,8 +45,8 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-rubik font-bold">פרויקטים</h1>
             <p className="text-muted-foreground text-sm mt-1">{projects.length} פרויקטים במערכת</p>
           </div>
-          <Link to="/create-video" className="gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <Video className="w-4 h-4" /> סרטון חדש
+          <Link to="/creative-studio" className="gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2">
+            <Building2 className="w-4 h-4" /> הוסף חברה
           </Link>
         </div>
 
@@ -151,11 +151,11 @@ export default function ProjectsPage() {
 
         {!loading && filtered.length === 0 && (
           <div className="text-center py-20 bg-card border border-border rounded-xl">
-            <Video className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
             <p className="text-lg text-muted-foreground mb-2">לא נמצאו פרויקטים</p>
-            <p className="text-sm text-muted-foreground mb-4">צרו את הסרטון הראשון שלכם</p>
-            <Link to="/create-video" className="gradient-gold text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
-              <Video className="w-4 h-4" /> סרטון חדש
+            <p className="text-sm text-muted-foreground mb-4">הוסיפו את החברה הראשונה שלכם כדי להתחיל ליצור תוכן</p>
+            <Link to="/creative-studio" className="gradient-gold text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+              <Building2 className="w-4 h-4" /> הוסף חברה
             </Link>
           </div>
         )}
