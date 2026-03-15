@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Check, ChevronLeft, ChevronRight, Plus, Trash2, Copy, GripVertical, Loader2 } from 'lucide-react';
 import { projectService } from '@/services/projectService';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const steps = ['בחירת אווטאר', 'סוג סרטון', 'תוכן', 'בונה סצנות', 'הגדרות מתקדמות', 'סקירה'];
 const videoTypes: { type: VideoType; desc: string }[] = [
