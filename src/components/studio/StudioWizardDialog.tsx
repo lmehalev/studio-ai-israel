@@ -123,6 +123,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
         setResult(null);
         setScriptResult(null);
         setEditImageUrl('');
+        setImageRefPhotos([]);
+        setEditHistory([]);
+        setEditPrompt('');
         setAvatarRefPhotos([]);
         setGeneratedAvatarUrl(null);
         setAvatarImageUrl('');
