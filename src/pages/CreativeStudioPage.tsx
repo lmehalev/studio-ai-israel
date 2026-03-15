@@ -560,16 +560,32 @@ export default function CreativeStudioPage() {
               <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
             </div>
 
-            {/* Video preview */}
+            {/* Video preview with subtitle overlay */}
             {videoPreviewUrl && (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <video src={videoPreviewUrl} controls className="w-full max-h-[300px]" />
+                <div className="relative">
+                  <video
+                    ref={videoPreviewRef}
+                    src={videoPreviewUrl}
+                    controls
+                    className="w-full max-h-[350px]"
+                    onTimeUpdate={handleVideoTimeUpdate}
+                  />
+                  {/* Subtitle overlay */}
+                  {showPreview && currentSubtitle && (
+                    <div className="absolute bottom-12 left-0 right-0 flex justify-center pointer-events-none px-4">
+                      <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center" dir="rtl">
+                        {currentSubtitle}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Transcribe button */}
+            {/* Action buttons */}
             {videoFile && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={handleTranscribe}
                   disabled={loading}
@@ -579,9 +595,32 @@ export default function CreativeStudioPage() {
                   {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
                 </button>
                 {subtitleSegments.length > 0 && (
-                  <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
-                    <Download className="w-4 h-4" /> הורד SRT
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowPreview(!showPreview)}
+                      className={cn(
+                        'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
+                        showPreview ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                      )}
+                    >
+                      <Eye className="w-4 h-4" /> {showPreview ? 'הסתר תצוגה מקדימה' : 'תצוגה מקדימה'}
+                    </button>
+                    <button
+                      onClick={handleSaveSRT}
+                      disabled={savingSrt}
+                      className={cn(
+                        'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
+                        savedSrtUrl ? 'border-green-500 bg-green-500/10 text-green-600' : 'border-border hover:bg-muted',
+                        savingSrt && 'opacity-50'
+                      )}
+                    >
+                      {savingSrt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {savedSrtUrl ? 'נשמר ✓' : 'שמור באחסון'}
+                    </button>
+                    <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
+                      <Download className="w-4 h-4" /> הורד SRT
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -589,9 +628,12 @@ export default function CreativeStudioPage() {
             {/* Editable subtitles */}
             {subtitleSegments.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-                <h3 className="font-rubik font-semibold flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-rubik font-semibold flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
+                  </h3>
+                  <span className="text-xs text-muted-foreground">{subtitleSegments.length} שורות</span>
+                </div>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {subtitleSegments.map((seg, i) => (
                     <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
@@ -607,6 +649,11 @@ export default function CreativeStudioPage() {
                     </div>
                   ))}
                 </div>
+                {!savedSrtUrl && (
+                  <p className="text-xs text-amber-500 flex items-center gap-1">
+                    ⚠️ שינויים לא נשמרו — לחץ "שמור באחסון" כדי לשמור
+                  </p>
+                )}
               </div>
             )}
           </div>
