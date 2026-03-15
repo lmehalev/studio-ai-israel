@@ -754,7 +754,7 @@ export default function CreativeStudioPage() {
                   ))}
                 </div>
                 {!savedSrtUrl && (
-                  <p className="text-xs text-amber-500 flex items-center gap-1">
+                  <p className="text-xs text-warning flex items-center gap-1">
                     ⚠️ שינויים לא נשמרו — לחץ "שמור באחסון" כדי לשמור
                   </p>
                 )}
