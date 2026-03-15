@@ -284,7 +284,7 @@ export default function CreativeStudioPage() {
         </div>
 
         {/* Brand Selector */}
-        <div className="bg-card border border-border rounded-xl p-4">
+        <div data-tour="brand-selector" className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold flex items-center gap-2">
               <Building2 className="w-4 h-4 text-primary" /> חברה / מותג
