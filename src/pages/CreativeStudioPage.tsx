@@ -1,4 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
+import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
