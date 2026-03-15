@@ -81,6 +81,8 @@ export default function CreativeStudioPage() {
   const [savingSrt, setSavingSrt] = useState(false);
   const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const [subtitleOffset, setSubtitleOffset] = useState(0.3);
+  const [subtitleFontClass, setSubtitleFontClass] = useState<(typeof subtitleFontOptions)[number]['value']>('font-heebo');
 
   // RunwayML Video
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
