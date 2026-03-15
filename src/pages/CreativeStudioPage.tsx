@@ -9,7 +9,7 @@ import {
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
+import { imageService, voiceService, didService, avatarGenService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
