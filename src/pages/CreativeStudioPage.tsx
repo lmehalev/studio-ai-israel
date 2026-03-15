@@ -4,19 +4,20 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
-  Upload, Subtitles, Edit3
+  Upload, Subtitles, Edit3, Video
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { imageService, voiceService, didService, promptEnhanceService, subtitleService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
+import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles';
+type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles' | 'video';
 
 const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'תמונה', icon: ImageIcon, desc: 'צור תמונות שיווקיות מטקסט' },
   { id: 'edit', label: 'עריכת תמונה', icon: Wand2, desc: 'ערוך תמונה קיימת עם AI' },
+  { id: 'video', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט עם RunwayML' },
   { id: 'avatar', label: 'אווטאר מדבר', icon: UserCircle, desc: 'צור סרטון עם דמות מדברת (D-ID)' },
   { id: 'voice', label: 'דיבוב', icon: Mic, desc: 'המר טקסט לדיבור מקצועי בעברית' },
   { id: 'script', label: 'תסריט', icon: FileText, desc: 'כתוב וערוך תסריט שיווקי עם AI' },
@@ -57,6 +58,12 @@ export default function CreativeStudioPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // RunwayML Video
+  const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
+  const [runwayImageUrl, setRunwayImageUrl] = useState('');
+  const [runwayPolling, setRunwayPolling] = useState(false);
+  const [runwayProgress, setRunwayProgress] = useState(0);
 
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -139,6 +146,51 @@ export default function CreativeStudioPage() {
         const data = await promptEnhanceService.enhance(buildPrompt(prompt), 'script');
         setScriptResult(data);
         toast.success('התסריט מוכן!');
+      } else if (activeTab === 'video') {
+        if (runwayMode === 'image_to_video' && !runwayImageUrl.trim()) {
+          toast.error('יש להזין קישור לתמונה'); setLoading(false); return;
+        }
+        let taskData;
+        if (runwayMode === 'image_to_video') {
+          taskData = await runwayService.imageToVideo(runwayImageUrl, buildPrompt(prompt));
+        } else {
+          taskData = await runwayService.textToVideo(buildPrompt(prompt));
+        }
+        toast.success('הסרטון בהכנה...');
+        setLoading(false);
+        // Poll RunwayML
+        setRunwayPolling(true);
+        setRunwayProgress(0);
+        const pollRunway = async () => {
+          let attempts = 0;
+          const maxAttempts = 120;
+          const poll = async () => {
+            try {
+              const status = await runwayService.checkStatus(taskData.taskId);
+              setRunwayProgress(status.progress * 100);
+              if (status.status === 'SUCCEEDED' && status.resultUrl) {
+                setResult({ videoUrl: status.resultUrl });
+                setRunwayPolling(false);
+                toast.success('הסרטון מוכן!');
+                return;
+              }
+              if (status.status === 'FAILED') {
+                setRunwayPolling(false);
+                toast.error(status.failureReason || 'שגיאה ביצירת הסרטון');
+                return;
+              }
+              attempts++;
+              if (attempts < maxAttempts) setTimeout(poll, 5000);
+              else { setRunwayPolling(false); toast.error('תם הזמן – נסה שוב'); }
+            } catch {
+              setRunwayPolling(false);
+              toast.error('שגיאה בבדיקת סטטוס');
+            }
+          };
+          poll();
+        };
+        pollRunway();
+        return;
       }
     } catch (err: any) {
       toast.error(err.message || 'שגיאה ביצירה');
@@ -257,6 +309,7 @@ export default function CreativeStudioPage() {
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
     edit: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"',
+    video: 'תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"',
     avatar: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש שלנו..."',
     voice: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"',
     script: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"',
@@ -266,6 +319,7 @@ export default function CreativeStudioPage() {
   const buttonLabels: Record<StudioTab, string> = {
     image: 'צור תמונה',
     edit: 'ערוך תמונה',
+    video: 'צור סרטון',
     avatar: 'צור אווטאר מדבר',
     voice: 'צור דיבוב',
     script: 'צור תסריט',
@@ -505,6 +559,58 @@ export default function CreativeStudioPage() {
                 placeholder="https://example.com/image.jpg"
                 className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
+            </div>
+           )}
+
+          {activeTab === 'video' && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRunwayMode('image_to_video')}
+                  className={cn(
+                    'px-4 py-2 rounded-lg border text-xs font-medium transition-all',
+                    runwayMode === 'image_to_video' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
+                  )}
+                >
+                  🖼️ תמונה → וידאו
+                </button>
+                <button
+                  onClick={() => setRunwayMode('text_to_video')}
+                  className={cn(
+                    'px-4 py-2 rounded-lg border text-xs font-medium transition-all',
+                    runwayMode === 'text_to_video' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
+                  )}
+                >
+                  ✍️ טקסט → וידאו
+                </button>
+              </div>
+              {runwayMode === 'image_to_video' && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
+                  <input
+                    value={runwayImageUrl}
+                    onChange={e => setRunwayImageUrl(e.target.value)}
+                    placeholder="https://example.com/product.jpg"
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
+              {runwayPolling && (
+                <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> מייצר סרטון...
+                    </span>
+                    <span className="text-xs font-medium text-primary">{Math.round(runwayProgress)}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-l from-primary to-accent rounded-full transition-all duration-500"
+                      style={{ width: `${runwayProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
