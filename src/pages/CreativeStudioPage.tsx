@@ -36,6 +36,14 @@ const hebrewVoices = [
   { id: 'ErXwobaYiN019PkySvjV', name: 'אנטוני (גברי)' },
 ];
 
+const subtitleFontOptions = [
+  { value: 'font-heebo', label: 'Heebo (ברירת מחדל)' },
+  { value: 'font-rubik', label: 'Rubik' },
+  { value: 'font-sans', label: 'Sans' },
+  { value: 'font-serif', label: 'Serif' },
+  { value: 'font-mono', label: 'Mono' },
+] as const;
+
 export default function CreativeStudioPage() {
   const [activeTab, setActiveTab] = useState<StudioTab>('image');
   const [prompt, setPrompt] = useState('');
