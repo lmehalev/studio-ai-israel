@@ -3,29 +3,29 @@ import { supabase } from "@/integrations/supabase/client";
 // ====== File Upload Service ======
 export const storageService = {
   /**
-   * Upload a file to Supabase storage and return the public URL.
+   * Upload a file via the storage-manager edge function (uses service role, no RLS issues).
    */
   upload: async (file: File): Promise<string> => {
-    // First ensure bucket exists via edge function
-    await supabase.functions.invoke("storage-manager", {
-      body: { action: "init" },
+    // Convert file to base64
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    const { data, error } = await supabase.functions.invoke("storage-manager", {
+      body: {
+        action: "upload",
+        fileName: file.name,
+        fileType: file.type,
+        fileBase64: base64,
+      },
     });
-
-    const path = `uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const { error } = await supabase.storage
-      .from('media')
-      .upload(path, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
     if (error) throw new Error(error.message || 'שגיאה בהעלאת קובץ');
-
-    const { data: publicUrlData } = supabase.storage
-      .from('media')
-      .getPublicUrl(path);
-
-    return publicUrlData.publicUrl;
+    if (data?.error) throw new Error(data.error);
+    return data.publicUrl;
   },
 };
 
