@@ -657,7 +657,7 @@ export default function CreativeStudioPage() {
                       disabled={savingSrt}
                       className={cn(
                         'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
-                        savedSrtUrl ? 'border-green-500 bg-green-500/10 text-green-600' : 'border-border hover:bg-muted',
+                        savedSrtUrl ? 'border-success bg-success/10 text-success' : 'border-border hover:bg-muted',
                         savingSrt && 'opacity-50'
                       )}
                     >
