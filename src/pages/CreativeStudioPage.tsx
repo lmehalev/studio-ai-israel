@@ -671,6 +671,63 @@ export default function CreativeStudioPage() {
               </div>
             )}
 
+            {subtitleSegments.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">פונט כתוביות</label>
+                  <select
+                    value={subtitleFontClass}
+                    onChange={(e) => setSubtitleFontClass(e.target.value as (typeof subtitleFontOptions)[number]['value'])}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    {subtitleFontOptions.map((font) => (
+                      <option key={font.value} value={font.value}>{font.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">השהיית כתוביות</label>
+                    <span className="text-xs font-medium text-primary">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={subtitleOffset}
+                    onChange={(e) => {
+                      setSubtitleOffset(Number(e.target.value));
+                      setSavedSrtUrl(null);
+                    }}
+                    className="w-full accent-primary"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSubtitleOffset((prev) => Math.max(-2, Number((prev - 0.2).toFixed(1))));
+                        setSavedSrtUrl(null);
+                      }}
+                      className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted"
+                    >
+                      מוקדם יותר
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSubtitleOffset((prev) => Math.min(2, Number((prev + 0.2).toFixed(1))));
+                        setSavedSrtUrl(null);
+                      }}
+                      className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted"
+                    >
+                      מאוחר יותר
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">הסנכרון חל גם על התצוגה וגם על קובץ ה-SRT.</p>
+                </div>
+              </div>
+            )}
+
             {/* Editable subtitles */}
             {subtitleSegments.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-5 space-y-3">
