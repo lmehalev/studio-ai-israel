@@ -117,28 +117,7 @@ export function WizardFlow({ action, activeBrand, onBack, buildPrompt }: WizardF
   const [runwayPolling, setRunwayPolling] = useState(false);
   const [runwayProgress, setRunwayProgress] = useState(0);
 
-  // Subtitles
-  const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([]);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [currentSubtitle, setCurrentSubtitle] = useState('');
-  const [savingSrt, setSavingSrt] = useState(false);
-  const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
-  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
-  const [subtitleOffset, setSubtitleOffset] = useState(0.3);
-  const [subtitleFontClass, setSubtitleFontClass] = useState<string>('font-heebo');
 
-  const getAdjustedSegments = useCallback(() => {
-    return subtitleSegments
-      .map((seg) => ({
-        ...seg,
-        start: Math.max(0, Number((seg.start + subtitleOffset).toFixed(2))),
-        end: Math.max(Math.max(0, Number((seg.start + subtitleOffset).toFixed(2))) + 0.1, Number((seg.end + subtitleOffset).toFixed(2))),
-      }))
-      .sort((a, b) => a.start - b.start);
   }, [subtitleSegments, subtitleOffset]);
 
   // Poll D-ID
