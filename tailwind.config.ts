@@ -16,6 +16,7 @@ export default {
       fontFamily: {
         heebo: ["Heebo", "sans-serif"],
         rubik: ["Rubik", "sans-serif"],
+        "noto-hebrew": ["Noto Sans Hebrew", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
