@@ -394,7 +394,7 @@ export default function CreativeStudioPage() {
   const handleVideoTimeUpdate = () => {
     if (!videoPreviewRef.current) return;
     const currentTime = videoPreviewRef.current.currentTime;
-    const active = subtitleSegments.find(seg => currentTime >= seg.start && currentTime <= seg.end);
+    const active = getAdjustedSegments().find(seg => currentTime >= seg.start && currentTime <= seg.end);
     setCurrentSubtitle(active?.text || '');
   };
 
