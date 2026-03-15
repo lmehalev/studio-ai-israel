@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronLeft, Video, HelpCircle
 } from 'lucide-react';
 import { useState } from 'react';
-import { OpenGuideButton } from '@/components/OnboardingDialog';
+import { OpenGuideTourButton } from '@/components/GuidedTour';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
@@ -72,7 +72,7 @@ export function AppSidebar() {
 
       {!collapsed && (
         <div className="p-4 border-t border-sidebar-border space-y-2">
-          <OpenGuideButton />
+          <OpenGuideTourButton />
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>

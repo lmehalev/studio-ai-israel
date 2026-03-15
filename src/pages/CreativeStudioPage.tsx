@@ -1,4 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
+import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
@@ -273,6 +274,7 @@ export default function CreativeStudioPage() {
 
   return (
     <AppLayout>
+      <GuidedTour />
       <div className="space-y-5">
         {/* Header */}
         <div>
@@ -284,7 +286,7 @@ export default function CreativeStudioPage() {
         </div>
 
         {/* Brand Selector */}
-        <div className="bg-card border border-border rounded-xl p-4">
+        <div data-tour="brand-selector" className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold flex items-center gap-2">
               <Building2 className="w-4 h-4 text-primary" /> חברה / מותג
@@ -395,6 +397,7 @@ export default function CreativeStudioPage() {
             return (
               <button
                 key={tab.id}
+                data-tour={`tab-${tab.id}`}
                 onClick={() => { setActiveTab(tab.id); setResult(null); setScriptResult(null); }}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all',
@@ -490,7 +493,7 @@ export default function CreativeStudioPage() {
 
         {/* Input Area (for non-subtitle tabs) */}
         {activeTab !== 'subtitles' && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div data-tour="prompt-area" className="bg-card border border-border rounded-xl p-5 space-y-4">
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
@@ -542,6 +545,7 @@ export default function CreativeStudioPage() {
 
           <div className="flex items-center gap-3">
             <button
+              data-tour="generate-btn"
               onClick={handleGenerate}
               disabled={loading || polling}
               className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
