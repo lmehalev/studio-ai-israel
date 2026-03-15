@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, action, imageUrl } = await req.json();
+    const { prompt, action, imageUrl, referenceImages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -41,6 +41,19 @@ serve(async (req) => {
           { type: "image_url", image_url: { url: imageUrl } },
         ],
       });
+    } else if (referenceImages && referenceImages.length > 0) {
+      // Generate with reference images
+      messages.push({
+        role: "system",
+        content: hebrewTextGuidelines,
+      });
+      const contentParts: any[] = [
+        { type: "text", text: `צור תמונה חדשה באיכות גבוהה לפי התיאור הבא. השתמש בתמונות הרפרנס המצורפות כהשראה — שלב אלמנטים מהן (אנשים, מוצרים, לוגו, סגנון) בתמונה החדשה. שים לב שכל טקסט בעברית יהיה מדויק וקריא.\n\nתיאור: ${prompt}` },
+      ];
+      for (const refUrl of referenceImages) {
+        contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+      }
+      messages.push({ role: "user", content: contentParts });
     } else {
       messages.push({
         role: "system",

@@ -31,9 +31,9 @@ export const storageService = {
 
 // ====== Image Generation Service ======
 export const imageService = {
-  generate: async (prompt: string): Promise<{ imageUrl: string; text: string }> => {
+  generate: async (prompt: string, referenceImages?: string[]): Promise<{ imageUrl: string; text: string }> => {
     const { data, error } = await supabase.functions.invoke("generate-image", {
-      body: { prompt, action: "generate" },
+      body: { prompt, action: "generate", referenceImages },
     });
     if (error) throw new Error(error.message || "שגיאה ביצירת תמונה");
     if (data?.error) throw new Error(data.error);
