@@ -780,17 +780,36 @@ export default function CreativeStudioPage() {
           )}
 
           {(activeTab === 'voice' || activeTab === 'avatar') && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">בחר קול</label>
-              <select
-                value={selectedVoice}
-                onChange={e => setSelectedVoice(e.target.value)}
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                {hebrewVoices.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">בחר קול</label>
+                <select
+                  value={selectedVoice}
+                  onChange={e => setSelectedVoice(e.target.value)}
+                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <optgroup label="קולות מובנים">
+                    {hebrewVoices.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {activeTab === 'voice' && (
+                <>
+                  <VoiceRecorder
+                    label="🎙️ הקלט את הקול שלך"
+                    onSaved={(url) => toast.success('ההקלטה נשמרה: ' + url)}
+                  />
+                  <FileUploadZone
+                    accept="audio/*"
+                    label="או העלה קובץ קול"
+                    hint="MP3, WAV, M4A"
+                    onUploaded={(url) => toast.success('קובץ הקול הועלה: ' + url)}
+                  />
+                </>
+              )}
             </div>
           )}
 
