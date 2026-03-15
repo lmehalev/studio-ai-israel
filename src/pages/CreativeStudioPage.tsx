@@ -66,6 +66,12 @@ export default function CreativeStudioPage() {
   // Avatar (D-ID)
   const [avatarImageUrl, setAvatarImageUrl] = useState('');
   const [polling, setPolling] = useState(false);
+  // Multi-photo avatar generation
+  const [avatarRefPhotos, setAvatarRefPhotos] = useState<string[]>([]);
+  const [avatarStyle, setAvatarStyle] = useState('professional headshot');
+  const [generatingAvatar, setGeneratingAvatar] = useState(false);
+  const [generatedAvatarUrl, setGeneratedAvatarUrl] = useState<string | null>(null);
+  const avatarMultiRef = useRef<HTMLInputElement>(null);
 
   // Script
   const [scriptResult, setScriptResult] = useState<{ enhanced?: string; scenes?: any[]; hook?: string; cta?: string } | null>(null);
