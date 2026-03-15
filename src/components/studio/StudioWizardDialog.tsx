@@ -254,7 +254,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   };
 
   // ============ PROMPT INPUT WITH SPEECH ============
-  const PromptInput = ({ placeholder, rows = 4 }: { placeholder: string; rows?: number }) => (
+  const renderPromptInput = ({ placeholder, rows = 4 }: { placeholder: string; rows?: number }) => (
     <div className="relative">
       <textarea
         value={prompt}
@@ -287,7 +287,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   );
 
   // ============ RESULT VIEW ============
-  const ResultView = () => (
+  const renderResultView = () => (
     <div className="space-y-4">
       {result?.imageUrl && (
         <div className="rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
@@ -318,7 +318,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   );
 
   // ============ IMAGE RESULT WITH ITERATIVE EDITING ============
-  const ImageResultWithEdit = () => (
+  const renderImageResultWithEdit = () => (
     <div className="space-y-4">
       {/* Edit history */}
       {editHistory.length > 1 && (
@@ -437,7 +437,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'image') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <PromptInput placeholder='תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' />
+          {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
           
           {/* Reference images */}
           <div className="space-y-2">
@@ -486,7 +486,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 1 && result?.imageUrl) return <ImageResultWithEdit />;
+      if (wizardStep === 1 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
     // ====== EDIT IMAGE ======
@@ -505,7 +505,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               <img src={editImageUrl} alt="תמונה מקורית" className="max-h-[180px] object-contain" />
             </div>
           )}
-          <PromptInput placeholder='תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"' />
+          {renderPromptInput({ placeholder: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"' })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
@@ -527,7 +527,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 2 && result?.imageUrl) return <ImageResultWithEdit />;
+      if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
     // ====== AVATAR VIDEO ======
@@ -607,7 +607,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
       );
       if (wizardStep === 2) return (
         <div className="space-y-4">
-          <PromptInput placeholder='מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש..."' rows={5} />
+          {renderPromptInput({ placeholder: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש..."', rows: 5 })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין טקסט'); return; }
@@ -628,7 +628,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 3 && result?.videoUrl) return <ResultView />;
+      if (wizardStep === 3 && result?.videoUrl) return renderResultView();
     }
 
     // ====== VIDEO AI ======
@@ -662,7 +662,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
       );
       if (wizardStep === 1) return (
         <div className="space-y-4">
-          <PromptInput placeholder='תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"' />
+          {renderPromptInput({ placeholder: 'תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"' })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
@@ -707,14 +707,14 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 2 && result?.videoUrl) return <ResultView />;
+      if (wizardStep === 2 && result?.videoUrl) return renderResultView();
     }
 
     // ====== DUBBING ======
     if (selectedAction === 'dubbing') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <PromptInput placeholder='הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"' rows={5} />
+          {renderPromptInput({ placeholder: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"', rows: 5 })}
           <VoiceRecorder label="🎙️ הקלט את הקול שלך" onSaved={url => toast.success('ההקלטה נשמרה: ' + url)} />
           <FileUploadZone accept="audio/*" label="או העלה קובץ קול" hint="MP3, WAV, M4A"
             onUploaded={url => toast.success('קובץ הקול הועלה: ' + url)} />
@@ -775,7 +775,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'script') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <PromptInput placeholder='תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"' rows={6} />
+          {renderPromptInput({ placeholder: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"', rows: 6 })}
           <button
             onClick={async () => {
               if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
