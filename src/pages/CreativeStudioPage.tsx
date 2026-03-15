@@ -340,7 +340,7 @@ export default function CreativeStudioPage() {
     if (subtitleSegments.length === 0) return;
     setSavingSrt(true);
     try {
-      const srt = subtitleService.toSRT(subtitleSegments);
+      const srt = subtitleService.toSRT(getAdjustedSegments());
       const bom = '\uFEFF';
       const content = bom + srt;
       
