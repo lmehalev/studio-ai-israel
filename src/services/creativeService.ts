@@ -1,5 +1,34 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// ====== File Upload Service ======
+export const storageService = {
+  /**
+   * Upload a file to Supabase storage and return the public URL.
+   */
+  upload: async (file: File): Promise<string> => {
+    // First ensure bucket exists via edge function
+    await supabase.functions.invoke("storage-manager", {
+      body: { action: "init" },
+    });
+
+    const path = `uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { error } = await supabase.storage
+      .from('media')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) throw new Error(error.message || 'שגיאה בהעלאת קובץ');
+
+    const { data: publicUrlData } = supabase.storage
+      .from('media')
+      .getPublicUrl(path);
+
+    return publicUrlData.publicUrl;
+  },
+};
+
 // ====== Image Generation Service ======
 export const imageService = {
   generate: async (prompt: string): Promise<{ imageUrl: string; text: string }> => {
