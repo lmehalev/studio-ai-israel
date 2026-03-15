@@ -97,6 +97,36 @@ export const subtitleService = {
   },
 };
 
+// ====== RunwayML Video Service ======
+export const runwayService = {
+  imageToVideo: async (promptImage: string, promptText: string, model?: string, duration?: number, ratio?: string) => {
+    const { data, error } = await supabase.functions.invoke("runway-video", {
+      body: { action: "image_to_video", promptImage, promptText, model, duration, ratio },
+    });
+    if (error) throw new Error(error.message || "שגיאה ביצירת וידאו");
+    if (data?.error) throw new Error(data.error);
+    return data as { taskId: string };
+  },
+
+  textToVideo: async (promptText: string, model?: string, duration?: number, ratio?: string) => {
+    const { data, error } = await supabase.functions.invoke("runway-video", {
+      body: { action: "text_to_video", promptText, model, duration, ratio },
+    });
+    if (error) throw new Error(error.message || "שגיאה ביצירת וידאו");
+    if (data?.error) throw new Error(data.error);
+    return data as { taskId: string };
+  },
+
+  checkStatus: async (taskId: string) => {
+    const { data, error } = await supabase.functions.invoke("runway-video", {
+      body: { action: "check_status", taskId },
+    });
+    if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
+    if (data?.error) throw new Error(data.error);
+    return data as { status: string; progress: number; resultUrl: string | null; failureReason: string | null };
+  },
+};
+
 // ====== Prompt Enhancement Service ======
 export const promptEnhanceService = {
   enhance: async (text: string, type: "enhance" | "script" = "enhance") => {
