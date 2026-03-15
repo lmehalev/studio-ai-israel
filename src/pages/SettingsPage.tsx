@@ -7,12 +7,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 const connectedServices = [
-  { name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים', icon: Sparkles, status: 'connected', free: true },
-  { name: 'ElevenLabs', desc: 'דיבוב בעברית (4 קולות)', icon: Mic, status: 'connected', free: false },
-  { name: 'D-ID', desc: 'אווטאר מדבר', icon: UserCircle, status: 'connected', free: false },
-  { name: 'RunwayML', desc: 'וידאו AI (תמונה/טקסט → סרטון)', icon: Video, status: 'connected', free: false },
-  { name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, status: 'connected', free: true },
-  { name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, status: 'connected', free: true },
+  { name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים', icon: Sparkles, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
+  { name: 'ElevenLabs', desc: 'דיבוב בעברית (4 קולות)', icon: Mic, status: 'connected', free: false, plan: 'חינם (מוגבל)', planNote: '⚠️ חבילת Free מוגבלת ל-10,000 תווים/חודש. ליצירת תוכן רציני נדרשת חבילה בתשלום ($5+/חודש).' },
+  { name: 'D-ID', desc: 'אווטאר מדבר', icon: UserCircle, status: 'connected', free: false, plan: 'חינם (Trial)', planNote: '⚠️ חשבון Trial מוגבל ל-5 דקות. ליצירת סרטוני אווטאר נדרשת חבילה בתשלום ($5.9+/חודש).' },
+  { name: 'RunwayML', desc: 'וידאו AI (תמונה/טקסט → סרטון)', icon: Video, status: 'connected', free: false, plan: 'חינם (Trial)', planNote: '⚠️ חשבון Trial מוגבל ל-125 קרדיטים. ליצירת וידאו נדרשת חבילה בתשלום ($12+/חודש).' },
+  { name: 'Shotstack', desc: 'עריכת וידאו ורינדור אוטומטי', icon: Video, status: 'connected', free: false, plan: 'Sandbox (חינם)', planNote: '✅ Sandbox חינמי מאפשר רינדור עם ווטרמארק. להסרת ווטרמארק נדרשת חבילה בתשלום ($39+/חודש).' },
+  { name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, status: 'connected', free: false, plan: 'חינם (מוגבל)', planNote: '✅ חבילת Free כוללת 25 קרדיטים/חודש. לשימוש מורחב נדרשת חבילה בתשלום ($89+/חודש).' },
+  { name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
+  { name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
 ];
 
 interface StoredFile {
