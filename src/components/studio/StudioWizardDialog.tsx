@@ -74,6 +74,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
 
   // Image edit
   const [editImageUrl, setEditImageUrl] = useState('');
+  
+  // Image generation - reference images & iterative editing
+  const [imageRefPhotos, setImageRefPhotos] = useState<string[]>([]);
+  const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string }[]>([]);
+  const [editPrompt, setEditPrompt] = useState('');
 
   // Voice
   const [selectedVoice, setSelectedVoice] = useState(hebrewVoices[0].id);
