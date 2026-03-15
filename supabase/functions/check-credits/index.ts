@@ -6,6 +6,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ELEVENLABS_DASHBOARD_URL = "https://elevenlabs.io/subscription";
+const RUNWAY_DASHBOARD_URL = "https://app.runwayml.com/settings/billing";
+const RUNWAY_VERSION = "2024-11-06";
+const RUNWAY_VALIDATION_TASK_ID = "00000000-0000-0000-0000-000000000000";
+
 interface ServiceCredits {
   service: string;
   used: number;
@@ -17,26 +22,91 @@ interface ServiceCredits {
   error?: string;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  return String(error);
+};
+
+const toErrorResult = (
+  service: ServiceCredits["service"],
+  unit: string,
+  dashboardUrl: string,
+  error: unknown,
+): ServiceCredits => ({
+  service,
+  used: 0,
+  limit: 0,
+  unit,
+  plan: "unknown",
+  canGenerate: false,
+  dashboardUrl,
+  error: getErrorMessage(error),
+});
+
+const parseErrorBody = async (response: Response): Promise<string> => {
+  const text = await response.text();
+  if (!text) return "No response body";
+
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === "string") return parsed;
+    if (parsed?.detail) return String(parsed.detail);
+    if (parsed?.message) return String(parsed.message);
+    return JSON.stringify(parsed);
+  } catch {
+    return text;
+  }
+};
+
 async function checkElevenLabs(apiKey: string): Promise<ServiceCredits> {
   try {
-    const res = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
-      headers: { "xi-api-key": apiKey },
+    const headers = { "xi-api-key": apiKey };
+
+    const subscriptionRes = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+      headers,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const used = data.character_count || 0;
-    const limit = data.character_limit || 10000;
-    return {
-      service: "elevenlabs",
-      used,
-      limit,
-      unit: "תווים",
-      plan: data.tier || "free",
-      canGenerate: used < limit,
-      dashboardUrl: "https://elevenlabs.io/subscription",
-    };
-  } catch (e) {
-    return { service: "elevenlabs", used: 0, limit: 0, unit: "תווים", plan: "unknown", canGenerate: false, dashboardUrl: "https://elevenlabs.io/subscription", error: e.message };
+
+    if (subscriptionRes.ok) {
+      const data = await subscriptionRes.json();
+      const used = data.character_count || 0;
+      const limit = data.character_limit || 10000;
+
+      return {
+        service: "elevenlabs",
+        used,
+        limit,
+        unit: "תווים",
+        plan: data.tier || "free",
+        canGenerate: used < limit,
+        dashboardUrl: ELEVENLABS_DASHBOARD_URL,
+      };
+    }
+
+    if (subscriptionRes.status === 401 || subscriptionRes.status === 403) {
+      // Some keys (e.g. scoped/service-account keys) cannot read subscription,
+      // but can still generate TTS. Validate key with a read-only endpoint.
+      const modelsRes = await fetch("https://api.elevenlabs.io/v1/models", { headers });
+
+      if (modelsRes.ok) {
+        return {
+          service: "elevenlabs",
+          used: 0,
+          limit: -1,
+          unit: "תווים",
+          plan: "API מחובר",
+          canGenerate: true,
+          dashboardUrl: ELEVENLABS_DASHBOARD_URL,
+        };
+      }
+
+      const modelsError = await parseErrorBody(modelsRes);
+      throw new Error(`subscription:${subscriptionRes.status}; models:${modelsRes.status} ${modelsError}`);
+    }
+
+    const subscriptionError = await parseErrorBody(subscriptionRes);
+    throw new Error(`HTTP ${subscriptionRes.status}: ${subscriptionError}`);
+  } catch (error) {
+    return toErrorResult("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, error);
   }
 }
 
@@ -45,10 +115,16 @@ async function checkDID(apiKey: string): Promise<ServiceCredits> {
     const res = await fetch("https://api.d-id.com/credits", {
       headers: { Authorization: `Basic ${apiKey}` },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    if (!res.ok) {
+      const message = await parseErrorBody(res);
+      throw new Error(`HTTP ${res.status}: ${message}`);
+    }
+
     const data = await res.json();
     const remaining = data.remaining || 0;
     const total = data.total || 20;
+
     return {
       service: "did",
       used: total - remaining,
@@ -58,47 +134,55 @@ async function checkDID(apiKey: string): Promise<ServiceCredits> {
       canGenerate: remaining > 0,
       dashboardUrl: "https://studio.d-id.com/account",
     };
-  } catch (e) {
-    return { service: "did", used: 0, limit: 0, unit: "קרדיטים", plan: "unknown", canGenerate: false, dashboardUrl: "https://studio.d-id.com/account", error: e.message };
+  } catch (error) {
+    return toErrorResult("did", "קרדיטים", "https://studio.d-id.com/account", error);
   }
 }
 
 async function checkRunway(apiKey: string): Promise<ServiceCredits> {
   try {
-    // Runway API doesn't have a credits endpoint - validate the key with a lightweight call
-    const res = await fetch("https://api.dev.runwayml.com/v1/tasks?limit=1", {
-      headers: { Authorization: `Bearer ${apiKey}`, "X-Runway-Version": "2024-11-06" },
+    // Runway currently has no dedicated "credits" endpoint.
+    // Validate API key by hitting a known endpoint with a dummy task id.
+    const res = await fetch(`https://api.dev.runwayml.com/v1/tasks/${RUNWAY_VALIDATION_TASK_ID}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "X-Runway-Version": RUNWAY_VERSION,
+      },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Key is valid - credits are managed on Runway's dashboard
-    return {
-      service: "runway",
-      used: 0,
-      limit: -1,
-      unit: "קרדיטים",
-      plan: "API מחובר",
-      canGenerate: true,
-      dashboardUrl: "https://app.runwayml.com/video-tools/teams/info27720/settings/billing",
-    };
-  } catch (e) {
-    return { service: "runway", used: 0, limit: 0, unit: "קרדיטים", plan: "unknown", canGenerate: false, dashboardUrl: "https://app.runwayml.com/video-tools/teams/info27720/settings/billing", error: e.message };
+
+    // 200 = task exists, 400/404/422 = endpoint reached + auth valid, task invalid/not found.
+    if (res.ok || res.status === 400 || res.status === 404 || res.status === 422) {
+      return {
+        service: "runway",
+        used: 0,
+        limit: -1,
+        unit: "קרדיטים",
+        plan: "API מחובר",
+        canGenerate: true,
+        dashboardUrl: RUNWAY_DASHBOARD_URL,
+      };
+    }
+
+    const errorText = await parseErrorBody(res);
+    throw new Error(`HTTP ${res.status}: ${errorText}`);
+  } catch (error) {
+    return toErrorResult("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, error);
   }
 }
 
-async function checkShotstack(apiKey: string): Promise<ServiceCredits> {
+async function checkShotstack(_apiKey: string): Promise<ServiceCredits> {
   try {
-    // Shotstack doesn't have a direct credits endpoint in sandbox, return static info
     return {
       service: "shotstack",
       used: 0,
-      limit: -1, // unlimited in sandbox (with watermark)
+      limit: -1,
       unit: "רינדורים",
       plan: "sandbox",
       canGenerate: true,
       dashboardUrl: "https://dashboard.shotstack.io/",
     };
-  } catch (e) {
-    return { service: "shotstack", used: 0, limit: 0, unit: "רינדורים", plan: "unknown", canGenerate: false, dashboardUrl: "https://dashboard.shotstack.io/", error: e.message };
+  } catch (error) {
+    return toErrorResult("shotstack", "רינדורים", "https://dashboard.shotstack.io/", error);
   }
 }
 
@@ -108,9 +192,15 @@ async function checkCloudinary(cloudName: string, apiKey: string, apiSecret: str
     const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/usage`, {
       headers: { Authorization: `Basic ${auth}` },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    if (!res.ok) {
+      const message = await parseErrorBody(res);
+      throw new Error(`HTTP ${res.status}: ${message}`);
+    }
+
     const data = await res.json();
     const used = data.credits?.used_percent ?? 0;
+
     return {
       service: "cloudinary",
       used: Math.round(used * 100) / 100,
@@ -120,8 +210,8 @@ async function checkCloudinary(cloudName: string, apiKey: string, apiSecret: str
       canGenerate: used < 100,
       dashboardUrl: "https://console.cloudinary.com/settings/account",
     };
-  } catch (e) {
-    return { service: "cloudinary", used: 0, limit: 0, unit: "% קרדיטים", plan: "unknown", canGenerate: false, dashboardUrl: "https://console.cloudinary.com/settings/account", error: e.message };
+  } catch (error) {
+    return toErrorResult("cloudinary", "% קרדיטים", "https://console.cloudinary.com/settings/account", error);
   }
 }
 
@@ -141,27 +231,30 @@ serve(async (req) => {
     const cloudinaryKey = Deno.env.get("CLOUDINARY_API_KEY");
     const cloudinarySecret = Deno.env.get("CLOUDINARY_API_SECRET");
 
-    // Run all checks in parallel
     const promises: Promise<ServiceCredits>[] = [];
 
     if (elevenLabsKey) promises.push(checkElevenLabs(elevenLabsKey));
     if (didKey) promises.push(checkDID(didKey));
     if (runwayKey) promises.push(checkRunway(runwayKey));
     if (shotstackKey) promises.push(checkShotstack(shotstackKey));
-    if (cloudinaryName && cloudinaryKey && cloudinarySecret)
+    if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
       promises.push(checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret));
+    }
 
     const settled = await Promise.allSettled(promises);
-    for (const r of settled) {
-      if (r.status === "fulfilled") results.push(r.value);
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        results.push(result.value);
+      }
     }
 
     return new Response(JSON.stringify({ credits: results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("check-credits error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (error) {
+    console.error("check-credits error:", error);
+
+    return new Response(JSON.stringify({ error: getErrorMessage(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
