@@ -221,15 +221,27 @@ export default function CreativeStudioPage() {
     setIsPlaying(!isPlaying);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const url = result?.imageUrl || result?.audioUrl || result?.videoUrl;
     if (!url) return;
     const ext = result?.videoUrl ? 'mp4' : result?.audioUrl ? 'mp3' : 'png';
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${activeBrand?.name || 'studio'}-${Date.now()}.${ext}`;
-    link.click();
-    toast.success('ההורדה החלה');
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${activeBrand?.name || 'studio'}-${Date.now()}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast.success('ההורדה החלה');
+    } catch {
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+      toast.info('הקובץ נפתח בטאב חדש — שמור משם');
+    }
   };
 
   const handleCopy = async () => {
