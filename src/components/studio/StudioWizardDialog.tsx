@@ -308,7 +308,85 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           <Copy className="w-4 h-4" /> העתק קישור
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); }}
+      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
+        className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
+        <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
+      </button>
+    </div>
+  );
+
+  // ============ IMAGE RESULT WITH ITERATIVE EDITING ============
+  const ImageResultWithEdit = () => (
+    <div className="space-y-4">
+      {/* Edit history */}
+      {editHistory.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {editHistory.map((h, i) => (
+            <button key={i} onClick={() => setResult({ imageUrl: h.imageUrl })}
+              className={cn('flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
+                result?.imageUrl === h.imageUrl ? 'border-primary shadow-gold' : 'border-border/50 opacity-60 hover:opacity-100')}>
+              <img src={h.imageUrl} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Current image */}
+      {result?.imageUrl && (
+        <div className="rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+          <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[250px] object-contain" />
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
+          <Download className="w-4 h-4" /> הורד
+        </button>
+        <button onClick={async () => {
+          if (result?.imageUrl) { await navigator.clipboard.writeText(result.imageUrl); toast.success('הועתק'); }
+        }} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
+          <Copy className="w-4 h-4" /> העתק
+        </button>
+      </div>
+
+      {/* Iterative editing */}
+      <div className="bg-muted/30 rounded-xl border border-border p-3 space-y-3">
+        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <Edit3 className="w-3.5 h-3.5" /> רוצה לשנות משהו? תאר מה לעדכן
+        </p>
+        <div className="relative">
+          <textarea
+            value={editPrompt}
+            onChange={e => setEditPrompt(e.target.value)}
+            placeholder='למשל: "שנה את הרקע לכחול", "הוסף לוגו למעלה", "הפוך את הטקסט לבולט יותר"'
+            rows={2}
+            dir="rtl"
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
+        <button
+          onClick={async () => {
+            if (!editPrompt.trim() || !result?.imageUrl) return;
+            setLoading(true);
+            try {
+              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl);
+              setEditHistory(prev => [...prev, { imageUrl: data.imageUrl, prompt: editPrompt }]);
+              setResult({ imageUrl: data.imageUrl });
+              setEditPrompt('');
+              toast.success('התמונה עודכנה!');
+            } catch (e: any) { toast.error(e.message); }
+            finally { setLoading(false); }
+          }}
+          disabled={loading || !editPrompt.trim()}
+          className="w-full gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+          {loading ? 'מעדכן...' : 'עדכן תמונה'}
+        </button>
+      </div>
+
+      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
