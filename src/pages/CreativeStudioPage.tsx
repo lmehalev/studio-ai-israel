@@ -269,6 +269,8 @@ export default function CreativeStudioPage() {
     setVideoFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
     setSubtitleSegments([]);
+    setShowPreview(false);
+    setSavedSrtUrl(null);
     toast.success(`"${file.name}" הועלה בהצלחה`);
   };
 
@@ -284,7 +286,6 @@ export default function CreativeStudioPage() {
     if (!videoFile) { toast.error('יש להעלות סרטון קודם'); return; }
     setLoading(true);
     try {
-      // Extract audio from video as base64 (chunk to avoid stack overflow)
       const arrayBuffer = await videoFile.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const chunkSize = 8192;
@@ -295,11 +296,50 @@ export default function CreativeStudioPage() {
       const base64 = btoa(binary);
       const data = await subtitleService.transcribe(base64);
       setSubtitleSegments(data.segments);
-      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות');
+      setSavedSrtUrl(null);
+      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות ולצפות בתצוגה מקדימה');
     } catch (err: any) {
       toast.error(err.message || 'שגיאה בתמלול');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSRT = async () => {
+    if (subtitleSegments.length === 0) return;
+    setSavingSrt(true);
+    try {
+      const srt = subtitleService.toSRT(subtitleSegments);
+      const bom = '\uFEFF';
+      const content = bom + srt;
+      
+      // Convert to base64 for upload
+      const encoder = new TextEncoder();
+      const encoded = encoder.encode(content);
+      let binaryStr = '';
+      const chunk = 8192;
+      for (let i = 0; i < encoded.length; i += chunk) {
+        binaryStr += String.fromCharCode(...encoded.slice(i, i + chunk));
+      }
+      const base64 = btoa(binaryStr);
+      
+      const { data, error } = await supabase.functions.invoke("storage-manager", {
+        body: {
+          action: "upload",
+          fileName: `${activeBrand?.name || 'subtitles'}-${Date.now()}.srt`,
+          fileType: "text/plain",
+          fileBase64: base64,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      
+      setSavedSrtUrl(data.publicUrl);
+      toast.success('קובץ SRT נשמר באחסון! ניתן להוריד או למחוק מדף ההגדרות');
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה בשמירה');
+    } finally {
+      setSavingSrt(false);
     }
   };
 
@@ -319,8 +359,17 @@ export default function CreativeStudioPage() {
     toast.success('קובץ SRT הורד');
   };
 
+  // Update current subtitle based on video time
+  const handleVideoTimeUpdate = () => {
+    if (!videoPreviewRef.current) return;
+    const currentTime = videoPreviewRef.current.currentTime;
+    const active = subtitleSegments.find(seg => currentTime >= seg.start && currentTime <= seg.end);
+    setCurrentSubtitle(active?.text || '');
+  };
+
   const updateSegmentText = (index: number, text: string) => {
     setSubtitleSegments(prev => prev.map((seg, i) => i === index ? { ...seg, text } : seg));
+    setSavedSrtUrl(null); // Mark as unsaved
   };
 
   const placeholders: Record<StudioTab, string> = {
