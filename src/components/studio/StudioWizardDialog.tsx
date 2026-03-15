@@ -363,6 +363,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           <textarea
             value={editPrompt}
             onChange={e => setEditPrompt(e.target.value)}
+            onKeyDown={e => e.stopPropagation()}
             placeholder='למשל: "שנה את הרקע לכחול", "הוסף לוגו למעלה", "הפוך את הטקסט לבולט יותר"'
             rows={2}
             dir="rtl"
