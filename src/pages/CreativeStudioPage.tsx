@@ -4,11 +4,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
-  Upload, Subtitles, Edit3, Video
+  Upload, Subtitles, Edit3, Video, Eye, Save
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
+import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -59,6 +60,11 @@ export default function CreativeStudioPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [currentSubtitle, setCurrentSubtitle] = useState('');
+  const [savingSrt, setSavingSrt] = useState(false);
+  const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
   // RunwayML Video
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
@@ -264,6 +270,8 @@ export default function CreativeStudioPage() {
     setVideoFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
     setSubtitleSegments([]);
+    setShowPreview(false);
+    setSavedSrtUrl(null);
     toast.success(`"${file.name}" הועלה בהצלחה`);
   };
 
@@ -279,7 +287,6 @@ export default function CreativeStudioPage() {
     if (!videoFile) { toast.error('יש להעלות סרטון קודם'); return; }
     setLoading(true);
     try {
-      // Extract audio from video as base64 (chunk to avoid stack overflow)
       const arrayBuffer = await videoFile.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
       const chunkSize = 8192;
@@ -290,11 +297,50 @@ export default function CreativeStudioPage() {
       const base64 = btoa(binary);
       const data = await subtitleService.transcribe(base64);
       setSubtitleSegments(data.segments);
-      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות');
+      setSavedSrtUrl(null);
+      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות ולצפות בתצוגה מקדימה');
     } catch (err: any) {
       toast.error(err.message || 'שגיאה בתמלול');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSRT = async () => {
+    if (subtitleSegments.length === 0) return;
+    setSavingSrt(true);
+    try {
+      const srt = subtitleService.toSRT(subtitleSegments);
+      const bom = '\uFEFF';
+      const content = bom + srt;
+      
+      // Convert to base64 for upload
+      const encoder = new TextEncoder();
+      const encoded = encoder.encode(content);
+      let binaryStr = '';
+      const chunk = 8192;
+      for (let i = 0; i < encoded.length; i += chunk) {
+        binaryStr += String.fromCharCode(...encoded.slice(i, i + chunk));
+      }
+      const base64 = btoa(binaryStr);
+      
+      const { data, error } = await supabase.functions.invoke("storage-manager", {
+        body: {
+          action: "upload",
+          fileName: `${activeBrand?.name || 'subtitles'}-${Date.now()}.srt`,
+          fileType: "text/plain",
+          fileBase64: base64,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      
+      setSavedSrtUrl(data.publicUrl);
+      toast.success('קובץ SRT נשמר באחסון! ניתן להוריד או למחוק מדף ההגדרות');
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה בשמירה');
+    } finally {
+      setSavingSrt(false);
     }
   };
 
@@ -314,8 +360,17 @@ export default function CreativeStudioPage() {
     toast.success('קובץ SRT הורד');
   };
 
+  // Update current subtitle based on video time
+  const handleVideoTimeUpdate = () => {
+    if (!videoPreviewRef.current) return;
+    const currentTime = videoPreviewRef.current.currentTime;
+    const active = subtitleSegments.find(seg => currentTime >= seg.start && currentTime <= seg.end);
+    setCurrentSubtitle(active?.text || '');
+  };
+
   const updateSegmentText = (index: number, text: string) => {
     setSubtitleSegments(prev => prev.map((seg, i) => i === index ? { ...seg, text } : seg));
+    setSavedSrtUrl(null); // Mark as unsaved
   };
 
   const placeholders: Record<StudioTab, string> = {
@@ -505,16 +560,32 @@ export default function CreativeStudioPage() {
               <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
             </div>
 
-            {/* Video preview */}
+            {/* Video preview with subtitle overlay */}
             {videoPreviewUrl && (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <video src={videoPreviewUrl} controls className="w-full max-h-[300px]" />
+                <div className="relative">
+                  <video
+                    ref={videoPreviewRef}
+                    src={videoPreviewUrl}
+                    controls
+                    className="w-full max-h-[350px]"
+                    onTimeUpdate={handleVideoTimeUpdate}
+                  />
+                  {/* Subtitle overlay */}
+                  {showPreview && currentSubtitle && (
+                    <div className="absolute bottom-12 left-0 right-0 flex justify-center pointer-events-none px-4">
+                      <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm md:text-base font-medium max-w-[90%] text-center" dir="rtl">
+                        {currentSubtitle}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Transcribe button */}
+            {/* Action buttons */}
             {videoFile && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={handleTranscribe}
                   disabled={loading}
@@ -524,9 +595,32 @@ export default function CreativeStudioPage() {
                   {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
                 </button>
                 {subtitleSegments.length > 0 && (
-                  <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
-                    <Download className="w-4 h-4" /> הורד SRT
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowPreview(!showPreview)}
+                      className={cn(
+                        'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
+                        showPreview ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                      )}
+                    >
+                      <Eye className="w-4 h-4" /> {showPreview ? 'הסתר תצוגה מקדימה' : 'תצוגה מקדימה'}
+                    </button>
+                    <button
+                      onClick={handleSaveSRT}
+                      disabled={savingSrt}
+                      className={cn(
+                        'px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2 transition-all',
+                        savedSrtUrl ? 'border-green-500 bg-green-500/10 text-green-600' : 'border-border hover:bg-muted',
+                        savingSrt && 'opacity-50'
+                      )}
+                    >
+                      {savingSrt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {savedSrtUrl ? 'נשמר ✓' : 'שמור באחסון'}
+                    </button>
+                    <button onClick={handleDownloadSRT} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2">
+                      <Download className="w-4 h-4" /> הורד SRT
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -534,9 +628,12 @@ export default function CreativeStudioPage() {
             {/* Editable subtitles */}
             {subtitleSegments.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-                <h3 className="font-rubik font-semibold flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-rubik font-semibold flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-primary" /> ערוך כתוביות
+                  </h3>
+                  <span className="text-xs text-muted-foreground">{subtitleSegments.length} שורות</span>
+                </div>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {subtitleSegments.map((seg, i) => (
                     <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
@@ -552,6 +649,11 @@ export default function CreativeStudioPage() {
                     </div>
                   ))}
                 </div>
+                {!savedSrtUrl && (
+                  <p className="text-xs text-amber-500 flex items-center gap-1">
+                    ⚠️ שינויים לא נשמרו — לחץ "שמור באחסון" כדי לשמור
+                  </p>
+                )}
               </div>
             )}
           </div>
