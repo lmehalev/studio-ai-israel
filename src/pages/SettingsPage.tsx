@@ -1,21 +1,11 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Settings, Plug, Shield, Check, Trash2, Download, Loader2, ImageIcon, Mic, UserCircle, Video, FileText, Subtitles, Sparkles } from 'lucide-react';
+import { Settings, ImageIcon, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { cn } from '@/lib/utils';
-
-const connectedServices = [
-  { name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים', icon: Sparkles, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
-  { name: 'ElevenLabs', desc: 'דיבוב בעברית (4 קולות)', icon: Mic, status: 'connected', free: false, plan: 'חינם (מוגבל)', planNote: '⚠️ חבילת Free מוגבלת ל-10,000 תווים/חודש. ליצירת תוכן רציני נדרשת חבילה בתשלום ($5+/חודש).' },
-  { name: 'D-ID', desc: 'אווטאר מדבר', icon: UserCircle, status: 'connected', free: false, plan: 'חינם (Trial)', planNote: '⚠️ חשבון Trial מוגבל ל-5 דקות. ליצירת סרטוני אווטאר נדרשת חבילה בתשלום ($5.9+/חודש).' },
-  { name: 'RunwayML', desc: 'וידאו AI (תמונה/טקסט → סרטון)', icon: Video, status: 'connected', free: false, plan: 'חינם (Trial)', planNote: '⚠️ חשבון Trial מוגבל ל-125 קרדיטים. ליצירת וידאו נדרשת חבילה בתשלום ($12+/חודש).' },
-  { name: 'Shotstack', desc: 'עריכת וידאו ורינדור אוטומטי', icon: Video, status: 'connected', free: false, plan: 'Sandbox (חינם)', planNote: '✅ Sandbox חינמי מאפשר רינדור עם ווטרמארק. להסרת ווטרמארק נדרשת חבילה בתשלום ($39+/חודש).' },
-  { name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, status: 'connected', free: false, plan: 'חינם (מוגבל)', planNote: '✅ חבילת Free כוללת 25 קרדיטים/חודש. לשימוש מורחב נדרשת חבילה בתשלום ($89+/חודש).' },
-  { name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
-  { name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, status: 'connected', free: true, plan: 'חינם (מובנה)', planNote: '' },
-];
+import { Loader2, Trash2, Download, Plug } from 'lucide-react';
+import { ConnectionsTab } from '@/components/settings/ConnectionsTab';
 
 interface StoredFile {
   name: string;
@@ -114,48 +104,7 @@ export default function SettingsPage() {
           </TabsList>
 
           <TabsContent value="connections" className="mt-4 space-y-4">
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="font-rubik font-semibold mb-4">שירותים מחוברים</h2>
-              <div className="space-y-3">
-                {connectedServices.map(s => {
-                  const Icon = s.icon;
-                  return (
-                    <div key={s.name} className="p-4 bg-muted/30 rounded-lg border border-border space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-success/20 text-success flex items-center justify-center">
-                            <Check className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium flex items-center gap-2">
-                              <Icon className="w-4 h-4 text-primary" />
-                              {s.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{s.desc}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-xs px-2 py-0.5 rounded-full font-medium",
-                            s.free ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning"
-                          )}>
-                            {s.plan}
-                          </span>
-                          <span className="text-xs px-2.5 py-1 rounded-full bg-success/10 text-success font-medium">
-                            מחובר
-                          </span>
-                        </div>
-                      </div>
-                      {s.planNote && (
-                        <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 mr-13">
-                          {s.planNote}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <ConnectionsTab />
           </TabsContent>
 
           <TabsContent value="storage" className="mt-4 space-y-4">
