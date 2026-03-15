@@ -34,28 +34,42 @@ serve(async (req) => {
       if (error) throw error;
     }
 
-    // Handle file upload via signed URL or just return bucket status
-    const { action, fileName, fileType } = await req.json();
+    const { action, fileName, fileType, fileBase64 } = await req.json();
 
-    if (action === 'get_upload_url') {
-      // Generate a path
-      const path = `uploads/${Date.now()}-${fileName}`;
-      const { data, error } = await supabase.storage
+    if (action === 'upload') {
+      if (!fileBase64 || !fileName) {
+        return new Response(
+          JSON.stringify({ error: "חסר קובץ להעלאה" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Decode base64 to bytes
+      const binaryStr = atob(fileBase64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `uploads/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
         .from('media')
-        .createSignedUploadUrl(path);
-      if (error) throw error;
+        .upload(path, bytes, {
+          contentType: fileType || 'application/octet-stream',
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage
         .from('media')
         .getPublicUrl(path);
 
       return new Response(
-        JSON.stringify({ 
-          signedUrl: data.signedUrl, 
-          token: data.token,
-          path,
-          publicUrl: publicUrlData.publicUrl,
-        }),
+        JSON.stringify({ publicUrl: publicUrlData.publicUrl, path }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
