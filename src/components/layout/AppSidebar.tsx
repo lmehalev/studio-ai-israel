@@ -2,9 +2,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
-  ChevronRight, ChevronLeft, Video
+  ChevronRight, ChevronLeft, Video, HelpCircle
 } from 'lucide-react';
 import { useState } from 'react';
+import { OpenGuideButton } from '@/components/OnboardingDialog';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
@@ -70,7 +71,8 @@ export function AppSidebar() {
       </nav>
 
       {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border space-y-2">
+          <OpenGuideButton />
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>
