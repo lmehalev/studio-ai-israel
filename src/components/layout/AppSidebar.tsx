@@ -2,9 +2,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
-  ChevronRight, ChevronLeft, Video
+  ChevronRight, ChevronLeft, Video, HelpCircle
 } from 'lucide-react';
 import { useState } from 'react';
+import { OpenGuideButton } from '@/components/OnboardingDialog';
 
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
