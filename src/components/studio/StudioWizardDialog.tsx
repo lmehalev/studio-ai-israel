@@ -507,6 +507,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               try {
                 const data = await imageService.edit(buildPrompt(prompt), editImageUrl);
                 setResult({ imageUrl: data.imageUrl });
+                setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
                 setStep(step + 1);
                 toast.success('התמונה נערכה!');
               } catch (e: any) { toast.error(e.message); }
@@ -520,7 +521,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
           </button>
         </div>
       );
-      if (wizardStep === 2 && result?.imageUrl) return <ResultView />;
+      if (wizardStep === 2 && result?.imageUrl) return <ImageResultWithEdit />;
     }
 
     // ====== AVATAR VIDEO ======
