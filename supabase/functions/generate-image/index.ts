@@ -18,7 +18,22 @@ serve(async (req) => {
 
     const messages: any[] = [];
 
+    const hebrewTextGuidelines = `CRITICAL RULES FOR HEBREW TEXT IN IMAGES:
+- Hebrew is written RIGHT-TO-LEFT (RTL). Never reverse the letter order.
+- Each Hebrew letter must be rendered in its correct isolated/final/medial form.
+- Use a clean, professional Hebrew-compatible font style (similar to Heebo, Rubik, or Noto Sans Hebrew).
+- Hebrew text must be sharp, legible, and properly kerned — never blurry or distorted.
+- If the prompt includes specific Hebrew words or phrases, reproduce them EXACTLY as written, character by character.
+- Do NOT transliterate Hebrew into Latin characters.
+- Ensure proper spacing between Hebrew words.
+- For mixed Hebrew+English text, Hebrew flows RTL and English flows LTR within the same line.
+- Text should have good contrast against its background for readability.`;
+
     if (action === "edit" && imageUrl) {
+      messages.push({
+        role: "system",
+        content: hebrewTextGuidelines,
+      });
       messages.push({
         role: "user",
         content: [
@@ -28,8 +43,12 @@ serve(async (req) => {
       });
     } else {
       messages.push({
+        role: "system",
+        content: hebrewTextGuidelines,
+      });
+      messages.push({
         role: "user",
-        content: `צור תמונה באיכות גבוהה לפי התיאור הבא: ${prompt}`,
+        content: `צור תמונה באיכות גבוהה לפי התיאור הבא. שים לב במיוחד שכל טקסט בעברית יהיה מדויק, קריא וברור: ${prompt}`,
       });
     }
 
@@ -40,7 +59,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model: "google/gemini-3-pro-image-preview",
         messages,
         modalities: ["image", "text"],
       }),

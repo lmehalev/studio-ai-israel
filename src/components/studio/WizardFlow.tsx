@@ -28,9 +28,9 @@ const hebrewVoices = [
 const subtitleFontOptions = [
   { value: 'font-heebo', label: 'Heebo (ברירת מחדל)' },
   { value: 'font-rubik', label: 'Rubik' },
+  { value: 'font-noto-hebrew', label: 'Noto Sans Hebrew' },
   { value: 'font-sans', label: 'Sans' },
   { value: 'font-serif', label: 'Serif' },
-  { value: 'font-mono', label: 'Mono' },
 ] as const;
 
 interface WizardFlowProps {
