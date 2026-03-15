@@ -610,15 +610,12 @@ export default function CreativeStudioPage() {
           )}
 
           {activeTab === 'avatar' && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונת הדמות (פנים)</label>
-              <input
-                value={avatarImageUrl}
-                onChange={e => setAvatarImageUrl(e.target.value)}
-                placeholder="https://example.com/face.jpg — תמונה חזיתית ברורה"
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            <FileUploadZone
+              accept="image/*"
+              label="העלה תמונת פנים חזיתית"
+              hint="תמונה ברורה של הפנים — JPG, PNG"
+              onUploaded={(url) => setAvatarImageUrl(url)}
+            />
           )}
 
           {(activeTab === 'voice' || activeTab === 'avatar') && (
