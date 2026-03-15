@@ -279,9 +279,15 @@ export default function CreativeStudioPage() {
     if (!videoFile) { toast.error('יש להעלות סרטון קודם'); return; }
     setLoading(true);
     try {
-      // Extract audio from video as base64
+      // Extract audio from video as base64 (chunk to avoid stack overflow)
       const arrayBuffer = await videoFile.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer).slice(0, 500000))); // Limit size
+      const bytes = new Uint8Array(arrayBuffer);
+      const chunkSize = 8192;
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+      }
+      const base64 = btoa(binary);
       const data = await subtitleService.transcribe(base64);
       setSubtitleSegments(data.segments);
       toast.success('התמלול מוכן! ניתן לערוך את הכתוביות');
