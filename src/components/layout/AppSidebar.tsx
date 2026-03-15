@@ -9,6 +9,7 @@ import { useState } from 'react';
 const menuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
   { title: 'ספריית אווטארים', icon: Users, path: '/avatars' },
+  { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
   { title: 'יצירת סרטון', icon: Video, path: '/create-video' },
   { title: 'מחולל פרומפטים', icon: Wand2, path: '/prompt-generator' },
   { title: 'ספריית תבניות', icon: FileText, path: '/templates' },
