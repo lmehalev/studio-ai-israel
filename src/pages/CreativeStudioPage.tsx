@@ -395,6 +395,7 @@ export default function CreativeStudioPage() {
             return (
               <button
                 key={tab.id}
+                data-tour={`tab-${tab.id}`}
                 onClick={() => { setActiveTab(tab.id); setResult(null); setScriptResult(null); }}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all',
