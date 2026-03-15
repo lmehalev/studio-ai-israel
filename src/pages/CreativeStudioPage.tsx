@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
+import { FileUploadZone } from '@/components/FileUploadZone';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -551,15 +552,12 @@ export default function CreativeStudioPage() {
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
-              <input
-                value={editImageUrl}
-                onChange={e => setEditImageUrl(e.target.value)}
-                placeholder="https://example.com/image.jpg"
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            <FileUploadZone
+              accept="image/*"
+              label="העלה תמונה לעריכה"
+              hint="JPG, PNG, WebP"
+              onUploaded={(url) => setEditImageUrl(url)}
+            />
            )}
 
           {activeTab === 'video' && (
@@ -585,15 +583,12 @@ export default function CreativeStudioPage() {
                 </button>
               </div>
               {runwayMode === 'image_to_video' && (
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
-                  <input
-                    value={runwayImageUrl}
-                    onChange={e => setRunwayImageUrl(e.target.value)}
-                    placeholder="https://example.com/product.jpg"
-                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
+                <FileUploadZone
+                  accept="image/*"
+                  label="העלה תמונה להפיכה לסרטון"
+                  hint="JPG, PNG, WebP"
+                  onUploaded={(url) => setRunwayImageUrl(url)}
+                />
               )}
               {runwayPolling && (
                 <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
@@ -615,15 +610,12 @@ export default function CreativeStudioPage() {
           )}
 
           {activeTab === 'avatar' && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונת הדמות (פנים)</label>
-              <input
-                value={avatarImageUrl}
-                onChange={e => setAvatarImageUrl(e.target.value)}
-                placeholder="https://example.com/face.jpg — תמונה חזיתית ברורה"
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            <FileUploadZone
+              accept="image/*"
+              label="העלה תמונת פנים חזיתית"
+              hint="תמונה ברורה של הפנים — JPG, PNG"
+              onUploaded={(url) => setAvatarImageUrl(url)}
+            />
           )}
 
           {(activeTab === 'voice' || activeTab === 'avatar') && (

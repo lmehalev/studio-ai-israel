@@ -1,5 +1,34 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// ====== File Upload Service ======
+export const storageService = {
+  /**
+   * Upload a file via the storage-manager edge function (uses service role, no RLS issues).
+   */
+  upload: async (file: File): Promise<string> => {
+    // Convert file to base64
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    const { data, error } = await supabase.functions.invoke("storage-manager", {
+      body: {
+        action: "upload",
+        fileName: file.name,
+        fileType: file.type,
+        fileBase64: base64,
+      },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בהעלאת קובץ');
+    if (data?.error) throw new Error(data.error);
+    return data.publicUrl;
+  },
+};
+
 // ====== Image Generation Service ======
 export const imageService = {
   generate: async (prompt: string): Promise<{ imageUrl: string; text: string }> => {
