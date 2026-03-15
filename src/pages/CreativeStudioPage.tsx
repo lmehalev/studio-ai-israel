@@ -742,7 +742,7 @@ export default function CreativeStudioPage() {
                   {subtitleSegments.map((seg, i) => (
                     <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
                       <div className="text-xs text-muted-foreground whitespace-nowrap pt-2 min-w-[80px]">
-                        {seg.start.toFixed(1)}s — {seg.end.toFixed(1)}s
+                        {Math.max(0, seg.start + subtitleOffset).toFixed(1)}s — {Math.max(Math.max(0, seg.start + subtitleOffset) + 0.1, seg.end + subtitleOffset).toFixed(1)}s
                       </div>
                       <input
                         value={seg.text}
