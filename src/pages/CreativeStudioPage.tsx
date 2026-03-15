@@ -583,15 +583,12 @@ export default function CreativeStudioPage() {
                 </button>
               </div>
               {runwayMode === 'image_to_video' && (
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">קישור לתמונה מקורית</label>
-                  <input
-                    value={runwayImageUrl}
-                    onChange={e => setRunwayImageUrl(e.target.value)}
-                    placeholder="https://example.com/product.jpg"
-                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
+                <FileUploadZone
+                  accept="image/*"
+                  label="העלה תמונה להפיכה לסרטון"
+                  hint="JPG, PNG, WebP"
+                  onUploaded={(url) => setRunwayImageUrl(url)}
+                />
               )}
               {runwayPolling && (
                 <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
