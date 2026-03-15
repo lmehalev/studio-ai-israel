@@ -14,7 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      project_outputs: {
+        Row: {
+          aspect_ratio: string | null
+          created_at: string
+          description: string | null
+          estimated_length: string | null
+          id: string
+          name: string
+          project_id: string
+          prompt: string | null
+          provider: string | null
+          script: string | null
+          status: string
+          thumbnail_url: string | null
+          video_url: string | null
+        }
+        Insert: {
+          aspect_ratio?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_length?: string | null
+          id?: string
+          name: string
+          project_id: string
+          prompt?: string | null
+          provider?: string | null
+          script?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          aspect_ratio?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_length?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+          prompt?: string | null
+          provider?: string | null
+          script?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_outputs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_timeline: {
+        Row: {
+          description: string
+          id: string
+          project_id: string
+          status: string
+          timestamp: string
+          type: string
+        }
+        Insert: {
+          description: string
+          id?: string
+          project_id: string
+          status?: string
+          timestamp?: string
+          type: string
+        }
+        Update: {
+          description?: string
+          id?: string
+          project_id?: string
+          status?: string
+          timestamp?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_timeline_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_versions: {
+        Row: {
+          changes: string
+          created_at: string
+          id: string
+          project_id: string
+          status: string
+          version: number
+        }
+        Insert: {
+          changes: string
+          created_at?: string
+          id?: string
+          project_id: string
+          status?: string
+          version?: number
+        }
+        Update: {
+          changes?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          status?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_versions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          aspect_ratio: string
+          avatar_id: string | null
+          avatar_name: string | null
+          brand_id: string | null
+          content: Json
+          created_at: string
+          current_version: number
+          enhanced_prompt: string | null
+          id: string
+          name: string
+          output_count: number
+          prompt: string | null
+          provider: string | null
+          scenes: Json
+          script: string | null
+          settings: Json
+          status: string
+          tags: string[]
+          updated_at: string
+          video_type: string
+        }
+        Insert: {
+          aspect_ratio?: string
+          avatar_id?: string | null
+          avatar_name?: string | null
+          brand_id?: string | null
+          content?: Json
+          created_at?: string
+          current_version?: number
+          enhanced_prompt?: string | null
+          id?: string
+          name: string
+          output_count?: number
+          prompt?: string | null
+          provider?: string | null
+          scenes?: Json
+          script?: string | null
+          settings?: Json
+          status?: string
+          tags?: string[]
+          updated_at?: string
+          video_type?: string
+        }
+        Update: {
+          aspect_ratio?: string
+          avatar_id?: string | null
+          avatar_name?: string | null
+          brand_id?: string | null
+          content?: Json
+          created_at?: string
+          current_version?: number
+          enhanced_prompt?: string | null
+          id?: string
+          name?: string
+          output_count?: number
+          prompt?: string | null
+          provider?: string | null
+          scenes?: Json
+          script?: string | null
+          settings?: Json
+          status?: string
+          tags?: string[]
+          updated_at?: string
+          video_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
