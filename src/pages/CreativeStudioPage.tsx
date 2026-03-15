@@ -762,12 +762,21 @@ export default function CreativeStudioPage() {
           )}
 
           {activeTab === 'avatar' && (
-            <FileUploadZone
-              accept="image/*"
-              label="העלה תמונת פנים חזיתית"
-              hint="תמונה ברורה של הפנים — JPG, PNG"
-              onUploaded={(url) => setAvatarImageUrl(url)}
-            />
+            <div className="space-y-3">
+              <FileUploadZone
+                accept="image/*"
+                label="העלה תמונת פנים חזיתית"
+                hint="תמונה ברורה של הפנים — JPG, PNG"
+                onUploaded={(url) => setAvatarImageUrl(url)}
+              />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+              </div>
+              <UrlImportInput
+                onSubmit={(url) => setAvatarImageUrl(url)}
+                placeholder="הדבק קישור לתמונת פנים..."
+              />
+            </div>
           )}
 
           {(activeTab === 'voice' || activeTab === 'avatar') && (
