@@ -2,15 +2,16 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, Wand2, Loader2, Download, Copy, RefreshCw,
-  Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check
+  Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
+  Upload, Subtitles, Edit3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { imageService, voiceService, didService, promptEnhanceService, brandService, type Brand } from '@/services/creativeService';
+import { imageService, voiceService, didService, promptEnhanceService, subtitleService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script';
+type StudioTab = 'image' | 'edit' | 'avatar' | 'voice' | 'script' | 'subtitles';
 
 const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'תמונה', icon: ImageIcon, desc: 'צור תמונות שיווקיות מטקסט' },
@@ -18,6 +19,7 @@ const tabs: { id: StudioTab; label: string; icon: typeof ImageIcon; desc: string
   { id: 'avatar', label: 'אווטאר מדבר', icon: UserCircle, desc: 'צור סרטון עם דמות מדברת (D-ID)' },
   { id: 'voice', label: 'דיבוב', icon: Mic, desc: 'המר טקסט לדיבור מקצועי בעברית' },
   { id: 'script', label: 'תסריט', icon: FileText, desc: 'כתוב וערוך תסריט שיווקי עם AI' },
+  { id: 'subtitles', label: 'כתוביות', icon: Subtitles, desc: 'העלה סרטון וקבל כתוביות אוטומטיות בעברית' },
 ];
 
 const hebrewVoices = [
