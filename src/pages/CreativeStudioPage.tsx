@@ -59,6 +59,12 @@ export default function CreativeStudioPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // RunwayML Video
+  const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
+  const [runwayImageUrl, setRunwayImageUrl] = useState('');
+  const [runwayPolling, setRunwayPolling] = useState(false);
+  const [runwayProgress, setRunwayProgress] = useState(0);
+
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
