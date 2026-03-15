@@ -491,7 +491,7 @@ export default function CreativeStudioPage() {
 
         {/* Input Area (for non-subtitle tabs) */}
         {activeTab !== 'subtitles' && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div data-tour="prompt-area" className="bg-card border border-border rounded-xl p-5 space-y-4">
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
