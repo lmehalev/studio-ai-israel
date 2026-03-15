@@ -5,6 +5,7 @@ import {
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
   ImageIcon, Video, FileText, Sparkles
 } from 'lucide-react';
+import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
