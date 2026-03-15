@@ -52,6 +52,17 @@ const tourSteps: Step[] = [
     },
   },
   {
+    target: '[data-tour="tab-video"]',
+    placement: 'bottom',
+    disableBeacon: true,
+    content: '',
+    data: {
+      title: '🎥 וידאו AI (RunwayML)',
+      description: 'צור סרטונים מדהימים מתמונה או טקסט! בחר מצב — תמונה לוידאו או טקסט לוידאו — ו-RunwayML ייצור אנימציה מקצועית.',
+      tip: 'מצוין לסרטוני מוצר, רילס, ותוכן שיווקי עם תנועה',
+    },
+  },
+  {
     target: '[data-tour="tab-avatar"]',
     placement: 'bottom',
     disableBeacon: true,
