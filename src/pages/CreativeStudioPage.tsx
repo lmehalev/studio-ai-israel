@@ -205,12 +205,61 @@ export default function CreativeStudioPage() {
     toast.success('המותג הוסר');
   };
 
+  // Subtitle handling
+  const handleVideoUpload = (file: File) => {
+    setVideoFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setSubtitleSegments([]);
+    toast.success(`"${file.name}" הועלה בהצלחה`);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('video/')) handleVideoUpload(file);
+    else toast.error('יש להעלות קובץ וידאו');
+  };
+
+  const handleTranscribe = async () => {
+    if (!videoFile) { toast.error('יש להעלות סרטון קודם'); return; }
+    setLoading(true);
+    try {
+      // Extract audio from video as base64
+      const arrayBuffer = await videoFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer).slice(0, 500000))); // Limit size
+      const data = await subtitleService.transcribe(base64);
+      setSubtitleSegments(data.segments);
+      toast.success('התמלול מוכן! ניתן לערוך את הכתוביות');
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה בתמלול');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadSRT = () => {
+    if (subtitleSegments.length === 0) return;
+    const srt = subtitleService.toSRT(subtitleSegments);
+    const blob = new Blob([srt], { type: 'text/srt;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${activeBrand?.name || 'subtitles'}-${Date.now()}.srt`;
+    link.click();
+    toast.success('קובץ SRT הורד');
+  };
+
+  const updateSegmentText = (index: number, text: string) => {
+    setSubtitleSegments(prev => prev.map((seg, i) => i === index ? { ...seg, text } : seg));
+  };
+
   const placeholders: Record<StudioTab, string> = {
     image: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"',
     edit: 'תאר מה לשנות... למשל: "שנה רקע לכחול, הוסף לוגו"',
     avatar: 'מה הדמות תגיד? למשל: "שלום, אני מציג לכם את המוצר החדש שלנו..."',
     voice: 'הקלד טקסט לדיבוב... למשל: "ברוכים הבאים למרכז הישראלי לחברות"',
     script: 'תאר את המוצר/שירות... למשל: "שירות הערכות שווי לעסקים קטנים ובינוניים"',
+    subtitles: '',
   };
 
   const buttonLabels: Record<StudioTab, string> = {
@@ -219,6 +268,7 @@ export default function CreativeStudioPage() {
     avatar: 'צור אווטאר מדבר',
     voice: 'צור דיבוב',
     script: 'צור תסריט',
+    subtitles: 'תמלל',
   };
 
   return (
