@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ImageIcon, Film, Mic, MicOff, Wand2, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Plus, Trash2, Building2, UserCircle, FileText, ChevronDown, Check,
-  Upload, Subtitles, Edit3, Video, Eye, Save
+  Upload, Subtitles, Edit3, Video, Eye, Save, X
 } from 'lucide-react';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import { cn } from '@/lib/utils';
