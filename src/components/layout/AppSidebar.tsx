@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, Video, Wand2, FileText, FolderOpen, Settings,
-  Plug, Palette, Shield, PlayCircle, Zap, ChevronRight, ChevronLeft
+  Plug, Palette, Shield, PlayCircle, Zap, ChevronRight, ChevronLeft, Sparkles
 } from 'lucide-react';
 import { useState } from 'react';
 
