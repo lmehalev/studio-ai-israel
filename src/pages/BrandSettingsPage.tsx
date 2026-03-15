@@ -40,7 +40,10 @@ export default function BrandSettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {section.fields.map(([label, key]) => (
                 <div key={key}>
-                  <label className="block text-sm font-medium mb-1">{label}</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium">{label}</label>
+                    <VoiceDictationButton onResult={(text) => u(key, ((form as any)[key] || '') + (((form as any)[key]) ? ' ' : '') + text)} />
+                  </div>
                   <input value={(form as any)[key]} onChange={e => u(key, e.target.value)}
                     className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>

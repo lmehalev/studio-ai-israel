@@ -250,7 +250,10 @@ export default function CreateVideoPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-muted-foreground">טקסט שנאמר</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-muted-foreground">טקסט שנאמר</label>
+                        <VoiceDictationButton onResult={(text) => { const s = [...scenes]; s[i].text = s[i].text ? s[i].text + ' ' + text : text; setScenes(s); }} />
+                      </div>
                       <textarea value={scene.text} onChange={e => { const s = [...scenes]; s[i].text = e.target.value; setScenes(s); }}
                         rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none mt-1" />
                     </div>

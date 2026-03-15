@@ -352,9 +352,12 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
 
       {/* Iterative editing */}
       <div className="bg-muted/30 rounded-xl border border-border p-3 space-y-3">
-        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-          <Edit3 className="w-3.5 h-3.5" /> רוצה לשנות משהו? תאר מה לעדכן
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Edit3 className="w-3.5 h-3.5" /> רוצה לשנות משהו? תאר מה לעדכן
+          </p>
+          <VoiceDictationButton onResult={(text) => setEditPrompt(prev => prev ? prev + ' ' + text : text)} />
+        </div>
         <div className="relative">
           <textarea
             value={editPrompt}
