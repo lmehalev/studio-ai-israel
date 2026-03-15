@@ -28,7 +28,7 @@ serve(async (req) => {
         allowedMimeTypes: [
           'image/jpeg', 'image/png', 'image/webp', 'image/gif',
           'video/mp4', 'video/webm', 'video/quicktime',
-          'audio/mpeg', 'audio/wav', 'audio/mp3',
+          'audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/x-m4a',
           'text/plain', 'application/x-subrip',
         ],
       });

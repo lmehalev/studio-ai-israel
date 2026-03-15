@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import { imageService, voiceService, didService, promptEnhanceService, subtitleService, runwayService, brandService, type Brand, type SubtitleSegment } from '@/services/creativeService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
+import { VoiceRecorder } from '@/components/VoiceRecorder';
+import { UrlImportInput } from '@/components/UrlImportInput';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -219,15 +221,27 @@ export default function CreativeStudioPage() {
     setIsPlaying(!isPlaying);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const url = result?.imageUrl || result?.audioUrl || result?.videoUrl;
     if (!url) return;
     const ext = result?.videoUrl ? 'mp4' : result?.audioUrl ? 'mp3' : 'png';
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${activeBrand?.name || 'studio'}-${Date.now()}.${ext}`;
-    link.click();
-    toast.success('ההורדה החלה');
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${activeBrand?.name || 'studio'}-${Date.now()}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast.success('ההורדה החלה');
+    } catch {
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+      toast.info('הקובץ נפתח בטאב חדש — שמור משם');
+    }
   };
 
   const handleCopy = async () => {
@@ -671,12 +685,22 @@ export default function CreativeStudioPage() {
           <p className="text-sm text-muted-foreground">{tabs.find(t => t.id === activeTab)?.desc}</p>
 
           {activeTab === 'edit' && (
-            <FileUploadZone
-              accept="image/*"
-              label="העלה תמונה לעריכה"
-              hint="JPG, PNG, WebP"
-              onUploaded={(url) => setEditImageUrl(url)}
-            />
+            <div className="space-y-3">
+              <FileUploadZone
+                accept="image/*"
+                label="העלה תמונה לעריכה"
+                hint="JPG, PNG, WebP"
+                onUploaded={(url) => setEditImageUrl(url)}
+              />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+              </div>
+              <UrlImportInput
+                onSubmit={(url) => setEditImageUrl(url)}
+                placeholder="הדבק קישור לתמונה..."
+                label=""
+              />
+            </div>
            )}
 
           {activeTab === 'video' && (
@@ -702,12 +726,21 @@ export default function CreativeStudioPage() {
                 </button>
               </div>
               {runwayMode === 'image_to_video' && (
-                <FileUploadZone
-                  accept="image/*"
-                  label="העלה תמונה להפיכה לסרטון"
-                  hint="JPG, PNG, WebP"
-                  onUploaded={(url) => setRunwayImageUrl(url)}
-                />
+                <div className="space-y-3">
+                  <FileUploadZone
+                    accept="image/*"
+                    label="העלה תמונה להפיכה לסרטון"
+                    hint="JPG, PNG, WebP"
+                    onUploaded={(url) => setRunwayImageUrl(url)}
+                  />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <UrlImportInput
+                    onSubmit={(url) => setRunwayImageUrl(url)}
+                    placeholder="הדבק קישור לתמונה..."
+                  />
+                </div>
               )}
               {runwayPolling && (
                 <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
@@ -729,26 +762,54 @@ export default function CreativeStudioPage() {
           )}
 
           {activeTab === 'avatar' && (
-            <FileUploadZone
-              accept="image/*"
-              label="העלה תמונת פנים חזיתית"
-              hint="תמונה ברורה של הפנים — JPG, PNG"
-              onUploaded={(url) => setAvatarImageUrl(url)}
-            />
+            <div className="space-y-3">
+              <FileUploadZone
+                accept="image/*"
+                label="העלה תמונת פנים חזיתית"
+                hint="תמונה ברורה של הפנים — JPG, PNG"
+                onUploaded={(url) => setAvatarImageUrl(url)}
+              />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> או הדבק קישור <span className="h-px flex-1 bg-border" />
+              </div>
+              <UrlImportInput
+                onSubmit={(url) => setAvatarImageUrl(url)}
+                placeholder="הדבק קישור לתמונת פנים..."
+              />
+            </div>
           )}
 
           {(activeTab === 'voice' || activeTab === 'avatar') && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">בחר קול</label>
-              <select
-                value={selectedVoice}
-                onChange={e => setSelectedVoice(e.target.value)}
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                {hebrewVoices.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">בחר קול</label>
+                <select
+                  value={selectedVoice}
+                  onChange={e => setSelectedVoice(e.target.value)}
+                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <optgroup label="קולות מובנים">
+                    {hebrewVoices.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {activeTab === 'voice' && (
+                <>
+                  <VoiceRecorder
+                    label="🎙️ הקלט את הקול שלך"
+                    onSaved={(url) => toast.success('ההקלטה נשמרה: ' + url)}
+                  />
+                  <FileUploadZone
+                    accept="audio/*"
+                    label="או העלה קובץ קול"
+                    hint="MP3, WAV, M4A"
+                    onUploaded={(url) => toast.success('קובץ הקול הועלה: ' + url)}
+                  />
+                </>
+              )}
             </div>
           )}
 

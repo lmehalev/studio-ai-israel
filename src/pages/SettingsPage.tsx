@@ -62,14 +62,24 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDownloadFile = (fileName: string) => {
+  const handleDownloadFile = async (fileName: string) => {
     const { data } = supabase.storage.from('media').getPublicUrl(`uploads/${fileName}`);
-    const link = document.createElement('a');
-    link.href = data.publicUrl;
-    link.download = fileName;
-    link.target = '_blank';
-    link.click();
-    toast.success('ההורדה החלה');
+    try {
+      const res = await fetch(data.publicUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName.replace(/^\d+-/, '');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast.success('ההורדה החלה');
+    } catch {
+      window.open(data.publicUrl, '_blank');
+      toast.info('הקובץ נפתח בטאב חדש');
+    }
   };
 
   const formatSize = (bytes?: number) => {
