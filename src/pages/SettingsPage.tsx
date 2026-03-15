@@ -30,12 +30,11 @@ export default function SettingsPage() {
   const loadFiles = async () => {
     setLoadingFiles(true);
     try {
-      const { data, error } = await supabase.storage.from('media').list('uploads', {
-        limit: 100,
-        sortBy: { column: 'created_at', order: 'desc' },
+      const { data, error } = await supabase.functions.invoke('storage-manager', {
+        body: { action: 'list' },
       });
       if (error) throw error;
-      setFiles((data || []) as StoredFile[]);
+      setFiles((data?.files || []) as StoredFile[]);
     } catch (err: any) {
       console.error('Error loading files:', err);
     } finally {
@@ -48,7 +47,9 @@ export default function SettingsPage() {
   const handleDeleteFile = async (fileName: string) => {
     setDeletingId(fileName);
     try {
-      const { error } = await supabase.storage.from('media').remove([`uploads/${fileName}`]);
+      const { data, error } = await supabase.functions.invoke('storage-manager', {
+        body: { action: 'delete', fileName },
+      });
       if (error) throw error;
       setFiles(prev => prev.filter(f => f.name !== fileName));
       toast.success('הקובץ נמחק');
