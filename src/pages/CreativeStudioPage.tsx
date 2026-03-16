@@ -203,6 +203,7 @@ export default function CreativeStudioPage() {
           open={wizardOpen}
           onOpenChange={setWizardOpen}
           activeBrand={activeBrand}
+          activeBrandId={activeBrandId}
           buildPrompt={buildPrompt}
         />
       </div>

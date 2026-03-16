@@ -15,6 +15,7 @@ import {
   avatarDbService,
   type SubtitleSegment, type Brand,
 } from '@/services/creativeService';
+import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
@@ -44,10 +45,11 @@ interface StudioWizardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   activeBrand: Brand | undefined;
+  activeBrandId: string | null;
   buildPrompt: (base: string) => string;
 }
 
-export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPrompt }: StudioWizardDialogProps) {
+export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt }: StudioWizardDialogProps) {
   const [selectedAction, setSelectedAction] = useState<StudioAction | null>(null);
   const [step, setStep] = useState(0);
 
@@ -101,6 +103,34 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
+  const [savingOutput, setSavingOutput] = useState(false);
+
+  const handleSaveToProject = async () => {
+    if (!activeBrandId || !activeBrand) {
+      toast.error('יש לבחור חברה / מותג לפני השמירה');
+      return;
+    }
+    const url = result?.imageUrl || result?.videoUrl;
+    if (!url) return;
+
+    setSavingOutput(true);
+    try {
+      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name);
+      const isVideo = !!result?.videoUrl;
+      await projectService.addOutput(project.id, {
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}`,
+        description: prompt || undefined,
+        video_url: isVideo ? url : null,
+        thumbnail_url: !isVideo ? url : null,
+        prompt: prompt || null,
+      });
+      toast.success(`נשמר בפרויקט "${activeBrand.name}"!`);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בשמירה');
+    } finally {
+      setSavingOutput(false);
+    }
+  };
 
   // Load avatars & voices when dialog opens
   useEffect(() => {
@@ -356,11 +386,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
         </button>
-        <button onClick={async () => {
-          const url = result?.imageUrl || result?.videoUrl;
-          if (url) { await navigator.clipboard.writeText(url); toast.success('הועתק'); }
-        }} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
-          <Copy className="w-4 h-4" /> העתק קישור
+        <button onClick={handleSaveToProject} disabled={savingOutput}
+          className="flex-1 px-4 py-2.5 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+          {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
       <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
@@ -393,10 +422,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
         </button>
-        <button onClick={async () => {
-          if (result?.imageUrl) { await navigator.clipboard.writeText(result.imageUrl); toast.success('הועתק'); }
-        }} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
-          <Copy className="w-4 h-4" /> העתק
+        <button onClick={handleSaveToProject} disabled={savingOutput}
+          className="flex-1 px-3 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+          {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
       <div className="bg-muted/30 rounded-xl border border-border p-3 space-y-3">
