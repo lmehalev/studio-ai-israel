@@ -172,6 +172,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setSelectedAvatarId(null);
         setSelectedVoiceId(null);
         setShowAvatarVoicePanel(false);
+        setSelectedCategory('');
       }, 300);
     }
   }, [open]);
