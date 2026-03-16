@@ -146,7 +146,10 @@ export function VideoWizardFlow({
 
       if (avatarImage) {
         // If we have an avatar, use D-ID for talking avatar
-        const voiceId = selectedVoices[0]?.id;
+        // Only pass voiceId if it's an ElevenLabs voice (not our internal recorded voice UUIDs)
+        // Our recorded voices have type 'recorded' — D-ID can't use those directly
+        const selectedVoice = selectedVoices[0];
+        const voiceId = selectedVoice?.type === 'elevenlabs' ? selectedVoice.id : undefined;
         const talkResult = await didService.createTalk(avatarImage, fullScript, voiceId);
         toast.success('הסרטון בהכנה...');
         setRunwayPolling(true);
