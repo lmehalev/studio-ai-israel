@@ -104,18 +104,21 @@ export default function ProjectsPage() {
               <thead><tr className="border-b border-border bg-muted/30">
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">קטגוריה</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פעילות</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תוצאות</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">פעולות</th>
               </tr></thead>
               <tbody>
                 {filtered.map(p => {
                   const brand = brands.find(b => b.id === p.brand_id);
                   return (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3"><Link to={`/projects/${p.id}`} className="text-sm font-medium hover:text-primary">{p.name}</Link></td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => navigate(`/projects/${p.id}`)} className="text-sm font-medium hover:text-primary text-right">{p.name}</button>
+                      </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {brand ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
@@ -124,9 +127,9 @@ export default function ProjectsPage() {
                         ) : '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {getProjectCategory(p) ? (
+                        {getProjectSubActivity(p) ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                            <Tag className="w-3 h-3" /> {getProjectCategory(p)}
+                            <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
                           </span>
                         ) : '—'}
                       </td>
@@ -134,6 +137,16 @@ export default function ProjectsPage() {
                       <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{p.output_count}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          <button onClick={() => navigate(`/projects/${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                            <FolderOpen className="w-3 h-3" /> פתח
+                          </button>
+                          <button onClick={() => navigate(`/creative-studio?projectId=${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                            <Wand2 className="w-3 h-3" /> סטודיו
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
