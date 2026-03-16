@@ -88,7 +88,10 @@ export default function AvatarsManagePage() {
   // Step 1: Generate preview (don't save yet)
   const handleGenerate = async () => {
     if (!name.trim()) { toast.error('יש להזין שם לאווטאר'); return; }
-    if (mergedReferencePreview.length === 0) { toast.error('יש להעלות לפחות תמונה אחת או לבחור אווטאר קיים'); return; }
+    if (mergedReferencePreview.length < 3) {
+      toast.error('לדיוק פנים גבוה חייבים לפחות 3 תמונות מזוויות שונות (מומלץ 4-7)');
+      return;
+    }
 
     setGenerating(true);
     try {
