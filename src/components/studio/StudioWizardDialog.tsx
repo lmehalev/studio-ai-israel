@@ -659,18 +659,23 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">הדבק קישור לתמונה או סרטון שראית ותרצה לערוך</p>
           <UrlImportInput onSubmit={url => {
+            // Block non-direct-media URLs (YouTube, social media pages, etc.)
+            const blocked = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com)/i;
+            if (blocked.test(url)) {
+              toast.error('יש להדביק קישור ישיר לתמונה או סרטון — לא קישור לאתר (YouTube, פייסבוק וכו\')');
+              return;
+            }
             setImportUrl(url);
-            // Try to detect type from URL
             const lower = url.toLowerCase();
             if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/)) {
               setImportType('image');
             } else if (lower.match(/\.(mp4|mov|webm|avi)(\?|$)/)) {
               setImportType('video');
             } else {
-              setImportType('image'); // default to image
+              setImportType('image');
             }
             setStep(step + 1);
-          }} placeholder="הדבק קישור לתמונה או סרטון..." />
+          }} placeholder="הדבק קישור ישיר לתמונה או סרטון..." />
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /> או העלה קובץ <span className="h-px flex-1 bg-border" /></div>
           <FileUploadZone accept="image/*,video/*" label="העלה תמונה או סרטון" hint="JPG, PNG, MP4, WebP"
             onUploaded={url => {
