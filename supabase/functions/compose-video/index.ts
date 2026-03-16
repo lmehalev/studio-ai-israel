@@ -299,7 +299,8 @@ serve(async (req) => {
           asset: { type: "video", src: clipUrls[i] },
           start: videoStart,
           length: clipUrls.length === 1 ? totalDuration : sceneDur,
-          transition: i > 0 ? { in: "fade" } : undefined,
+          transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
+          effect: clipUrls.length > 1 ? "zoomIn" : undefined,
         });
         videoStart += sceneDur;
       }
