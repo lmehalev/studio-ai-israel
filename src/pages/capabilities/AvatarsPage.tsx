@@ -150,8 +150,31 @@ export default function AvatarsManagePage() {
   };
 
   const handleDelete = async (id: string) => {
-    try { await avatarDbService.remove(id); setAvatars((prev) => prev.filter((a) => a.id !== id)); toast.success('האווטאר הוסר'); }
-    catch (e: any) { toast.error(e.message); }
+    try {
+      const avatar = avatars.find(a => a.id === id);
+      await avatarDbService.remove(id);
+      // Also delete avatar image and source photos from storage
+      if (avatar) {
+        const filesToDelete: string[] = [];
+        const extractPath = (url: string) => {
+          const match = url.match(/\/media\/(.+)$/);
+          return match ? match[1] : null;
+        };
+        if (avatar.image_url) {
+          const path = extractPath(avatar.image_url);
+          if (path) filesToDelete.push(path);
+        }
+        for (const photo of avatar.source_photos || []) {
+          const path = extractPath(photo);
+          if (path) filesToDelete.push(path);
+        }
+        if (filesToDelete.length > 0) {
+          await supabase.storage.from('media').remove(filesToDelete);
+        }
+      }
+      setAvatars((prev) => prev.filter((a) => a.id !== id));
+      toast.success('האווטאר הוסר');
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const startVariationFromAvatar = (avatar: SavedAvatar) => {
