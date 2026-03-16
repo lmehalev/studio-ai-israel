@@ -57,22 +57,77 @@ const escapeControlCharsInJsonStrings = (input: string): string => {
   return output;
 };
 
+const stripCodeFenceMarkers = (value: string): string =>
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
+const extractFirstJsonObject = (input: string): string | null => {
+  const text = stripCodeFenceMarkers(input);
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+};
+
 const parseModelJsonContent = (content: string) => {
+  const raw = content.trim();
+  const deFenced = stripCodeFenceMarkers(raw);
   const candidates: string[] = [];
+  const seen = new Set<string>();
 
-  const fencedMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) candidates.push(fencedMatch[1].trim());
+  const addCandidate = (value?: string | null) => {
+    const next = value?.trim();
+    if (!next || seen.has(next)) return;
+    seen.add(next);
+    candidates.push(next);
+  };
 
-  const braceMatch = content.match(/\{[\s\S]*\}/);
-  if (braceMatch?.[0]) candidates.push(braceMatch[0].trim());
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const braceMatch = deFenced.match(/\{[\s\S]*\}/);
 
-  candidates.push(content.trim());
+  addCandidate(deFenced);
+  addCandidate(fencedMatch?.[1]);
+  addCandidate(extractFirstJsonObject(raw));
+  addCandidate(braceMatch?.[0]);
+  addCandidate(raw);
 
   let lastErr: unknown = null;
 
   for (const candidate of candidates) {
-    if (!candidate) continue;
-
     try {
       return JSON.parse(candidate);
     } catch (firstErr) {
@@ -87,6 +142,66 @@ const parseModelJsonContent = (content: string) => {
   }
 
   throw lastErr instanceof Error ? lastErr : new Error("Failed to parse AI JSON");
+};
+
+const splitToSentenceChunks = (input: string): string[] => {
+  const sentences = input
+    .split(/\n+|(?<=[.!?！？。])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) return [];
+
+  const targetScenes = Math.min(6, Math.max(3, Math.ceil(sentences.length / 2)));
+  const chunkSize = Math.max(1, Math.ceil(sentences.length / targetScenes));
+  const chunks: string[] = [];
+
+  for (let i = 0; i < sentences.length && chunks.length < 6; i += chunkSize) {
+    chunks.push(sentences.slice(i, i + chunkSize).join(" "));
+  }
+
+  return chunks;
+};
+
+const buildFallbackScenes = (sourceText: string, selectedStyle?: string) => {
+  const chunks = splitToSentenceChunks(sourceText);
+  const baseChunks = chunks.length > 0
+    ? chunks
+    : [
+        "פותחים בהוק ברור שמציג את הערך המרכזי.",
+        "מציגים את הפתרון ואת היתרונות המרכזיים ללקוח.",
+        "מסיימים עם קריאה לפעולה ברורה וממוקדת.",
+      ];
+
+  return baseChunks.slice(0, 6).map((text, idx) => ({
+    id: idx + 1,
+    title: `סצנה ${idx + 1}`,
+    speaker: "קריין",
+    spokenText: text,
+    visualDescription: "סצנה קולנועית מותאמת לנושא, עם תאורה מקצועית, עומק שדה ותנועה טבעית בפריים.",
+    backgroundAction: "ברקע יש תנועה דינמית של אנשים/אלמנטים סביבתיים שמוסיפה חיים ואותנטיות.",
+    cameraDirection: "פתיחה ב-Wide shot ולאחריה Dolly-in עדין למוקד הסצנה",
+    environment: "סביבה ריאליסטית מתאימה לעולם התוכן של הסרטון",
+    characters: "דמות מרכזית ודמויות משנה רלוונטיות עם שפת גוף טבעית",
+    subtitleText: text.slice(0, 64),
+    icons: ["🎬", "✨"],
+    duration: 10,
+    transition: "fade",
+    videoStyle: selectedStyle || "cinematic",
+  }));
+};
+
+const buildFallbackScriptPayload = (rawContent: string, promptText: string, selectedStyle?: string) => {
+  const baseText = stripCodeFenceMarkers(rawContent).trim() || promptText.trim();
+  const scenes = buildFallbackScenes(baseText || promptText, selectedStyle);
+
+  return {
+    title: "תסריט וידאו",
+    script: scenes.map((scene) => scene.spokenText).join(" "),
+    scenes,
+    duration: scenes.length * 10,
+    style: { cinematicStyle: selectedStyle || "cinematic" },
+  };
 };
 
 serve(async (req) => {
@@ -316,59 +431,105 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
     try {
       parsed = parseModelJsonContent(content || "");
 
-      if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
-        parsed.scenes = [];
-      }
+      const fallbackBaseText =
+        typeof parsed?.script === "string" && parsed.script.trim()
+          ? parsed.script
+          : typeof content === "string"
+          ? stripCodeFenceMarkers(content)
+          : prompt;
 
-      // Fallback: if JSON parsed but scenes are missing, create baseline scenes from script
-      if (parsed.scenes.length === 0 && typeof parsed.script === "string" && parsed.script.trim()) {
-        const sentences = parsed.script
-          .split(/\n+|(?<=[.!?！？。])\s+/)
-          .map((s: string) => s.trim())
-          .filter(Boolean);
+      const incomingScenes = Array.isArray(parsed?.scenes) ? parsed.scenes : [];
+      const normalizedScenes = incomingScenes
+        .map((scene: any, idx: number) => {
+          const spokenText =
+            typeof scene?.spokenText === "string" && scene.spokenText.trim()
+              ? scene.spokenText.trim()
+              : "";
+          if (!spokenText) return null;
 
-        const grouped: string[] = [];
-        for (let i = 0; i < sentences.length; i += 2) {
-          grouped.push(sentences.slice(i, i + 2).join(" "));
-          if (grouped.length >= 6) break;
-        }
+          return {
+            id: idx + 1,
+            title:
+              typeof scene?.title === "string" && scene.title.trim()
+                ? scene.title.trim()
+                : `סצנה ${idx + 1}`,
+            speaker:
+              typeof scene?.speaker === "string" && scene.speaker.trim()
+                ? scene.speaker.trim()
+                : "קריין",
+            spokenText,
+            visualDescription:
+              typeof scene?.visualDescription === "string" && scene.visualDescription.trim()
+                ? scene.visualDescription.trim()
+                : "סצנה קולנועית מותאמת לנושא עם תאורה מקצועית ותנועה טבעית.",
+            backgroundAction:
+              typeof scene?.backgroundAction === "string" && scene.backgroundAction.trim()
+                ? scene.backgroundAction.trim()
+                : "ברקע יש תנועה דינמית שמוסיפה חיות ואותנטיות.",
+            cameraDirection:
+              typeof scene?.cameraDirection === "string" && scene.cameraDirection.trim()
+                ? scene.cameraDirection.trim()
+                : "פתיחה ב-Wide shot עם Dolly-in עדין",
+            environment:
+              typeof scene?.environment === "string" && scene.environment.trim()
+                ? scene.environment.trim()
+                : "סביבה ריאליסטית המתאימה לתוכן הסרטון",
+            characters:
+              typeof scene?.characters === "string" && scene.characters.trim()
+                ? scene.characters.trim()
+                : "דמות מרכזית ודמויות משנה רלוונטיות",
+            subtitleText:
+              typeof scene?.subtitleText === "string" && scene.subtitleText.trim()
+                ? scene.subtitleText.trim().slice(0, 64)
+                : spokenText.slice(0, 64),
+            icons:
+              Array.isArray(scene?.icons) && scene.icons.length > 0
+                ? scene.icons.slice(0, 4)
+                : ["🎬", "✨"],
+            duration: 10,
+            transition:
+              typeof scene?.transition === "string" && scene.transition.trim()
+                ? scene.transition.trim()
+                : "fade",
+            videoStyle:
+              typeof scene?.videoStyle === "string" && scene.videoStyle.trim()
+                ? scene.videoStyle.trim()
+                : videoStyle || "cinematic",
+          };
+        })
+        .filter(Boolean);
 
-        const fallbackScenes = grouped.length > 0 ? grouped : [parsed.script.trim()];
-        parsed.scenes = fallbackScenes.slice(0, 6).map((text: string, idx: number) => ({
-          id: idx + 1,
-          title: `סצנה ${idx + 1}`,
-          speaker: "קריין",
-          spokenText: text,
-          visualDescription: "סצנה קולנועית מפורטת המתאימה לתחום הפעילות, עם עומק שדה, תאורה מקצועית ורקע חי ודינמי.",
-          backgroundAction: "ברקע נראים אנשים בתנועה טבעית, פעילות סביבתית ותאורה משתנה שמעניקים תחושת חיים לסצנה.",
-          cameraDirection: "Wide shot בפתיחה עם Dolly-in איטי אל הדמות המרכזית",
-          environment: "סביבה מקצועית מותאמת לתחום העסקי שהוגדר בפרומפט",
-          characters: "דמויות רלוונטיות לתוכן, בלבוש מתאים ובשפת גוף טבעית",
-          subtitleText: text.slice(0, 64),
-          icons: ["🎬", "✨"],
-          duration: 10,
-          transition: "fade",
-          videoStyle: videoStyle || "cinematic",
-        }));
-      }
+      parsed.scenes = normalizedScenes.length > 0 ? normalizedScenes : buildFallbackScenes(fallbackBaseText, videoStyle);
 
-      // Enforce each scene = 10s, total = scenes * 10
-      for (const scene of parsed.scenes) {
-        scene.duration = 10;
-      }
-      parsed.duration = parsed.scenes.length * 10;
-
-      // Clamp to 3-6 scenes (30-60 seconds)
       if (parsed.scenes.length < 3) {
-        parsed.duration = parsed.scenes.length * 10;
+        const fillers = buildFallbackScenes(fallbackBaseText, videoStyle);
+        const existingCount = parsed.scenes.length;
+        const needed = 3 - existingCount;
+        const additions = fillers.slice(0, needed).map((scene: any, idx: number) => ({
+          ...scene,
+          id: existingCount + idx + 1,
+        }));
+        parsed.scenes = [...parsed.scenes, ...additions];
       }
+
       if (parsed.scenes.length > 6) {
         parsed.scenes = parsed.scenes.slice(0, 6);
-        parsed.duration = 60;
       }
+
+      if (typeof parsed.title !== "string" || !parsed.title.trim()) {
+        parsed.title = "תסריט וידאו";
+      }
+
+      const joinedScript = parsed.scenes.map((scene: any) => scene.spokenText).join(" ").trim();
+      if (typeof parsed.script !== "string" || !parsed.script.trim()) {
+        parsed.script = joinedScript || prompt;
+      }
+
+      parsed.duration = parsed.scenes.length * 10;
+      parsed.style = typeof parsed.style === "object" && parsed.style !== null ? parsed.style : {};
     } catch (parseErr) {
       console.error("JSON parse error:", parseErr, "Content preview:", content?.slice(0, 300));
-      parsed = { script: content, scenes: [], title: "תסריט", duration: 10, style: {} };
+      parsed = buildFallbackScriptPayload(typeof content === "string" ? content : "", prompt, videoStyle);
     }
 
     return new Response(JSON.stringify(parsed), {
