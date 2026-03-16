@@ -758,6 +758,64 @@ export function VideoWizardFlow({
             )}
           </div>
 
+          {/* Website URL scraper */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5" /> קישור לאתר (אופציונלי)
+            </p>
+            <p className="text-[10px] text-muted-foreground">הדבק קישור לאתר שלך — המערכת תסרוק אותו ותשלב תוכן, צבעים ומבנה בסרטון</p>
+
+            {websiteData ? (
+              <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span className="text-sm font-medium truncate">{websiteData.metadata?.title || websiteUrl}</span>
+                  </div>
+                  <button onClick={() => { setWebsiteData(null); setWebsiteUrl(''); }}
+                    className="w-6 h-6 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+                {websiteData.metadata?.description && (
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{websiteData.metadata.description}</p>
+                )}
+                {websiteData.branding?.colors && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">צבעי האתר:</span>
+                    {Object.values(websiteData.branding.colors).slice(0, 6).map((color, i) => (
+                      <div key={i} className="w-4 h-4 rounded-full border border-border" style={{ backgroundColor: color }} />
+                    ))}
+                  </div>
+                )}
+                {websiteData.screenshot && (
+                  <div className="rounded-lg overflow-hidden border border-border max-h-32">
+                    <img src={`data:image/png;base64,${websiteData.screenshot}`} alt="צילום מסך" className="w-full object-cover object-top" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Globe className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    value={websiteUrl}
+                    onChange={e => setWebsiteUrl(e.target.value)}
+                    onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleScrapeWebsite(); }}
+                    placeholder="https://www.example.com"
+                    className="w-full bg-muted/50 border border-border rounded-lg pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="ltr"
+                  />
+                </div>
+                <button onClick={handleScrapeWebsite} disabled={!websiteUrl.trim() || scrapingWebsite}
+                  className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted disabled:opacity-50 flex items-center gap-1.5">
+                  {scrapingWebsite ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  {scrapingWebsite ? 'סורק...' : 'סרוק'}
+                </button>
+              </div>
+            )}
+          </div>
+
           <button onClick={handleGenerateScript} disabled={loading}
             className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
