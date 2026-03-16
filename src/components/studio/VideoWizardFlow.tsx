@@ -195,18 +195,38 @@ export function VideoWizardFlow({
     throw new Error('תם הזמן ליצירת הסרטון');
   };
 
-  // Build prompt for a specific scene
+  // Build prompt for a specific scene — maximize detail for Runway AI
   const buildRunwayPromptForScene = (scene: ScriptScene): string => {
     const parts: string[] = [];
     
+    // Style directive first — sets the visual tone
+    const styleLabel = scene.videoStyle || videoStyle || 'cinematic';
+    const styleDirectives: Record<string, string> = {
+      cinematic: 'Photorealistic cinematic film, professional lighting, shallow depth of field',
+      disney: '3D Disney Pixar style animation, vibrant colors, expressive characters, magical lighting',
+      anime: 'High quality anime style, detailed linework, dramatic lighting, dynamic composition',
+      cartoon: 'Colorful cartoon illustration style, bold outlines, exaggerated expressions, playful',
+      documentary: 'Documentary style, natural lighting, handheld camera feel, authentic and raw',
+      commercial: 'High-end TV commercial, polished studio lighting, pristine product shots',
+    };
+    parts.push(styleDirectives[styleLabel] || styleDirectives.cinematic);
+    
+    // Camera direction — how the shot is framed
+    if (scene.cameraDirection) parts.push(scene.cameraDirection);
+    
+    // Main visual — the core of what the AI sees
     if (scene.visualDescription) parts.push(scene.visualDescription);
-    if ((scene as any).backgroundAction) parts.push((scene as any).backgroundAction);
-    if (scene.cameraDirection) parts.push(`Camera: ${scene.cameraDirection}`);
-    if (scene.environment) parts.push(scene.environment);
+    
+    // Characters — who is in the frame
     if (scene.characters) parts.push(scene.characters);
     
-    const style = generatedScript?.style;
-    if (style?.cinematicStyle) parts.push(`Style: ${style.cinematicStyle}`);
+    // Environment — where it happens
+    if (scene.environment) parts.push(scene.environment);
+    
+    // Background action — dynamic life in the background
+    if (scene.backgroundAction) parts.push(scene.backgroundAction);
+    
+    // Brand context
     if (activeBrand?.name) parts.push(`Brand: ${activeBrand.name}`);
     
     return toRunwayPrompt(parts.join('. '));
