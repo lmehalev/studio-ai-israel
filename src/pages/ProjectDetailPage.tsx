@@ -141,15 +141,62 @@ export default function ProjectDetailPage() {
 
         {activeTab === 'outputs' && (
           <div className="space-y-3">
-            {outputs.length > 0 ? outputs.map(o => (
-              <div key={o.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-sm">{o.name}</p>
-                  <p className="text-xs text-muted-foreground">{o.description} • {o.estimated_length} • {formatDate(o.created_at)}</p>
-                </div>
-                <StatusBadge status={o.status} />
+            {outputs.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {outputs.map(o => {
+                  const mediaUrl = o.thumbnail_url || o.video_url;
+                  const isVideo = !!o.video_url && !o.thumbnail_url;
+                  return (
+                    <div key={o.id} className="bg-card border border-border rounded-xl overflow-hidden group relative">
+                      <div className="aspect-square bg-muted/30 flex items-center justify-center">
+                        {mediaUrl ? (
+                          isVideo ? (
+                            <video src={mediaUrl} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={mediaUrl} alt={o.name} className="w-full h-full object-cover" />
+                          )
+                        ) : (
+                          <Video className="w-10 h-10 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <p className="font-semibold text-sm truncate">{o.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatDate(o.created_at)}</p>
+                        {o.prompt && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{o.prompt}</p>}
+                      </div>
+                      <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {mediaUrl && (
+                          <>
+                            <button onClick={() => window.open(mediaUrl, '_blank')}
+                              className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="צפה">
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={async () => {
+                              try {
+                                const res = await fetch(mediaUrl);
+                                const blob = await res.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = blobUrl;
+                                link.download = `${o.name}.${isVideo ? 'mp4' : 'png'}`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                URL.revokeObjectURL(blobUrl);
+                                toast.success('ההורדה החלה');
+                              } catch { window.open(mediaUrl, '_blank'); }
+                            }}
+                              className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )) : <p className="text-center py-10 text-muted-foreground">אין תוצאות עדיין</p>}
+            ) : <p className="text-center py-10 text-muted-foreground">אין תוצאות עדיין</p>}
           </div>
         )}
 
