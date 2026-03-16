@@ -14,11 +14,12 @@ interface FileUploadZoneProps {
   className?: string;
 }
 
-export function FileUploadZone({ accept, label, hint, onUploaded, className }: FileUploadZoneProps) {
+export function FileUploadZone({ accept, label, hint, onUploaded, onMultipleUploaded, multiple, className }: FileUploadZoneProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -37,11 +38,52 @@ export function FileUploadZone({ accept, label, hint, onUploaded, className }: F
     }
   };
 
+  const handleMultipleFiles = async (files: File[]) => {
+    setUploading(true);
+    const urls: string[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(`מעלה ${i + 1}/${files.length}...`);
+        setFileName(files[i].name);
+        const url = await storageService.upload(files[i]);
+        urls.push(url);
+      }
+      if (onMultipleUploaded) {
+        onMultipleUploaded(urls);
+      } else {
+        urls.forEach(url => onUploaded(url));
+      }
+      toast.success(`${urls.length} קבצים הועלו בהצלחה`);
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה בהעלאה');
+      // Still send whatever succeeded
+      if (urls.length > 0) {
+        if (onMultipleUploaded) {
+          onMultipleUploaded(urls);
+        } else {
+          urls.forEach(url => onUploaded(url));
+        }
+      }
+    } finally {
+      setUploading(false);
+      setFileName(null);
+      setUploadProgress('');
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.dataTransfer.files);
+    if (multiple && files.length > 1) {
+      handleMultipleFiles(files);
+    } else if (files[0]) {
+      if (multiple) {
+        handleMultipleFiles([files[0]]);
+      } else {
+        handleFile(files[0]);
+      }
+    }
   };
 
   const handleClear = () => {
@@ -50,7 +92,8 @@ export function FileUploadZone({ accept, label, hint, onUploaded, className }: F
     onUploaded('');
   };
 
-  if (uploadedUrl) {
+  // For multiple mode, never show "uploaded" state — parent manages the list
+  if (!multiple && uploadedUrl) {
     return (
       <div className={cn('bg-muted/30 border border-border rounded-lg p-3 flex items-center justify-between', className)}>
         <div className="flex items-center gap-2 min-w-0">
@@ -81,13 +124,23 @@ export function FileUploadZone({ accept, label, hint, onUploaded, className }: F
         ref={inputRef}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        onChange={e => {
+          const files = Array.from(e.target.files || []);
+          if (multiple && files.length > 0) {
+            handleMultipleFiles(files);
+          } else if (files[0]) {
+            handleFile(files[0]);
+          }
+          // Reset input so same files can be re-selected
+          e.target.value = '';
+        }}
       />
       {uploading ? (
         <div className="flex items-center justify-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">מעלה {fileName}...</span>
+          <span className="text-sm text-muted-foreground">{uploadProgress || `מעלה ${fileName}...`}</span>
         </div>
       ) : (
         <>
