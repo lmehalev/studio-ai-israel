@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2 } from 'lucide-react';
+import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectService, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 
