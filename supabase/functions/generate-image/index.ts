@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const blockedMediaHosts = /(youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com)/i;
+const blockedMediaHosts = /(facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com)/i;
 
 const extractGatewayMessage = (raw: string) => {
   try {
