@@ -14,6 +14,49 @@ function getSupabase() {
   );
 }
 
+async function ensureTable() {
+  const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+  if (!dbUrl) return;
+  
+  // Use Deno's postgres to create table if needed
+  try {
+    const { Pool } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
+    const pool = new Pool(dbUrl, 1, true);
+    const conn = await pool.connect();
+    try {
+      await conn.queryObject(`
+        CREATE TABLE IF NOT EXISTS public.avatars (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          name text NOT NULL,
+          image_url text NOT NULL,
+          style text NOT NULL DEFAULT 'professional headshot',
+          source_photos text[] NOT NULL DEFAULT '{}',
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
+        ALTER TABLE public.avatars ENABLE ROW LEVEL SECURITY;
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'avatars' AND policyname = 'Allow public select on avatars') THEN
+            CREATE POLICY "Allow public select on avatars" ON public.avatars FOR SELECT USING (true);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'avatars' AND policyname = 'Allow public insert on avatars') THEN
+            CREATE POLICY "Allow public insert on avatars" ON public.avatars FOR INSERT WITH CHECK (true);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'avatars' AND policyname = 'Allow public delete on avatars') THEN
+            CREATE POLICY "Allow public delete on avatars" ON public.avatars FOR DELETE USING (true);
+          END IF;
+        END $$;
+      `);
+    } finally {
+      conn.release();
+      await pool.end();
+    }
+  } catch (e) {
+    console.error("ensureTable error (non-fatal):", e);
+  }
+}
+
+let tableChecked = false;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -22,22 +65,10 @@ serve(async (req) => {
   try {
     const supabase = getSupabase();
 
-    // Ensure table exists
-    await supabase.rpc("exec_sql", { sql: "" }).catch(() => {});
-    // Try a simple select first; if table doesn't exist, create it
-    const { error: checkError } = await supabase.from("avatars").select("id").limit(1);
-    if (checkError && checkError.message.includes("does not exist")) {
-      // Create table via raw SQL through service role
-      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        },
-      });
-      // Fallback: try creating via pg
-      console.log("Avatars table not found, it needs to be created via migration");
+    // Ensure table exists on first call
+    if (!tableChecked) {
+      await ensureTable();
+      tableChecked = true;
     }
 
     const { action, ...payload } = await req.json();
