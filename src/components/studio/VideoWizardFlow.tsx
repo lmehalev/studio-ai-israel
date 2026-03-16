@@ -529,7 +529,7 @@ export function VideoWizardFlow({
 
       if (missingSceneNumbers.length > 0) {
         throw new Error(
-          `לא הצלחתי להשלים את כל הסצנות (${missingSceneNumbers.join(', ')}). ${sceneErrors.at(-1) || ''}`.trim()
+          `לא הצלחתי להשלים את כל הסצנות (${missingSceneNumbers.join(', ')}). ${sceneErrors[sceneErrors.length - 1] || ''}`.trim()
         );
       }
 
