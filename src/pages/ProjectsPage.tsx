@@ -122,6 +122,13 @@ export default function ProjectsPage() {
                           </span>
                         ) : '—'}
                       </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {p.category ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
+                            <Tag className="w-3 h-3" /> {p.category}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{p.video_type}</td>
                       <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
