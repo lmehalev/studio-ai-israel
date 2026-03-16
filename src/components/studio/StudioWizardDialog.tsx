@@ -386,11 +386,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
         </button>
-        <button onClick={async () => {
-          const url = result?.imageUrl || result?.videoUrl;
-          if (url) { await navigator.clipboard.writeText(url); toast.success('הועתק'); }
-        }} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
-          <Copy className="w-4 h-4" /> העתק קישור
+        <button onClick={handleSaveToProject} disabled={savingOutput}
+          className="flex-1 px-4 py-2.5 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+          {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
       <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
