@@ -223,14 +223,14 @@ export function VideoWizardFlow({
       const fullScript = generatedScript.scenes.map(s => s.spokenText).join(' ');
       const selectedVoice = selectedVoices[0];
       let narrationAudioUrl: string | undefined;
-      let baseVideoUrl: string | undefined;
+      const sceneVideoUrls: string[] = [];
+      const totalScenes = generatedScript.scenes.length;
 
       // === Stage 1: ALWAYS generate Hebrew narration ===
       setProgressStage('מייצר קריינות בעברית...');
       setRunwayProgress(5);
 
       if (selectedVoice?.audio_url) {
-        // User selected their own voice → clone it
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
@@ -244,7 +244,6 @@ export function VideoWizardFlow({
         }
       }
 
-      // If no cloned voice succeeded, generate AI narration
       if (!narrationAudioUrl) {
         try {
           narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
@@ -254,105 +253,103 @@ export function VideoWizardFlow({
           toast.info('לא הצלחתי ליצור קריינות, ממשיך ללא קול...');
         }
       }
-      setRunwayProgress(25);
+      setRunwayProgress(15);
 
-      // === Stage 2: Generate base video ===
-      if (avatarImage) {
-        setProgressStage('יוצר אווטאר מדבר...');
-        setRunwayProgress(30);
-        const normalizedAvatarUrl = await normalizeAvatarForVideo(avatarImage);
+      // === Stage 2: Generate video clips — one per scene ===
+      const progressPerScene = 50 / totalScenes;
+
+      for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
+        const scene = generatedScript.scenes[sceneIdx];
+        const sceneNum = sceneIdx + 1;
+        setProgressStage(`מייצר סצנה ${sceneNum} מתוך ${totalScenes}: ${scene.title}...`);
+
+        const scenePrompt = buildRunwayPromptForScene(scene);
 
         try {
-          const talkResult = await didService.createTalk(
-            normalizedAvatarUrl,
-            narrationAudioUrl ? undefined : fullScript,
-            undefined,
-            narrationAudioUrl
-          );
-          if (!talkResult?.id) throw new Error('D-ID error');
+          let clipUrl: string;
 
-          setProgressStage('האווטאר מדבר... ממתין לתוצאה');
-          baseVideoUrl = await waitForDidResult(talkResult.id, (p) => {
-            setRunwayProgress(30 + p * 0.35);
-          });
-          toast.success('אווטאר מדבר מוכן!');
-        } catch (didErr: any) {
-          console.warn('D-ID failed, switching to Runway:', didErr?.message);
-          setProgressStage('מעביר ל-RunwayML...');
-          toast.info('מעביר אוטומטית ל-RunwayML...');
+          if (avatarImage && sceneIdx === 0) {
+            // First scene with avatar → try D-ID
+            const normalizedAvatarUrl = await normalizeAvatarForVideo(avatarImage);
+            try {
+              const talkResult = await didService.createTalk(
+                normalizedAvatarUrl,
+                narrationAudioUrl ? undefined : scene.spokenText,
+                undefined,
+                narrationAudioUrl
+              );
+              if (!talkResult?.id) throw new Error('D-ID error');
+              clipUrl = await waitForDidResult(talkResult.id, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            } catch {
+              // Fallback to Runway
+              const taskData = await runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, 10);
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            }
+          } else {
+            // Cinematic scene via Runway
+            const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
+            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
+              setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+            });
+          }
 
-          const runwayPrompt = buildRunwayPromptFromScript();
-
-          const taskData = await runwayService.imageToVideo(
-            normalizedAvatarUrl,
-            runwayPrompt,
-            undefined,
-            10,
-          );
-
-          baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-            setRunwayProgress(30 + p * 0.35);
-          });
+          sceneVideoUrls.push(clipUrl);
+          toast.success(`סצנה ${sceneNum} מוכנה!`);
+        } catch (sceneErr: any) {
+          console.error(`Scene ${sceneNum} failed:`, sceneErr?.message);
+          toast.error(`סצנה ${sceneNum} נכשלה — ממשיך...`);
+          // Skip failed scene but continue with others
         }
-      } else {
-        // No avatar → cinematic text-to-video via Runway
-        setProgressStage('מייצר סרטון AI קולנועי...');
-        
-        const runwayPrompt = buildRunwayPromptFromScript();
-
-        const taskData = await runwayService.textToVideo(
-          runwayPrompt,
-          undefined,
-          10,
-        );
-
-        baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-          setRunwayProgress(30 + p * 0.35);
-        });
       }
 
-      // === Stage 3: Composite with Shotstack (add subtitles, logo, icons) ===
-      if (baseVideoUrl) {
-        setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
-        setRunwayProgress(70);
+      if (sceneVideoUrls.length === 0) {
+        throw new Error('לא הצלחתי ליצור אף סצנה');
+      }
 
-        // First uploaded image is treated as logo
-        const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
-        const brandColors = activeBrand?.colors || [];
+      // === Stage 3: Composite all clips with Shotstack ===
+      setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
+      setRunwayProgress(70);
 
-        try {
-          const renderResult = await composeService.render({
-            videoUrl: baseVideoUrl,
-            scenes: generatedScript.scenes,
-            logoUrl,
-            brandColors,
-            audioUrl: narrationAudioUrl,
-          });
+      const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
+      const brandColors = activeBrand?.colors || [];
 
-          if (!renderResult?.renderId) throw new Error('Shotstack error');
+      try {
+        const renderResult = await composeService.render({
+          videoUrl: sceneVideoUrls[0],
+          videoUrls: sceneVideoUrls,
+          scenes: generatedScript.scenes.slice(0, sceneVideoUrls.length),
+          logoUrl,
+          brandColors,
+          audioUrl: narrationAudioUrl,
+        } as any);
 
-          setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
-          for (let i = 0; i < 90; i++) {
-            const status = await composeService.checkStatus(renderResult.renderId);
-            if (status.status === 'done' && status.url) {
-              setResultVideoUrl(status.url);
-              setStep(4);
-              setProgressStage('');
-              toast.success('🎬 הסרטון המקצועי מוכן עם כתוביות ולוגו!');
-              return;
-            }
-            if (status.status === 'failed') throw new Error('Shotstack render failed');
-            setRunwayProgress(70 + (i / 90) * 28);
-            await sleep(3000);
+        if (!renderResult?.renderId) throw new Error('Shotstack error');
+
+        setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
+        for (let i = 0; i < 120; i++) {
+          const status = await composeService.checkStatus(renderResult.renderId);
+          if (status.status === 'done' && status.url) {
+            setResultVideoUrl(status.url);
+            setStep(4);
+            setProgressStage('');
+            toast.success(`🎬 סרטון של ${sceneVideoUrls.length * 10} שניות מוכן!`);
+            return;
           }
-          throw new Error('תם הזמן להרכבת הסרטון');
-        } catch (composeErr: any) {
-          console.warn('Shotstack compositing failed, using base video:', composeErr?.message);
-          toast.info('ההרכבה לא הצליחה — הסרטון מוגש ללא כתוביות/לוגו. ניתן לשפר אותו.');
-          setResultVideoUrl(baseVideoUrl);
-          setStep(4);
-          setProgressStage('');
+          if (status.status === 'failed') throw new Error('Shotstack render failed');
+          setRunwayProgress(70 + (i / 120) * 28);
+          await sleep(3000);
         }
+        throw new Error('תם הזמן להרכבת הסרטון');
+      } catch (composeErr: any) {
+        console.warn('Shotstack compositing failed, using first clip:', composeErr?.message);
+        toast.info('ההרכבה לא הצליחה — מציג את הקליפ הראשון. ניתן לשפר.');
+        setResultVideoUrl(sceneVideoUrls[0]);
+        setStep(4);
+        setProgressStage('');
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה ביצירת סרטון');
