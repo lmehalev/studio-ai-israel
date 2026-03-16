@@ -775,53 +775,62 @@ export function VideoWizardFlow({
                         className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs" dir="rtl" />
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground">טקסט מדובר</label>
+                      <label className="text-[10px] text-muted-foreground">🎙️ טקסט מדובר (קריינות)</label>
                       <textarea value={scene.spokenText} onChange={e => updateSceneText(idx, 'spokenText', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
                         rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl" />
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground">🎬 תיאור חזותי — זה מה שמנוע הווידאו רואה!</label>
+                      <label className="text-[10px] text-muted-foreground font-semibold text-primary">🎬 בימוי חזותי מלא — זה מה שהמנוע רואה!</label>
                       <textarea value={scene.visualDescription} onChange={e => updateSceneText(idx, 'visualDescription', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
-                        rows={3} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
-                        placeholder="תאר בדיוק מה רואים על המסך — דמויות, מוצרים, סביבה, תאורה, צבעים..." />
+                        rows={5} className="w-full bg-primary/5 border border-primary/30 rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
+                        placeholder="תאר כאילו אתה במאי: פריים פתיחה, דמות מרכזית, פעולה, Foreground, Midground, Background, תאורה, צבעים, טקסטורות..." />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground font-semibold text-amber-600">🎭 אקשן ברקע — מה שנותן חיים לסצנה!</label>
+                      <textarea value={scene.backgroundAction || ''} onChange={e => updateSceneText(idx, 'backgroundAction', e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
+                        rows={3} className="w-full bg-amber-500/5 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
+                        placeholder="אנשים ברקע, תנועה סביבתית, אינטראקציות, אלמנטים חיים, צלילים ויזואליים..." />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">👥 דמויות — casting מפורט</label>
+                      <textarea value={scene.characters || ''} onChange={e => updateSceneText(idx, 'characters', e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
+                        rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
+                        placeholder="דמות מרכזית: גיל, מראה, ביגוד, הבעה, תנוחה. דמויות משניות..." />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">📷 כיוון מצלמה</label>
+                        <label className="text-[10px] text-muted-foreground">📷 תנועת מצלמה</label>
                         <input value={scene.cameraDirection || ''} onChange={e => updateSceneText(idx, 'cameraDirection', e.target.value)}
                           onKeyDown={e => e.stopPropagation()}
                           className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs" dir="rtl"
-                          placeholder="קלוז-אפ, wide shot, דרון..." />
+                          placeholder="Dolly In, Close-Up, Tracking Shot..." />
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground">🎨 סגנון וידאו</label>
-                        <select value={scene.videoStyle || 'cinematic'} onChange={e => updateSceneText(idx, 'videoStyle', e.target.value)}
+                        <label className="text-[10px] text-muted-foreground">🎨 סגנון</label>
+                        <select value={scene.videoStyle || videoStyle || 'cinematic'} onChange={e => updateSceneText(idx, 'videoStyle', e.target.value)}
                           className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs">
-                          <option value="cinematic">קולנועי</option>
-                          <option value="animation">אנימציה</option>
-                          <option value="documentary">דוקומנטרי</option>
-                          <option value="commercial">פרסומת</option>
+                          <option value="cinematic">🎬 קולנועי</option>
+                          <option value="disney">🏰 דיסני/פיקסאר</option>
+                          <option value="anime">🎌 אנימה</option>
+                          <option value="cartoon">🎨 קריקטורה</option>
+                          <option value="documentary">📹 דוקומנטרי</option>
+                          <option value="commercial">📺 פרסומת</option>
                         </select>
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground">🌍 סביבה ואווירה</label>
-                      <input value={scene.environment || ''} onChange={e => updateSceneText(idx, 'environment', e.target.value)}
+                      <label className="text-[10px] text-muted-foreground">🌍 סביבה, תאורה ואווירה</label>
+                      <textarea value={scene.environment || ''} onChange={e => updateSceneText(idx, 'environment', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
-                        className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs" dir="rtl"
-                        placeholder="משרד מודרני, רחוב שוק הומה, פארק ירוק..." />
+                        rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
+                        placeholder="מבנה החלל, ריהוט, תאורה מדויקת, אווירה, פרטים ייחודיים..." />
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground">👥 דמויות ופעולות</label>
-                      <input value={scene.characters || ''} onChange={e => updateSceneText(idx, 'characters', e.target.value)}
-                        onKeyDown={e => e.stopPropagation()}
-                        className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs" dir="rtl"
-                        placeholder="אישה צעירה עם מחשב נייד, מחייכת..." />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">כתובית</label>
+                      <label className="text-[10px] text-muted-foreground">💬 כתובית על המסך</label>
                       <input value={scene.subtitleText} onChange={e => updateSceneText(idx, 'subtitleText', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
                         className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs" dir="rtl" />
