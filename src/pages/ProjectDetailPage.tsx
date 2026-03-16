@@ -42,6 +42,10 @@ export default function ProjectDetailPage() {
       setOutputs(o);
       setTimeline(t);
       setVersions(v);
+      if (p) {
+        setEditName(p.name);
+        setEditCategory(getProjectCategory(p) || '');
+      }
     }).catch(e => toast.error(e.message))
       .finally(() => setLoading(false));
   }, [id]);
