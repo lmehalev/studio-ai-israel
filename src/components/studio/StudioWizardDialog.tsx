@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  ArrowRight, Loader2, Download, Copy, RefreshCw,
+  ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
   ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown
