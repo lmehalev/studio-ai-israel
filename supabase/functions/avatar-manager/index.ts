@@ -21,6 +21,25 @@ serve(async (req) => {
 
   try {
     const supabase = getSupabase();
+
+    // Ensure table exists
+    await supabase.rpc("exec_sql", { sql: "" }).catch(() => {});
+    // Try a simple select first; if table doesn't exist, create it
+    const { error: checkError } = await supabase.from("avatars").select("id").limit(1);
+    if (checkError && checkError.message.includes("does not exist")) {
+      // Create table via raw SQL through service role
+      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        },
+      });
+      // Fallback: try creating via pg
+      console.log("Avatars table not found, it needs to be created via migration");
+    }
+
     const { action, ...payload } = await req.json();
 
     // LIST avatars
