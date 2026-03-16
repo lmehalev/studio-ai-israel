@@ -1,12 +1,14 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { brandService, type Brand } from '@/services/creativeService';
+import { projectService, getProjectCategory } from '@/services/projectService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
