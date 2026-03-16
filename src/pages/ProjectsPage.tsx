@@ -103,6 +103,7 @@ export default function ProjectsPage() {
               <thead><tr className="border-b border-border bg-muted/30">
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">קטגוריה</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
