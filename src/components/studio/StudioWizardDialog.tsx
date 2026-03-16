@@ -103,6 +103,34 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
+  const [savingOutput, setSavingOutput] = useState(false);
+
+  const handleSaveToProject = async () => {
+    if (!activeBrandId || !activeBrand) {
+      toast.error('יש לבחור חברה / מותג לפני השמירה');
+      return;
+    }
+    const url = result?.imageUrl || result?.videoUrl;
+    if (!url) return;
+
+    setSavingOutput(true);
+    try {
+      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name);
+      const isVideo = !!result?.videoUrl;
+      await projectService.addOutput(project.id, {
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}`,
+        description: prompt || undefined,
+        video_url: isVideo ? url : null,
+        thumbnail_url: !isVideo ? url : null,
+        prompt: prompt || null,
+      });
+      toast.success(`נשמר בפרויקט "${activeBrand.name}"!`);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בשמירה');
+    } finally {
+      setSavingOutput(false);
+    }
+  };
 
   // Load avatars & voices when dialog opens
   useEffect(() => {
