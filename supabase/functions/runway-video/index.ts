@@ -16,6 +16,12 @@ const normalizePromptText = (value: unknown): string => {
 };
 
 const mapRunwayError = (status: number, errText: string): string => {
+  const lowerErr = errText.toLowerCase();
+
+  if (lowerErr.includes('not enough credits') || lowerErr.includes('you do not have enough credits')) {
+    return "נגמרו הקרדיטים לספק הווידאו (Runway). יש לחדש קרדיטים ואז לנסות שוב.";
+  }
+
   if (errText.includes('"code":"too_big"') || errText.includes("Too big")) {
     return "הפרומפט היה ארוך מדי לספק הווידאו. קיצרתי אותו אוטומטית — נסה שוב.";
   }

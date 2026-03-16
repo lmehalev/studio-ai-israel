@@ -67,6 +67,18 @@ const DID_MAX_POLL_ATTEMPTS = 180;
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
 
+const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('not enough credits') ||
+    message.includes('you do not have enough credits') ||
+    message.includes('אין מספיק קרדיט') ||
+    message.includes('אין מספיק קרדיטים') ||
+    message.includes('נגמרו הקרדיטים') ||
+    message.includes('קרדיטים לספק הווידאו')
+  );
+};
+
 const toSceneChunks = (text: string): string[] => {
   const sentences = text
     .split(/\n+|(?<=[.!?！？。])\s+/)
@@ -365,11 +377,33 @@ export function VideoWizardFlow({
       const sceneResults: Array<{ url: string; scene: ScriptScene } | null> = Array(totalScenes).fill(null);
       const failedSceneIndexes: number[] = [];
 
-      // === Stage 1: ALWAYS generate Hebrew narration ===
-      setProgressStage('מייצר קריינות בעברית...');
+      let forceDidOnlyMode = false;
+      try {
+        const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
+        const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
+        const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
+
+        if (!runwayCanGenerate) {
+          if (avatarImage && didCanGenerate) {
+            forceDidOnlyMode = true;
+            toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול אווטאר כדי לסיים את הסרטון.');
+          } else {
+            throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו. יש לחדש קרדיטים ואז לנסות שוב.');
+          }
+        }
+      } catch (creditsErr: any) {
+        const msg = creditsErr?.message || '';
+        if (msg.includes('אין קרדיטים')) throw creditsErr;
+        // If credit check fails, continue with normal flow.
+      }
+
+      const shouldGenerateNarration = !forceDidOnlyMode;
+
+      // === Stage 1: generate narration (skip in forced D-ID mode) ===
+      setProgressStage(shouldGenerateNarration ? 'מייצר קריינות בעברית...' : 'מכין מסלול אווטאר חלופי...');
       setRunwayProgress(5);
 
-      if (selectedVoice?.audio_url && narrationText) {
+      if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
@@ -389,7 +423,7 @@ export function VideoWizardFlow({
         }
       }
 
-      if (!narrationAudioUrl && narrationText) {
+      if (shouldGenerateNarration && !narrationAudioUrl && narrationText) {
         try {
           narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           toast.success('קריינות AI בעברית מוכנה!');
@@ -406,6 +440,28 @@ export function VideoWizardFlow({
         setRunwayProgress(15 + sceneIdx * progressPerScene + (progress / 100) * progressPerScene);
       };
 
+      const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
+      const createDidSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
+        if (!normalizedAvatarUrl) {
+          throw new Error('אין אווטאר זמין למסלול חלופי');
+        }
+
+        const talkResult = await didService.createTalk(
+          normalizedAvatarUrl,
+          audioUrl ? undefined : sceneText,
+          undefined,
+          audioUrl
+        );
+
+        if (!talkResult?.id) throw new Error('D-ID error');
+
+        return waitForDidResult(talkResult.id, (p) => {
+          updateSceneProgress(sceneIdx, p);
+        });
+      };
+
+      let runwayBlocked = forceDidOnlyMode;
+
       for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
         const scene = workingScenes[sceneIdx];
         const sceneNum = sceneIdx + 1;
@@ -417,20 +473,12 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (avatarImage && sceneIdx === 0) {
-            // First scene with avatar → try D-ID
-            const normalizedAvatarUrl = await normalizeAvatarForVideo(avatarImage);
+          if (runwayBlocked && normalizedAvatarUrl) {
+            clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+          } else if (normalizedAvatarUrl && sceneIdx === 0) {
+            // First scene with avatar → try D-ID first
             try {
-              const talkResult = await didService.createTalk(
-                normalizedAvatarUrl,
-                narrationAudioUrl ? undefined : scene.spokenText,
-                undefined,
-                narrationAudioUrl
-              );
-              if (!talkResult?.id) throw new Error('D-ID error');
-              clipUrl = await waitForDidResult(talkResult.id, (p) => {
-                updateSceneProgress(sceneIdx, p);
-              });
+              clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {
               // Fallback to Runway image-to-video
               try {
@@ -489,6 +537,27 @@ export function VideoWizardFlow({
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
           const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
+
+          if (isRunwayCreditsErrorMessage(errMsg)) {
+            if (normalizedAvatarUrl) {
+              runwayBlocked = true;
+              toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
+              try {
+                const didFallbackUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+                sceneResults[sceneIdx] = {
+                  url: didFallbackUrl,
+                  scene: { ...scene, duration: sceneDuration },
+                };
+                toast.success(`סצנה ${sceneNum} הושלמה במסלול חלופי`);
+                continue;
+              } catch (didFallbackErr: any) {
+                throw new Error(didFallbackErr?.message || 'נכשל גם במסלול אווטאר חלופי');
+              }
+            }
+
+            throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים או בחר מסלול עם אווטאר.');
+          }
+
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
           failedSceneIndexes.push(sceneIdx);
           console.error(`Scene ${sceneNum} failed:`, errMsg);
@@ -497,7 +566,7 @@ export function VideoWizardFlow({
       }
 
       // Retry failed scenes once more with a short safe prompt
-      if (failedSceneIndexes.length > 0) {
+      if (!runwayBlocked && failedSceneIndexes.length > 0) {
         setProgressStage('מנסה שוב את הסצנות שנכשלו...');
         for (const sceneIdx of failedSceneIndexes) {
           if (sceneResults[sceneIdx]) continue;
@@ -518,6 +587,9 @@ export function VideoWizardFlow({
             toast.success(`סצנה ${sceneIdx + 1} הושלמה בניסיון נוסף`);
           } catch (retryErr: any) {
             const retryMsg = retryErr?.message || 'שגיאה לא ידועה';
+            if (isRunwayCreditsErrorMessage(retryMsg) && !normalizedAvatarUrl) {
+              throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים.');
+            }
             sceneErrors.push(`סצנה ${sceneIdx + 1} (ניסיון נוסף): ${retryMsg}`);
           }
         }
