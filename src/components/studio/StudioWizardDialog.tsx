@@ -483,53 +483,71 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
 
     // ====== IMAGE ======
     if (selectedAction === 'image') {
-      if (wizardStep === 0) return (
-        <div className="space-y-4">
-          {avatarVoiceBar}
-          {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <ImageIcon className="w-3.5 h-3.5" /> הוסף תמונות רפרנס (אופציונלי)
-            </p>
-            {imageRefPhotos.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {imageRefPhotos.map((url, i) => (
-                  <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border">
-                    <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
-                    <button onClick={() => setImageRefPhotos(prev => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {imageRefPhotos.length < 3 && (
-              <FileUploadZone accept="image/*" label={`העלה תמונה (${imageRefPhotos.length}/3)`} hint="JPG, PNG — אווטאר, לוגו, מוצר"
-                onUploaded={url => { if (url && imageRefPhotos.length < 3) setImageRefPhotos(prev => [...prev, url]); }} />
-            )}
+      if (wizardStep === 0) {
+        // Build all reference images including avatar
+        const allRefs = [
+          ...(selectedAvatar ? [selectedAvatar.image_url] : []),
+          ...imageRefPhotos,
+        ];
+
+        return (
+          <div className="space-y-4">
+            {avatarVoiceBar}
+            {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5" /> תמונות רפרנס ({allRefs.length}/{MAX_REF_IMAGES})
+              </p>
+              {selectedAvatar && (
+                <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+                  <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
+                  <span>אווטאר "{selectedAvatar.name}" ישמש כרפרנס בתמונה</span>
+                </div>
+              )}
+              {imageRefPhotos.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {imageRefPhotos.map((url, i) => (
+                    <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border">
+                      <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                      <button onClick={() => setImageRefPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {allRefs.length < MAX_REF_IMAGES && (
+                <FileUploadZone accept="image/*" multiple label={`העלה תמונות (${imageRefPhotos.length} נוספו)`} hint={`JPG, PNG — נשארו ${MAX_REF_IMAGES - allRefs.length} מקומות`}
+                  onUploaded={url => { if (url && allRefs.length < MAX_REF_IMAGES) setImageRefPhotos(prev => [...prev, url]); }}
+                  onMultipleUploaded={urls => { setImageRefPhotos(prev => [...prev, ...urls].slice(0, MAX_REF_IMAGES - (selectedAvatar ? 1 : 0))); }}
+                />
+              )}
+            </div>
+            <button
+              onClick={async () => {
+                if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
+                setLoading(true);
+                try {
+                  const refs = allRefs.length > 0 ? allRefs : undefined;
+                  const avatarContext = selectedAvatar ? `\n\nIMPORTANT: Use the provided avatar/person reference image(s) — the person in the output MUST look exactly like the reference photos.` : '';
+                  const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs);
+                  setResult({ imageUrl: data.imageUrl });
+                  setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
+                  setStep(step + 1);
+                  toast.success('התמונה נוצרה!');
+                } catch (e: any) { toast.error(e.message); }
+                finally { setLoading(false); }
+              }}
+              disabled={loading}
+              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+              {loading ? 'מייצר...' : 'צור תמונה'}
+            </button>
           </div>
-          <button
-            onClick={async () => {
-              if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
-              setLoading(true);
-              try {
-                const data = await imageService.generate(buildPrompt(prompt), imageRefPhotos.length > 0 ? imageRefPhotos : undefined);
-                setResult({ imageUrl: data.imageUrl });
-                setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
-                setStep(step + 1);
-                toast.success('התמונה נוצרה!');
-              } catch (e: any) { toast.error(e.message); }
-              finally { setLoading(false); }
-            }}
-            disabled={loading}
-            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {loading ? 'מייצר...' : 'צור תמונה'}
-          </button>
-        </div>
-      );
+        );
+      }
       if (wizardStep === 1 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
