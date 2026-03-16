@@ -23,6 +23,7 @@ import { UrlImportInput } from '@/components/UrlImportInput';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
 
