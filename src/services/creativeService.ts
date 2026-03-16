@@ -69,6 +69,10 @@ export const voiceService = {
    * suitable for use with Shotstack / D-ID compositing.
    */
   generateAndUpload: async (text: string, voiceId?: string): Promise<string> => {
+    const normalizedText = text.replace(/\s+/g, ' ').trim();
+    const safeText = normalizedText.length > 4500 ? `${normalizedText.slice(0, 4500)}...` : normalizedText;
+    if (!safeText) throw new Error('אין טקסט לקריינות');
+
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
     const response = await fetch(url, {
       method: 'POST',
@@ -77,9 +81,20 @@ export const voiceService = {
         'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
       },
-      body: JSON.stringify({ text, voiceId }),
+      body: JSON.stringify({ text: safeText, voiceId }),
     });
-    if (!response.ok) throw new Error(`שגיאה ביצירת קריינות: ${response.status}`);
+
+    if (!response.ok) {
+      let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
+      try {
+        const data = await response.json();
+        if (data?.error) apiError = data.error;
+      } catch {
+        // ignore json parsing issues
+      }
+      throw new Error(apiError);
+    }
+
     const blob = await response.blob();
     const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
     return storageService.upload(file);

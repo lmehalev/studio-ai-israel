@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
   ImageIcon, Video, Volume2, Check, X, Edit3, RefreshCw,
-  FileText, Sparkles, Plus, Globe, Link2, Loader2 as Loader2Icon
+  FileText, Sparkles, Plus, Globe, Link2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -58,7 +58,9 @@ interface VideoWizardFlowProps {
 }
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;
+const NARRATION_MAX_CHARS = 4500;
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
+const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
 
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
@@ -290,32 +292,40 @@ export function VideoWizardFlow({
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
       const fullScript = generatedScript.scenes.map(s => s.spokenText).join(' ');
+      const narrationText = toNarrationText(fullScript);
       const selectedVoice = selectedVoices[0];
       let narrationAudioUrl: string | undefined;
       const sceneVideoUrls: string[] = [];
+      const sceneErrors: string[] = [];
       const totalScenes = generatedScript.scenes.length;
 
       // === Stage 1: ALWAYS generate Hebrew narration ===
       setProgressStage('מייצר קריינות בעברית...');
       setRunwayProgress(5);
 
-      if (selectedVoice?.audio_url) {
+      if (selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
-            fullScript
+            narrationText
           );
           narrationAudioUrl = cloneResult.audioUrl;
           toast.success('הקריינות בקול שלך מוכנה!');
         } catch (cloneErr: any) {
-          console.warn('Voice clone failed, falling back to AI TTS:', cloneErr?.message);
-          toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
+          const msg = cloneErr?.message || '';
+          console.warn('Voice clone failed, falling back to AI TTS:', msg);
+          if (msg.includes('קובץ הקול לא נמצא')) {
+            toast.error('קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
+            setSelectedVoiceIds(prev => prev.filter(id => id !== selectedVoice.id));
+          } else {
+            toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
+          }
         }
       }
 
-      if (!narrationAudioUrl) {
+      if (!narrationAudioUrl && narrationText) {
         try {
-          narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+          narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           toast.success('קריינות AI בעברית מוכנה!');
         } catch (ttsErr: any) {
           console.warn('TTS failed:', ttsErr?.message);
@@ -360,23 +370,39 @@ export function VideoWizardFlow({
             }
           } else {
             // Cinematic scene via Runway
-            const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-              setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
-            });
+            try {
+              const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            } catch {
+              // Retry with simplified fallback prompt
+              const fallbackPrompt = toRunwayPrompt([
+                scene.title,
+                scene.spokenText,
+                activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+              ].filter(Boolean).join('. '));
+
+              const fallbackTask = await runwayService.textToVideo(fallbackPrompt, undefined, 10);
+              clipUrl = await waitForRunwayResult(fallbackTask.taskId, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            }
           }
 
           sceneVideoUrls.push(clipUrl);
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
-          console.error(`Scene ${sceneNum} failed:`, sceneErr?.message);
+          const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
+          sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
+          console.error(`Scene ${sceneNum} failed:`, errMsg);
           toast.error(`סצנה ${sceneNum} נכשלה — ממשיך...`);
           // Skip failed scene but continue with others
         }
       }
 
       if (sceneVideoUrls.length === 0) {
-        throw new Error('לא הצלחתי ליצור אף סצנה');
+        throw new Error(`לא הצלחתי ליצור אף סצנה. ${sceneErrors[0] ? `פרטי שגיאה: ${sceneErrors[0]}` : ''}`.trim());
       }
 
       // === Stage 3: Composite all clips with Shotstack ===
@@ -440,21 +466,28 @@ export function VideoWizardFlow({
 
     try {
       const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
+      const narrationText = toNarrationText(fullScript);
       const totalScenes = generatedScript?.scenes.length || 1;
 
       // Generate narration for improved video too
       let narrationAudioUrl: string | undefined;
-      if (fullScript) {
+      if (narrationText) {
         setProgressStage('מייצר קריינות בעברית...');
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
-            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, fullScript);
+            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, narrationText);
             narrationAudioUrl = cloneResult.audioUrl;
           } else {
-            narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+            narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           }
-        } catch { /* continue without narration */ }
+        } catch {
+          try {
+            narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
+          } catch {
+            // continue without narration
+          }
+        }
       }
 
       setProgressStage('מייצר סצנות משופרות...');

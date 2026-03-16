@@ -7,6 +7,65 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const scriptToSafeNarration = (value: string) =>
+  value.replace(/\s+/g, " ").trim().slice(0, 4800);
+
+const extFromMime = (contentType: string, fallbackFromUrl = "webm") => {
+  if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) return "mp3";
+  if (contentType.includes("audio/wav") || contentType.includes("audio/x-wav")) return "wav";
+  if (contentType.includes("audio/ogg")) return "ogg";
+  if (contentType.includes("audio/mp4") || contentType.includes("audio/x-m4a") || contentType.includes("audio/m4a")) return "m4a";
+  if (contentType.includes("audio/webm")) return "webm";
+  return fallbackFromUrl;
+};
+
+const extractStoragePathFromUrl = (audioUrl: string): string | null => {
+  try {
+    const parsed = new URL(audioUrl);
+    const marker = "/storage/v1/object/public/media/";
+    const idx = parsed.pathname.indexOf(marker);
+    if (idx === -1) return null;
+    const rawPath = parsed.pathname.slice(idx + marker.length);
+    return decodeURIComponent(rawPath);
+  } catch {
+    return null;
+  }
+};
+
+const downloadVoiceSample = async (
+  audioUrl: string,
+  supabase: ReturnType<typeof createClient>
+): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; ext: string }> => {
+  // Try direct public URL first
+  const directResponse = await fetch(audioUrl);
+  if (directResponse.ok) {
+    const contentType = directResponse.headers.get("content-type") || "audio/webm";
+    const ext = extFromMime(contentType, "webm");
+    return {
+      arrayBuffer: await directResponse.arrayBuffer(),
+      contentType,
+      ext,
+    };
+  }
+
+  // Fallback: download via service role from storage path
+  const storagePath = extractStoragePathFromUrl(audioUrl);
+  if (storagePath) {
+    const { data, error } = await supabase.storage.from("media").download(storagePath);
+    if (!error && data) {
+      const contentType = data.type || "audio/webm";
+      const ext = extFromMime(contentType, storagePath.split(".").pop() || "webm");
+      return {
+        arrayBuffer: await data.arrayBuffer(),
+        contentType,
+        ext,
+      };
+    }
+  }
+
+  throw new Error("קובץ הקול לא נמצא באחסון. העלה/הקלט קול מחדש ונסה שוב.");
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -15,6 +74,12 @@ serve(async (req) => {
   try {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Supabase admin credentials are not configured");
+    }
 
     const { audioUrl, scriptText } = await req.json();
 
@@ -25,14 +90,16 @@ serve(async (req) => {
       });
     }
 
-    // Limit script length for TTS (ElevenLabs max ~5000 chars)
-    const safeScript = scriptText.length > 4800 ? `${scriptText.slice(0, 4800)}...` : scriptText;
+    const safeScript = scriptToSafeNarration(scriptText);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Step 1: Download the user's recorded audio
     console.log("Downloading voice sample from:", audioUrl);
-    const audioResponse = await fetch(audioUrl);
-    if (!audioResponse.ok) throw new Error("שגיאה בהורדת קובץ הקול");
-    const audioArrayBuffer = await audioResponse.arrayBuffer();
+    const sample = await downloadVoiceSample(audioUrl, supabase);
+
+    if (sample.arrayBuffer.byteLength < 5000) {
+      throw new Error("דגימת הקול קצרה מדי. הקלט לפחות 5-10 שניות ודבר בצורה ברורה.");
+    }
 
     // Step 2: Clone voice via ElevenLabs Instant Voice Cloning
     console.log("Cloning voice via ElevenLabs...");
@@ -40,8 +107,8 @@ serve(async (req) => {
     formData.append("name", `studio-clone-${Date.now()}`);
     formData.append(
       "files",
-      new Blob([audioArrayBuffer], { type: "audio/mpeg" }),
-      "voice-sample.mp3"
+      new Blob([sample.arrayBuffer], { type: sample.contentType }),
+      `voice-sample.${sample.ext}`
     );
 
     const cloneResponse = await fetch("https://api.elevenlabs.io/v1/voices/add", {
@@ -91,28 +158,19 @@ serve(async (req) => {
     const ttsAudioBuffer = await ttsResponse.arrayBuffer();
     console.log("TTS audio generated, size:", ttsAudioBuffer.byteLength);
 
-    // Step 4: Upload generated audio to Supabase Storage
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const fileName = `tts-narration-${Date.now()}.mp3`;
-    const { error: uploadError } = await supabase.storage
-      .from("media")
-      .upload(fileName, ttsAudioBuffer, {
-        contentType: "audio/mpeg",
-        upsert: false,
-      });
+    // Step 4: Upload generated audio to storage
+    const filePath = `uploads/tts-narration-${Date.now()}.mp3`;
+    const { error: uploadError } = await supabase.storage.from("media").upload(filePath, ttsAudioBuffer, {
+      contentType: "audio/mpeg",
+      upsert: false,
+    });
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
       throw new Error("שגיאה בהעלאת קריינות");
     }
 
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
-
-    console.log("Narration uploaded:", urlData.publicUrl);
+    const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath);
 
     return new Response(
       JSON.stringify({
