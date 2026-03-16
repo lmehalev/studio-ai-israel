@@ -253,9 +253,12 @@ export function VideoWizardFlow({
             .map(s => `${s.visualDescription}. ${s.subtitleText}`)
             .join('. ');
 
+          const fallbackScenePrompt = promptText || generatedScript.script || prompt;
+          const runwayPrompt = toRunwayPrompt(buildPrompt(fallbackScenePrompt));
+
           const taskData = await runwayService.imageToVideo(
             normalizedAvatarUrl,
-            buildPrompt(promptText),
+            runwayPrompt,
             undefined,
             generatedScript.duration >= 90 ? 10 : 5,
           );
