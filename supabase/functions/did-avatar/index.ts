@@ -28,14 +28,23 @@ serve(async (req) => {
     if (action === "create_talk") {
       const { imageUrl, text, voiceId, language } = params;
 
+      // D-ID has limits on text length — truncate if needed
+      const trimmedText = (text || '').slice(0, 500);
+      if (!trimmedText.trim()) {
+        return new Response(
+          JSON.stringify({ error: "טקסט ריק — אין מה לייצר" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const body: any = {
         source_url: imageUrl,
         script: {
           type: "text",
-          input: text,
+          input: trimmedText,
           provider: {
             type: "microsoft",
-            voice_id: voiceId || "he-IL-AvriNeural",
+            voice_id: "he-IL-AvriNeural",
           },
         },
         config: {
@@ -44,12 +53,15 @@ serve(async (req) => {
         },
       };
 
-      // If ElevenLabs voice is provided
+      // If ElevenLabs voice is provided (longer IDs)
       if (voiceId && voiceId.length > 15) {
         body.script.provider = {
           type: "elevenlabs",
           voice_id: voiceId,
         };
+      } else if (voiceId) {
+        // Microsoft voice ID provided directly
+        body.script.provider.voice_id = voiceId;
       }
 
       const response = await fetch(`${DID_API_URL}/talks`, {
