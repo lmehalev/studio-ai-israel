@@ -366,14 +366,31 @@ serve(async (req) => {
     // ====== Check render status ======
     if (action === "check_status") {
       const { renderId } = params;
+      const envOrder = getShotstackEnvOrder(params.shotstackEnv);
+      const statusErrors: string[] = [];
+      let data: any = null;
 
-      const response = await fetch(`${SHOTSTACK_API_URL}/render/${renderId}`, { headers });
+      for (const env of envOrder) {
+        const baseUrl = SHOTSTACK_ENDPOINTS[env];
+        const response = await fetch(`${baseUrl}/render/${renderId}`, { headers });
 
-      if (!response.ok) {
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+
         const errText = await response.text();
-        console.error("Shotstack status error:", response.status, errText);
+        statusErrors.push(`${env}:${response.status} ${errText}`);
+        console.error(`Shotstack status error (${env}):`, response.status, errText);
+
+        if (![401, 403, 404].includes(response.status)) {
+          break;
+        }
+      }
+
+      if (!data) {
         return new Response(
-          JSON.stringify({ error: "שגיאה בבדיקת סטטוס הרכבה" }),
+          JSON.stringify({ error: `שגיאה בבדיקת סטטוס הרכבה: ${statusErrors.join(" | ")}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
