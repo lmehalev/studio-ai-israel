@@ -79,6 +79,7 @@ export function VideoWizardFlow({
   const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
   const [runwayPolling, setRunwayPolling] = useState(false);
   const [runwayProgress, setRunwayProgress] = useState(0);
+  const [progressStage, setProgressStage] = useState('');
 
   // Save
   const [savingOutput, setSavingOutput] = useState(false);
