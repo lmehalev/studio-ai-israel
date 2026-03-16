@@ -132,6 +132,7 @@ export function VideoWizardFlow({
           voiceNames: selectedVoices.map(v => v.name),
           brandContext: activeBrand ? `${activeBrand.name} — ${activeBrand.industry || ''} — טון: ${activeBrand.tone || ''}` : undefined,
           hasImages: uploadedImages.length > 0,
+          videoStyle,
         },
       });
       if (error) throw new Error(error.message || 'שגיאה ביצירת תסריט');
