@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Trash2, Download, Plug } from 'lucide-react';
+import { Loader2, Trash2, Download, Plug, Eye, X } from 'lucide-react';
 import { ConnectionsTab } from '@/components/settings/ConnectionsTab';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface StoredFile {
   name: string;
