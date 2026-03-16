@@ -382,7 +382,6 @@ export function VideoWizardFlow({
     setProgressStage('משפר את הסרטון לפי הבקשה שלך...');
 
     try {
-      // Use the improve prompt + original context to generate a better prompt
       const improveContext = [
         improvePrompt,
         generatedScript?.scenes[0]?.visualDescription || '',
@@ -390,8 +389,24 @@ export function VideoWizardFlow({
       ].filter(Boolean).join('. ');
 
       const runwayPrompt = toRunwayPrompt(improveContext);
+      const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
 
-      // If we have an avatar image, use image-to-video; otherwise text-to-video
+      // Generate narration for improved video too
+      let narrationAudioUrl: string | undefined;
+      if (fullScript) {
+        setProgressStage('מייצר קריינות בעברית...');
+        try {
+          const selectedVoice = selectedVoices[0];
+          if (selectedVoice?.audio_url) {
+            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, fullScript);
+            narrationAudioUrl = cloneResult.audioUrl;
+          } else {
+            narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+          }
+        } catch { /* continue without narration */ }
+      }
+
+      setProgressStage('מייצר סרטון משופר...');
       const avatarImage = selectedAvatars[0]?.image_url;
       let newVideoUrl: string;
 
@@ -404,15 +419,17 @@ export function VideoWizardFlow({
         newVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(p));
       }
 
-      // Try compositing again
+      // Composite with narration + subtitles + logo
       if (generatedScript) {
         const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
+        setProgressStage('מרכיב כתוביות, קריינות ולוגו...');
         try {
           const renderResult = await composeService.render({
             videoUrl: newVideoUrl,
             scenes: generatedScript.scenes,
             logoUrl,
             brandColors: activeBrand?.colors || [],
+            audioUrl: narrationAudioUrl,
           });
           if (renderResult?.renderId) {
             for (let i = 0; i < 60; i++) {
