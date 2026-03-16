@@ -4,6 +4,7 @@ import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, Refresh
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService } from '@/services/creativeService';
+import { supabase } from '@/integrations/supabase/client';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const MAX_PHOTOS = 7;
