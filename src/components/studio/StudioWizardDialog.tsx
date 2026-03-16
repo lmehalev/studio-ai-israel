@@ -561,8 +561,6 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     );
   };
 
-  // Need brands list for inline selector
-  const brands = brandService.getAll();
 
   // ============ RESULT VIEW ============
   const renderResultView = () => (
