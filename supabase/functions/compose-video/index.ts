@@ -63,7 +63,7 @@ serve(async (req) => {
         });
       }
 
-      // === Track: Scene text overlays (subtitles + icons) ===
+      // === Track: Scene text overlays (subtitles + icons + scene titles) ===
       const textClips: any[] = [];
       let cumulativeTime = 0;
 
@@ -73,7 +73,7 @@ serve(async (req) => {
         const subtitle =
           scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
 
-        // Bottom subtitle with icons
+        // === Cinematic subtitle bar (bottom) ===
         if (subtitle) {
           textClips.push({
             asset: {
@@ -82,30 +82,31 @@ serve(async (req) => {
                 font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
                 direction: rtl;
                 text-align: center;
-                padding: 14px 28px;
-                background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.75) 100%);
-                border-radius: 14px;
+                padding: 16px 32px;
+                background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.85) 100%);
+                border-radius: 16px;
                 color: white;
-                font-size: 26px;
-                font-weight: 600;
-                line-height: 1.5;
-                text-shadow: 0 2px 8px rgba(0,0,0,0.6);
-              ">${icons ? `<span style="font-size:34px;margin-left:10px;">${icons}</span> ` : ""}${subtitle}</div>`,
-              width: 860,
-              height: 140,
+                font-size: 28px;
+                font-weight: 700;
+                line-height: 1.6;
+                text-shadow: 0 2px 12px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.4);
+                letter-spacing: 0.02em;
+              ">${icons ? `<span style="font-size:36px;margin-left:12px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));">${icons}</span> ` : ""}${subtitle}</div>`,
+              width: 900,
+              height: 150,
             },
-            start: cumulativeTime,
-            length: dur,
+            start: cumulativeTime + 0.3,
+            length: dur - 0.5,
             position: "bottom",
-            offset: { y: 0.06 },
+            offset: { y: 0.05 },
             transition: {
-              in: "fade",
+              in: "slideUp",
               out: "fade",
             },
           });
         }
 
-        // Scene title badge (top area, brief appearance)
+        // === Scene title badge (top, cinematic entry) ===
         if (scene.title && dur > 2) {
           textClips.push({
             asset: {
@@ -114,51 +115,67 @@ serve(async (req) => {
                 font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
                 direction: rtl;
                 text-align: center;
-                padding: 8px 24px;
-                background: linear-gradient(135deg, rgba(255,180,0,0.9), rgba(255,120,0,0.9));
-                border-radius: 10px;
-                color: #000;
-                font-size: 20px;
-                font-weight: 700;
-                box-shadow: 0 4px 12px rgba(255,160,0,0.4);
+                padding: 10px 28px;
+                background: linear-gradient(135deg, rgba(255,200,50,0.95), rgba(255,140,0,0.95));
+                border-radius: 12px;
+                color: #1a1a1a;
+                font-size: 22px;
+                font-weight: 800;
+                box-shadow: 0 6px 20px rgba(255,160,0,0.5), 0 0 40px rgba(255,160,0,0.2);
+                letter-spacing: 0.03em;
               ">${scene.title}</div>`,
-              width: 500,
-              height: 55,
+              width: 520,
+              height: 60,
             },
-            start: cumulativeTime + 0.2,
-            length: Math.min(dur - 0.3, 3.5),
+            start: cumulativeTime + 0.15,
+            length: Math.min(dur - 0.3, 3),
             position: "top",
-            offset: { y: -0.06 },
+            offset: { y: -0.05 },
             transition: {
               in: "slideRight",
-              out: "fade",
+              out: "slideLeft",
             },
           });
         }
 
-        // Floating icons (mid-screen, staggered)
+        // === Floating icons with bounce-in effect ===
         if (scene.icons && scene.icons.length > 0) {
           const iconPositions = ["left", "right", "topLeft", "topRight"];
           scene.icons.slice(0, 4).forEach((icon: string, i: number) => {
             textClips.push({
               asset: {
                 type: "html",
-                html: `<div style="font-size:52px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.3));">${icon}</div>`,
-                width: 80,
-                height: 80,
+                html: `<div style="font-size:56px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.4));">${icon}</div>`,
+                width: 90,
+                height: 90,
               },
-              start: cumulativeTime + 0.5 + i * 0.4,
-              length: Math.min(dur - 1, 2.5),
+              start: cumulativeTime + 0.8 + i * 0.5,
+              length: Math.min(dur - 1.5, 2.5),
               position: iconPositions[i % iconPositions.length],
-              offset: { x: i % 2 === 0 ? 0.08 : -0.08, y: -0.15 },
-              scale: 0.8,
+              offset: { x: i % 2 === 0 ? 0.1 : -0.1, y: -0.18 },
+              scale: 0.85,
               transition: {
-                in: "fade",
+                in: "zoom",
                 out: "fade",
               },
             });
           });
         }
+
+        // === Progress indicator (thin bar at top) ===
+        const progressWidth = Math.round((cumulativeTime / safeDuration) * 100);
+        textClips.push({
+          asset: {
+            type: "html",
+            html: `<div style="width:${progressWidth}%;height:4px;background:linear-gradient(90deg, #FFB800, #FF6B00);border-radius:0 2px 2px 0;"></div>`,
+            width: 1920,
+            height: 6,
+          },
+          start: cumulativeTime,
+          length: dur,
+          position: "top",
+          offset: { y: 0 },
+        });
 
         cumulativeTime += dur;
       }
