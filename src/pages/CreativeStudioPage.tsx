@@ -172,7 +172,10 @@ export default function CreativeStudioPage() {
             {brands.map(b => (
               <div key={b.id} className="relative group">
                 <button
-                  onClick={() => setActiveBrandId(b.id)}
+                  onClick={() => {
+                    setActiveBrandId(b.id);
+                    if (!b.departments?.includes(activeSubActivity)) setActiveSubActivity('');
+                  }}
                   className={cn(
                     'px-3 py-2 rounded-lg border text-xs font-medium transition-all',
                     activeBrandId === b.id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
