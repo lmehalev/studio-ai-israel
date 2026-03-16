@@ -399,6 +399,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       if (error || data?.error) throw new Error(data?.error || error?.message);
 
       const renderId = data.renderId;
+      const shotstackEnv = data.shotstackEnv as 'production' | 'stage' | undefined;
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה');
 
       setRenderProgress(40);

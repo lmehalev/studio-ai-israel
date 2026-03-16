@@ -559,7 +559,7 @@ export function VideoWizardFlow({
         setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
 
         for (let i = 0; i < composeMaxAttempts; i++) {
-          const status = await composeService.checkStatus(renderResult.renderId);
+          const status = await composeService.checkStatus(renderResult.renderId, (renderResult as any).shotstackEnv);
           if (status.status === 'done' && status.url) {
             const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
             setResultVideoUrl(status.url);
