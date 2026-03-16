@@ -1,5 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const withTimeout = async <T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 // ====== File Upload Service ======
 export const storageService = {
   /**
@@ -74,30 +88,47 @@ export const voiceService = {
     if (!safeText) throw new Error('אין טקסט לקריינות');
 
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
-      body: JSON.stringify({ text: safeText, voiceId }),
-    });
+    const controller = new AbortController();
+    const abortId = setTimeout(() => controller.abort(), 120000);
 
-    if (!response.ok) {
-      let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
-      try {
-        const data = await response.json();
-        if (data?.error) apiError = data.error;
-      } catch {
-        // ignore json parsing issues
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: safeText, voiceId }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
+        try {
+          const data = await response.json();
+          if (data?.error) apiError = data.error;
+        } catch {
+          // ignore json parsing issues
+        }
+        throw new Error(apiError);
       }
-      throw new Error(apiError);
-    }
 
-    const blob = await response.blob();
-    const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
-    return storageService.upload(file);
+      const blob = await response.blob();
+      const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
+      return await withTimeout(
+        storageService.upload(file),
+        120000,
+        'העלאת הקריינות לקחה יותר מדי זמן. נסה שוב.'
+      );
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('יצירת הקריינות לקחה יותר מדי זמן (timeout). ממשיך בלי קריינות מותאמת.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(abortId);
+    }
   },
 };
 
@@ -149,12 +180,18 @@ export const avatarDbService = {
 // ====== Voice Clone + TTS Service ======
 export const voiceCloneService = {
   cloneAndSpeak: async (audioUrl: string, scriptText: string): Promise<{ audioUrl: string; voiceId: string }> => {
-    const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
-      body: { audioUrl, scriptText },
-    });
-    if (error) throw new Error(error.message || "שגיאה בשכפול קול");
-    if (data?.error) throw new Error(data.error);
-    return data;
+    return withTimeout(
+      (async () => {
+        const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
+          body: { audioUrl, scriptText },
+        });
+        if (error) throw new Error(error.message || "שגיאה בשכפול קול");
+        if (data?.error) throw new Error(data.error);
+        return data;
+      })(),
+      120000,
+      'שכפול הקול לקח יותר מדי זמן (timeout)'
+    );
   },
 };
 
@@ -166,7 +203,7 @@ export const composeService = {
     logoUrl?: string;
     brandColors?: string[];
     audioUrl?: string;
-  }): Promise<{ renderId: string; status: string }> => {
+  }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage' }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
     });
@@ -175,9 +212,12 @@ export const composeService = {
     return data;
   },
 
-  checkStatus: async (renderId: string): Promise<{ status: string; url: string | null; progress: number }> => {
+  checkStatus: async (
+    renderId: string,
+    shotstackEnv?: 'production' | 'stage'
+  ): Promise<{ status: string; url: string | null; progress: number }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
-      body: { action: "check_status", renderId },
+      body: { action: "check_status", renderId, shotstackEnv },
     });
     if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
     if (data?.error) throw new Error(data.error);

@@ -399,6 +399,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       if (error || data?.error) throw new Error(data?.error || error?.message);
 
       const renderId = data.renderId;
+      const shotstackEnv = data.shotstackEnv as 'production' | 'stage' | undefined;
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה');
 
       setRenderProgress(40);
@@ -412,7 +413,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         attempts++;
 
         const { data: statusData } = await supabase.functions.invoke('compose-video', {
-          body: { action: 'check_status', renderId },
+          body: { action: 'check_status', renderId, shotstackEnv },
         });
 
         if (statusData?.status === 'done' && statusData?.url) {

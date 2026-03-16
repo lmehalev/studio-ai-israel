@@ -6,7 +6,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SHOTSTACK_API_URL = "https://api.shotstack.io/edit/v1";
+const SHOTSTACK_ENDPOINTS = {
+  production: "https://api.shotstack.io/edit/v1",
+  stage: "https://api.shotstack.io/edit/stage",
+} as const;
+
+type ShotstackEnv = keyof typeof SHOTSTACK_ENDPOINTS;
 
 interface SubtitleSegment {
   start: number;
@@ -118,6 +123,13 @@ function buildLogoClip(logoUrl: string, totalDuration: number): any {
       },
     ],
   };
+}
+
+function getShotstackEnvOrder(preferredEnv?: unknown): ShotstackEnv[] {
+  const normalized = typeof preferredEnv === "string" ? preferredEnv.toLowerCase() : "";
+  if (normalized === "stage") return ["stage", "production"];
+  if (normalized === "production") return ["production", "stage"];
+  return ["production", "stage"];
 }
 
 serve(async (req) => {
@@ -316,44 +328,73 @@ serve(async (req) => {
 
       console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 800));
 
-      const response = await fetch(`${SHOTSTACK_API_URL}/render`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(renderBody),
-      });
+      const envOrder = getShotstackEnvOrder(params.shotstackEnv);
+      const renderErrors: string[] = [];
 
-      if (!response.ok) {
+      for (const env of envOrder) {
+        const baseUrl = SHOTSTACK_ENDPOINTS[env];
+        const response = await fetch(`${baseUrl}/render`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(renderBody),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return new Response(
+            JSON.stringify({ renderId: data.response?.id, status: "rendering", shotstackEnv: env }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         const errText = await response.text();
-        console.error("Shotstack render error:", response.status, errText);
-        return new Response(
-          JSON.stringify({ error: `שגיאה בהרכבת הסרטון (${response.status})` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        renderErrors.push(`${env}:${response.status} ${errText}`);
+        console.error(`Shotstack render error (${env}):`, response.status, errText);
+
+        // Try next environment only for auth / scope mismatch or not found
+        if (![401, 403, 404].includes(response.status)) {
+          break;
+        }
       }
 
-      const data = await response.json();
       return new Response(
-        JSON.stringify({ renderId: data.response?.id, status: "rendering" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `שגיאה בהרכבת הסרטון: ${renderErrors.join(" | ")}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // ====== Check render status ======
     if (action === "check_status") {
       const { renderId } = params;
+      const envOrder = getShotstackEnvOrder(params.shotstackEnv);
+      const statusErrors: string[] = [];
+      let data: any = null;
 
-      const response = await fetch(`${SHOTSTACK_API_URL}/render/${renderId}`, { headers });
+      for (const env of envOrder) {
+        const baseUrl = SHOTSTACK_ENDPOINTS[env];
+        const response = await fetch(`${baseUrl}/render/${renderId}`, { headers });
 
-      if (!response.ok) {
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+
         const errText = await response.text();
-        console.error("Shotstack status error:", response.status, errText);
+        statusErrors.push(`${env}:${response.status} ${errText}`);
+        console.error(`Shotstack status error (${env}):`, response.status, errText);
+
+        if (![401, 403, 404].includes(response.status)) {
+          break;
+        }
+      }
+
+      if (!data) {
         return new Response(
-          JSON.stringify({ error: "שגיאה בבדיקת סטטוס הרכבה" }),
+          JSON.stringify({ error: `שגיאה בבדיקת סטטוס הרכבה: ${statusErrors.join(" | ")}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const data = await response.json();
       const r = data.response;
 
       return new Response(
