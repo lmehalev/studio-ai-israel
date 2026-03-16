@@ -25,7 +25,13 @@ export interface ProjectRow {
 
 /** Helper to get category from project content JSON */
 export function getProjectCategory(p: ProjectRow): string | null {
-  return (p.content as any)?.category || null;
+  const content = (p.content as any) || {};
+  return content.category || content.sub_activity || content.subActivity || null;
+}
+
+/** Alias helper for UI readability */
+export function getProjectSubActivity(p: ProjectRow): string | null {
+  return getProjectCategory(p);
 }
 
 export interface ProjectOutputRow {
@@ -238,20 +244,24 @@ export const projectService = {
   },
 
   async findOrCreateByBrand(brandId: string, brandName: string, category?: string): Promise<ProjectRow> {
-    // Try to find existing project for this brand + category
+    // Try to find existing project for this brand + category/sub-activity
     const all = await query<ProjectRow[]>('projects', {
       filter: { brand_id: brandId },
       order: { column: 'created_at', ascending: false },
     });
-    const match = category
-      ? all.find(p => getProjectCategory(p) === category)
+
+    const normalizedCategory = category?.trim();
+    const match = normalizedCategory
+      ? all.find(p => getProjectCategory(p) === normalizedCategory)
       : all[0];
+
     if (match) return match;
-    // Create new project for this brand + category
+
+    // Create new project for this brand + category/sub-activity
     return projectService.create({
-      name: category ? `${brandName} — ${category}` : brandName,
+      name: normalizedCategory ? `${brandName} — ${normalizedCategory}` : brandName,
       brand_id: brandId,
-      content: category ? { category } : {},
+      content: normalizedCategory ? { category: normalizedCategory, sub_activity: normalizedCategory } : {},
     });
   },
 };

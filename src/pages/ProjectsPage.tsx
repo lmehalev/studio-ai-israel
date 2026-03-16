@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Search, Grid3X3, List, Video, Loader2, Building2, Tag } from 'lucide-react';
+import { Search, Grid3X3, List, Loader2, Building2, Tag, FolderOpen, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { projectService, getProjectCategory, type ProjectRow } from '@/services/projectService';
+import { projectService, getProjectSubActivity, type ProjectRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
 
@@ -18,6 +18,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     projectService.getAll()
@@ -32,12 +33,12 @@ export default function ProjectsPage() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (brandFilter && p.brand_id !== brandFilter) return false;
     if (typeFilter && p.video_type !== typeFilter) return false;
-    if (categoryFilter && getProjectCategory(p) !== categoryFilter) return false;
+    if (categoryFilter && getProjectSubActivity(p) !== categoryFilter) return false;
     return true;
   });
 
   const videoTypes = [...new Set(projects.map(p => p.video_type))];
-  const categories = [...new Set(projects.map(p => getProjectCategory(p)).filter(Boolean))] as string[];
+  const categories = [...new Set(projects.map(p => getProjectSubActivity(p)).filter(Boolean))] as string[];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
   return (
@@ -103,18 +104,21 @@ export default function ProjectsPage() {
               <thead><tr className="border-b border-border bg-muted/30">
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">קטגוריה</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פעילות</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תוצאות</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">פעולות</th>
               </tr></thead>
               <tbody>
                 {filtered.map(p => {
                   const brand = brands.find(b => b.id === p.brand_id);
                   return (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3"><Link to={`/projects/${p.id}`} className="text-sm font-medium hover:text-primary">{p.name}</Link></td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => navigate(`/projects/${p.id}`)} className="text-sm font-medium hover:text-primary text-right">{p.name}</button>
+                      </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {brand ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
@@ -123,9 +127,9 @@ export default function ProjectsPage() {
                         ) : '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {getProjectCategory(p) ? (
+                        {getProjectSubActivity(p) ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                            <Tag className="w-3 h-3" /> {getProjectCategory(p)}
+                            <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
                           </span>
                         ) : '—'}
                       </td>
@@ -133,6 +137,16 @@ export default function ProjectsPage() {
                       <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{p.output_count}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          <button onClick={() => navigate(`/projects/${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                            <FolderOpen className="w-3 h-3" /> פתח
+                          </button>
+                          <button onClick={() => navigate(`/creative-studio?projectId=${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                            <Wand2 className="w-3 h-3" /> סטודיו
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -155,9 +169,9 @@ export default function ProjectsPage() {
                         <Building2 className="w-3 h-3" /> {brand.name}
                       </span>
                     )}
-                    {getProjectCategory(p) && (
+                    {getProjectSubActivity(p) && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                        <Tag className="w-3 h-3" /> {getProjectCategory(p)}
+                        <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{p.video_type} • {p.aspect_ratio}</span>

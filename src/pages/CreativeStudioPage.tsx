@@ -1,21 +1,25 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { brandService, type Brand } from '@/services/creativeService';
+import { projectService, getProjectCategory } from '@/services/projectService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
 export default function CreativeStudioPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [searchParams] = useSearchParams();
 
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
+  const [activeSubActivity, setActiveSubActivity] = useState('');
   const [brandDialogOpen, setBrandDialogOpen] = useState(false);
   const [newBrand, setNewBrand] = useState<Partial<Brand>>({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
   const [newDepartment, setNewDepartment] = useState('');
@@ -24,9 +28,23 @@ export default function CreativeStudioPage() {
 
   const activeBrand = brands.find(b => b.id === activeBrandId);
 
+  useEffect(() => {
+    const projectId = searchParams.get('projectId');
+    if (!projectId) return;
+
+    projectService.getById(projectId)
+      .then((project) => {
+        if (!project) return;
+        if (project.brand_id) setActiveBrandId(project.brand_id);
+        setActiveSubActivity(getProjectCategory(project) || '');
+      })
+      .catch(() => {});
+  }, [searchParams]);
+
   const buildPrompt = (basePrompt: string) => {
     if (!activeBrand) return basePrompt;
-    return `${basePrompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.`;
+    const subActivityContext = activeSubActivity ? ` תת-פעילות נבחרת: ${activeSubActivity}.` : '';
+    return `${basePrompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.${subActivityContext}`;
   };
 
   const handleAddBrand = () => {
@@ -43,6 +61,7 @@ export default function CreativeStudioPage() {
     const updated = brandService.add(brand);
     setBrands(updated);
     setActiveBrandId(brand.id);
+    setActiveSubActivity('');
     setNewBrand({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
     setBrandDialogOpen(false);
     toast.success(`"${brand.name}" נוסף`);
@@ -57,7 +76,10 @@ export default function CreativeStudioPage() {
   const handleRemoveBrand = (id: string) => {
     const updated = brandService.remove(id);
     setBrands(updated);
-    if (activeBrandId === id) setActiveBrandId(null);
+    if (activeBrandId === id) {
+      setActiveBrandId(null);
+      setActiveSubActivity('');
+    }
     toast.success('המותג הוסר');
   };
 
@@ -139,7 +161,7 @@ export default function CreativeStudioPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setActiveBrandId(null)}
+              onClick={() => { setActiveBrandId(null); setActiveSubActivity(''); }}
               className={cn(
                 'px-3 py-2 rounded-lg border text-xs font-medium transition-all',
                 !activeBrandId ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
@@ -150,7 +172,10 @@ export default function CreativeStudioPage() {
             {brands.map(b => (
               <div key={b.id} className="relative group">
                 <button
-                  onClick={() => setActiveBrandId(b.id)}
+                  onClick={() => {
+                    setActiveBrandId(b.id);
+                    if (!b.departments?.includes(activeSubActivity)) setActiveSubActivity('');
+                  }}
                   className={cn(
                     'px-3 py-2 rounded-lg border text-xs font-medium transition-all',
                     activeBrandId === b.id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
@@ -168,12 +193,41 @@ export default function CreativeStudioPage() {
             ))}
           </div>
           {activeBrand && (
-            <div className="mt-2 text-xs text-muted-foreground flex gap-3 flex-wrap">
-              {activeBrand.industry && <span>📋 {activeBrand.industry}</span>}
-              {activeBrand.tone && <span>🎯 {activeBrand.tone}</span>}
-              {activeBrand.departments && activeBrand.departments.length > 0 && (
-                <span>🏢 {activeBrand.departments.join(' • ')}</span>
-              )}
+            <div className="mt-3 space-y-3">
+              <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
+                {activeBrand.industry && <span>📋 {activeBrand.industry}</span>}
+                {activeBrand.tone && <span>🎯 {activeBrand.tone}</span>}
+                {activeBrand.departments && activeBrand.departments.length > 0 && (
+                  <span>🏢 {activeBrand.departments.join(' • ')}</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">תת-פעילות פעילה</label>
+                  <select
+                    value={activeSubActivity}
+                    onChange={(e) => setActiveSubActivity(e.target.value)}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="rtl"
+                  >
+                    <option value="">ללא תת-פעילות</option>
+                    {(activeBrand.departments || []).map((dep) => (
+                      <option key={dep} value={dep}>{dep}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">הגדרה מהירה</label>
+                  <input
+                    value={activeSubActivity}
+                    onChange={(e) => setActiveSubActivity(e.target.value)}
+                    placeholder="למשל: הערכת שווי"
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="rtl"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -205,6 +259,7 @@ export default function CreativeStudioPage() {
           activeBrand={activeBrand}
           activeBrandId={activeBrandId}
           buildPrompt={buildPrompt}
+          initialCategory={activeSubActivity}
         />
       </div>
     </AppLayout>

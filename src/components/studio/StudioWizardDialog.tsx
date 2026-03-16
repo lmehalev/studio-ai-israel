@@ -47,9 +47,10 @@ interface StudioWizardDialogProps {
   activeBrand: Brand | undefined;
   activeBrandId: string | null;
   buildPrompt: (base: string) => string;
+  initialCategory?: string;
 }
 
-export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt }: StudioWizardDialogProps) {
+export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt, initialCategory = '' }: StudioWizardDialogProps) {
   const [selectedAction, setSelectedAction] = useState<StudioAction | null>(null);
   const [step, setStep] = useState(0);
 
@@ -105,16 +106,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [customCategory, setCustomCategory] = useState<string>('');
 
   const brandDepartments = activeBrand?.departments || [];
+  const effectiveCategory = customCategory.trim() || selectedCategory;
 
   const handleSaveToProject = async () => {
     if (!activeBrandId || !activeBrand) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
       return;
     }
-    if (brandDepartments.length > 0 && !selectedCategory) {
-      toast.error('יש לבחור קטגוריה לפני השמירה');
+    if (brandDepartments.length > 0 && !effectiveCategory) {
+      toast.error('יש לבחור או להזין תת-פעילות לפני השמירה');
       return;
     }
     const url = result?.imageUrl || result?.videoUrl;
@@ -132,7 +135,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         finalUrl = await storageService.upload(file);
       }
 
-      const cat = selectedCategory || undefined;
+      const cat = effectiveCategory || undefined;
       const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
@@ -161,6 +164,13 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     }
   }, [open]);
 
+  // Sync selected category from current project context
+  useEffect(() => {
+    if (!open) return;
+    setSelectedCategory(initialCategory || '');
+    setCustomCategory('');
+  }, [open, initialCategory]);
+
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
@@ -183,6 +193,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setSelectedVoiceId(null);
         setShowAvatarVoicePanel(false);
         setSelectedCategory('');
+        setCustomCategory('');
       }, 300);
     }
   }, [open]);
@@ -388,26 +399,31 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     </div>
   );
 
-  // ============ CATEGORY SELECTOR ============
-  const renderCategorySelector = () => {
-    if (brandDepartments.length === 0) return null;
-    return (
-      <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-muted-foreground">קטגוריה / תת-פרויקט</label>
+  const renderCategorySelector = () => (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-muted-foreground">תת-פעילות / קטגוריה לפרויקט</label>
+      {brandDepartments.length > 0 && (
         <select
           value={selectedCategory}
           onChange={e => setSelectedCategory(e.target.value)}
           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           dir="rtl"
         >
-          <option value="">בחר קטגוריה...</option>
+          <option value="">בחר תת-פעילות...</option>
           {brandDepartments.map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-      </div>
-    );
-  };
+      )}
+      <input
+        value={customCategory}
+        onChange={e => setCustomCategory(e.target.value)}
+        placeholder="או כתוב תת-פעילות חדשה (למשל: הערכת שווי)"
+        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+        dir="rtl"
+      />
+    </div>
+  );
 
   // ============ RESULT VIEW ============
   const renderResultView = () => (
@@ -422,7 +438,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
-      {renderCategorySelector()}
+      {activeBrand && renderCategorySelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -433,7 +449,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(''); }}
+      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>

@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
+import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2, Download, Trash2, Maximize2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectService, getProjectCategory, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 
@@ -24,6 +24,10 @@ export default function ProjectDetailPage() {
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -37,12 +41,41 @@ export default function ProjectDetailPage() {
       setOutputs(o);
       setTimeline(t);
       setVersions(v);
+      if (p) {
+        setEditName(p.name);
+        setEditCategory(getProjectCategory(p) || '');
+      }
     }).catch(e => toast.error(e.message))
       .finally(() => setLoading(false));
   }, [id]);
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
   const formatDateTime = (d: string) => new Date(d).toLocaleString('he-IL');
+
+  const handleSaveProjectMeta = async () => {
+    if (!project) return;
+
+    const nextName = window.prompt('שם פרויקט חדש', project.name)?.trim();
+    if (!nextName) return;
+
+    const currentCategory = getProjectCategory(project) || '';
+    const nextCategory = window.prompt('תת-פעילות / קטגוריה', currentCategory)?.trim() ?? currentCategory;
+
+    try {
+      const updated = await projectService.update(project.id, {
+        name: nextName,
+        content: {
+          ...(project.content || {}),
+          category: nextCategory || null,
+          sub_activity: nextCategory || null,
+        },
+      });
+      setProject(updated);
+      toast.success('פרטי הפרויקט עודכנו');
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בעדכון הפרויקט');
+    }
+  };
 
   if (loading) return <AppLayout><div className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></div></AppLayout>;
   if (!project) return <AppLayout><div className="text-center py-20"><p className="text-muted-foreground">הפרויקט לא נמצא</p></div></AppLayout>;
@@ -68,7 +101,8 @@ export default function ProjectDetailPage() {
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
+            <button onClick={handleSaveProjectMeta} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
+            <Link to={`/creative-studio?projectId=${project.id}`} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Wand2 className="w-3.5 h-3.5" /> ערוך בסטודיו</Link>
             <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Copy className="w-3.5 h-3.5" /> שכפול</button>
             <button onClick={() => toast.info('המערכת מכינה את הבקשה...')} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><RefreshCw className="w-3.5 h-3.5" /> יצירה מחדש</button>
             <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Archive className="w-3.5 h-3.5" /> ארכוב</button>
