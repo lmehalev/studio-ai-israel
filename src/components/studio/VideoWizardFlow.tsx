@@ -56,6 +56,9 @@ interface VideoWizardFlowProps {
   onClose: () => void;
 }
 
+const RUNWAY_PROMPT_MAX_CHARS = 900;
+const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
+
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
   buildPrompt, initialCategory, brandDepartments,
@@ -250,9 +253,12 @@ export function VideoWizardFlow({
             .map(s => `${s.visualDescription}. ${s.subtitleText}`)
             .join('. ');
 
+          const fallbackScenePrompt = promptText || generatedScript.script || prompt;
+          const runwayPrompt = toRunwayPrompt(buildPrompt(fallbackScenePrompt));
+
           const taskData = await runwayService.imageToVideo(
             normalizedAvatarUrl,
-            buildPrompt(promptText),
+            runwayPrompt,
             undefined,
             generatedScript.duration >= 90 ? 10 : 5,
           );
@@ -282,7 +288,8 @@ export function VideoWizardFlow({
           ? `Overall style: ${generatedScript.style.cinematicStyle || generatedScript.style.tone || 'cinematic'}. Pace: ${generatedScript.style.pace || 'medium'}. Music mood: ${generatedScript.style.music || 'cinematic score'}.`
           : '';
 
-        const fullPrompt = buildPrompt(`${cinematicPrompt}. ${styleInfo}`.slice(0, 2000));
+        const basePrompt = cinematicPrompt || generatedScript.script || prompt;
+        const fullPrompt = toRunwayPrompt(buildPrompt(`${basePrompt}. ${styleInfo}`));
 
         const taskData = await runwayService.textToVideo(
           fullPrompt,

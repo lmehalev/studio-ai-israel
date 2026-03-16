@@ -8,6 +8,24 @@ const corsHeaders = {
 
 const RUNWAY_API = "https://api.dev.runwayml.com/v1";
 const RUNWAY_VERSION = "2024-11-06";
+const MAX_RUNWAY_PROMPT_LENGTH = 950;
+
+const normalizePromptText = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_RUNWAY_PROMPT_LENGTH);
+};
+
+const mapRunwayError = (status: number, errText: string): string => {
+  if (errText.includes('"code":"too_big"') || errText.includes("Too big")) {
+    return "הפרומפט היה ארוך מדי לספק הווידאו. קיצרתי אותו אוטומטית — נסה שוב.";
+  }
+
+  if (status === 429) {
+    return "יותר מדי בקשות לספק הווידאו כרגע, נסה שוב בעוד רגע.";
+  }
+
+  return `שגיאה ב-RunwayML [${status}]`;
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -35,13 +53,15 @@ serve(async (req) => {
         );
       }
 
+      const safePromptText = normalizePromptText(promptText);
+
       const response = await fetch(`${RUNWAY_API}/image_to_video`, {
         method: "POST",
         headers,
         body: JSON.stringify({
           model: model || "gen4.5",
           promptImage,
-          promptText: promptText || "",
+          promptText: safePromptText,
           duration: duration || 5,
           ratio: ratio || "1280:720",
         }),
@@ -50,7 +70,10 @@ serve(async (req) => {
       if (!response.ok) {
         const errText = await response.text();
         console.error("Runway image_to_video error:", response.status, errText);
-        throw new Error(`שגיאה ב-RunwayML [${response.status}]: ${errText}`);
+        return new Response(
+          JSON.stringify({ error: mapRunwayError(response.status, errText) }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const data = await response.json();
@@ -62,7 +85,8 @@ serve(async (req) => {
 
     // Create text-to-video task
     if (action === "text_to_video") {
-      if (!promptText) {
+      const safePromptText = normalizePromptText(promptText);
+      if (!safePromptText) {
         return new Response(
           JSON.stringify({ error: "חסר תיאור לסרטון" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -74,7 +98,7 @@ serve(async (req) => {
         headers,
         body: JSON.stringify({
           model: model || "gen4.5",
-          promptText,
+          promptText: safePromptText,
           duration: duration || 5,
           ratio: ratio || "1280:720",
         }),
@@ -83,7 +107,10 @@ serve(async (req) => {
       if (!response.ok) {
         const errText = await response.text();
         console.error("Runway text_to_video error:", response.status, errText);
-        throw new Error(`שגיאה ב-RunwayML [${response.status}]: ${errText}`);
+        return new Response(
+          JSON.stringify({ error: mapRunwayError(response.status, errText) }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const data = await response.json();
@@ -113,7 +140,10 @@ serve(async (req) => {
       if (!response.ok) {
         const errText = await response.text();
         console.error("Runway check_status error:", response.status, errText);
-        throw new Error(`שגיאה בבדיקת סטטוס [${response.status}]`);
+        return new Response(
+          JSON.stringify({ error: `שגיאה בבדיקת סטטוס [${response.status}]` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const data = await response.json();
