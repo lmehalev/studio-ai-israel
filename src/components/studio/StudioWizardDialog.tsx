@@ -91,6 +91,26 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
   const [subtitleOffset, setSubtitleOffset] = useState(0.3);
   const [subtitleFontClass, setSubtitleFontClass] = useState<string>('font-heebo');
 
+  // Avatar & Voice selection
+  interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
+  interface SavedVoice { id: string; name: string; audioUrl: string; type: string; }
+  const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<SavedVoice[]>([]);
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
+
+  // Load avatars & voices when dialog opens
+  useEffect(() => {
+    if (open) {
+      avatarDbService.list().then(list => setAvailableAvatars(list)).catch(() => {});
+      try {
+        const voices = JSON.parse(localStorage.getItem('studio-voices') || '[]');
+        setAvailableVoices(voices);
+      } catch { setAvailableVoices([]); }
+    }
+  }, [open]);
+
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
