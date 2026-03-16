@@ -116,8 +116,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       toast.error('יש לבחור חברה / מותג לפני השמירה');
       return;
     }
-    if (brandDepartments.length > 0 && !selectedCategory) {
-      toast.error('יש לבחור קטגוריה לפני השמירה');
+    if (brandDepartments.length > 0 && !effectiveCategory) {
+      toast.error('יש לבחור או להזין תת-פעילות לפני השמירה');
       return;
     }
     const url = result?.imageUrl || result?.videoUrl;
