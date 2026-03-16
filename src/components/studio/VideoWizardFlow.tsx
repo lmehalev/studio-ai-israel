@@ -73,6 +73,7 @@ export function VideoWizardFlow({
   const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
   const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>([]);
   const [useAiVoice, setUseAiVoice] = useState(false);
+  const [videoStyle, setVideoStyle] = useState<string>('cinematic');
 
   // Script
   const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(null);
