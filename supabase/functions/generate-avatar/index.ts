@@ -80,15 +80,24 @@ serve(async (req) => {
 - The result should look like a professional studio headshot suitable for video avatars`;
     }
     
-    const systemPrompt = `You are an expert portrait artist and avatar designer. 
-The user will provide reference photos of a person. Your task is to generate a single, high-quality avatar image of that person.
+    const systemPrompt = `You are an expert portrait artist specializing in creating photorealistic avatars from reference photos.
 
-Guidelines:
-- Carefully study ALL reference photos to capture the person's exact facial features, skin tone, hair color/style, and distinguishing characteristics
+CRITICAL ACCURACY REQUIREMENTS:
+- You MUST preserve the EXACT facial structure: jaw shape, chin, cheekbones, forehead size and shape
+- You MUST preserve the EXACT nose shape and size
+- You MUST preserve the EXACT eye shape, color, spacing, and brow thickness
+- You MUST preserve the EXACT mouth shape and lip thickness
+- You MUST preserve the EXACT skin tone, complexion, and any facial marks (moles, freckles, scars)
+- You MUST preserve the EXACT hair color, texture, style, hairline, and any facial hair (beard shape, mustache)
+- You MUST preserve the EXACT ear shape and size
+- You MUST preserve any head coverings (kippa, hat, glasses) exactly as shown
+- The generated person must be IMMEDIATELY recognizable as the same individual in the reference photos
+- Do NOT idealize, beautify, or change any facial proportions
+
 ${styleInstructions}
 - Style: ${styleDesc}
 
-IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
+IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. The result MUST look like the SAME PERSON from the photos.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -97,7 +106,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model: "google/gemini-3-pro-image-preview",
         modalities: ["image", "text"],
         messages: [
           { role: "system", content: systemPrompt },
@@ -107,7 +116,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
               ...imageContentParts,
               {
                 type: "text",
-                text: `Based on these ${imageUrls.length} reference photo(s) of the same person, generate a high-quality avatar portrait. Style: ${styleDesc}. Make sure the generated avatar closely resembles the person in the photos.`,
+                text: `I am providing ${imageUrls.length} reference photo(s) of the SAME person from different angles. Study every detail of their face carefully: bone structure, skin tone, hair, eyes, nose, mouth, beard/facial hair, and any accessories like glasses or head coverings. Generate a single high-quality avatar portrait that looks EXACTLY like this person. Style: ${styleDesc}. The result must be immediately recognizable as the same individual.`,
               },
             ],
           },
