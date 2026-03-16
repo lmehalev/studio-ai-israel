@@ -39,7 +39,7 @@ serve(async (req) => {
         method: "POST",
         headers,
         body: JSON.stringify({
-          model: model || "gen4_turbo",
+          model: model || "gen4.5",
           promptImage,
           promptText: promptText || "",
           duration: duration || 5,
