@@ -31,17 +31,61 @@ serve(async (req) => {
     }));
 
     const styleDesc = style || "professional headshot";
-    
-    const systemPrompt = `You are an expert portrait artist and avatar designer. 
-The user will provide reference photos of a person. Your task is to generate a single, high-quality professional avatar/headshot image of that person.
 
-Guidelines:
-- Carefully study ALL reference photos to capture the person's exact facial features, skin tone, hair color/style, and distinguishing characteristics
+    // Build style-specific instructions
+    let styleInstructions = "";
+    if (styleDesc.includes("cartoon") || styleDesc.includes("pixar")) {
+      styleInstructions = `
+- Create a 3D animated/Pixar-style character based on the person's features
+- Use vibrant colors, smooth skin textures, and slightly exaggerated proportions
+- Large expressive eyes, rounded features
+- The character should be clearly recognizable as the same person`;
+    } else if (styleDesc.includes("disney")) {
+      styleInstructions = `
+- Create a classic Disney hand-drawn animation style portrait
+- Elegant lines, warm color palette, magical lighting
+- Slightly idealized but clearly recognizable as the same person
+- Add subtle sparkle or magical atmosphere`;
+    } else if (styleDesc.includes("anime")) {
+      styleInstructions = `
+- Create a Japanese anime/manga style portrait
+- Large expressive eyes, sharp features, dynamic hair
+- Clean line art with cel-shading style coloring
+- The character should be clearly recognizable as the same person`;
+    } else if (styleDesc.includes("comic")) {
+      styleInstructions = `
+- Create a Western comic book / graphic novel style portrait
+- Bold outlines, dramatic shading, halftone dots effect
+- Heroic proportions, dynamic pose
+- The character should be clearly recognizable as the same person`;
+    } else if (styleDesc.includes("watercolor")) {
+      styleInstructions = `
+- Create an artistic watercolor painting portrait
+- Soft flowing colors, visible brush strokes, organic textures
+- Dreamy ethereal quality
+- The person should be clearly recognizable`;
+    } else if (styleDesc.includes("pop art")) {
+      styleInstructions = `
+- Create a bold pop art style portrait inspired by Andy Warhol / Roy Lichtenstein
+- Bright contrasting colors, bold outlines, Ben-Day dots
+- Dramatic and eye-catching composition
+- The person should be clearly recognizable`;
+    } else {
+      // Professional / photorealistic styles
+      styleInstructions = `
 - Generate a clean, well-lit, professional-looking portrait
 - The face should be clearly visible, centered, and facing forward
 - Use clean, neutral or slightly blurred background
 - Maintain photorealistic quality
-- The result should look like a professional studio headshot suitable for video avatars
+- The result should look like a professional studio headshot suitable for video avatars`;
+    }
+    
+    const systemPrompt = `You are an expert portrait artist and avatar designer. 
+The user will provide reference photos of a person. Your task is to generate a single, high-quality avatar image of that person.
+
+Guidelines:
+- Carefully study ALL reference photos to capture the person's exact facial features, skin tone, hair color/style, and distinguishing characteristics
+${styleInstructions}
 - Style: ${styleDesc}
 
 IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
@@ -54,6 +98,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
       },
       body: JSON.stringify({
         model: "google/gemini-3.1-flash-image-preview",
+        modalities: ["image", "text"],
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -62,7 +107,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
               ...imageContentParts,
               {
                 type: "text",
-                text: `Based on these ${imageUrls.length} reference photo(s) of the same person, generate a professional, high-quality avatar headshot portrait. Style: ${styleDesc}. Make sure the generated avatar closely resembles the person in the photos.`,
+                text: `Based on these ${imageUrls.length} reference photo(s) of the same person, generate a high-quality avatar portrait. Style: ${styleDesc}. Make sure the generated avatar closely resembles the person in the photos.`,
               },
             ],
           },
@@ -91,21 +136,25 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
     const data = await response.json();
     const choice = data.choices?.[0]?.message;
 
-    // Extract image from response - could be in content array or inline_data
+    // Extract image from response
     let generatedImageUrl: string | null = null;
     let textResponse = "";
+
+    // Check for images array (new format)
+    if (choice?.images && Array.isArray(choice.images) && choice.images.length > 0) {
+      generatedImageUrl = choice.images[0]?.image_url?.url || null;
+    }
 
     if (choice?.content) {
       if (typeof choice.content === "string") {
         textResponse = choice.content;
       } else if (Array.isArray(choice.content)) {
         for (const part of choice.content) {
-          if (part.type === "image_url" && part.image_url?.url) {
+          if (!generatedImageUrl && part.type === "image_url" && part.image_url?.url) {
             generatedImageUrl = part.image_url.url;
           } else if (part.type === "text") {
             textResponse = part.text || "";
-          } else if (part.inline_data) {
-            // base64 image
+          } else if (!generatedImageUrl && part.inline_data) {
             generatedImageUrl = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
           }
         }
@@ -119,7 +168,6 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image.`;
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Extract base64 data
       const matches = generatedImageUrl.match(/^data:(.+?);base64,(.+)$/);
       if (matches) {
         const mimeType = matches[1];
