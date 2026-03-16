@@ -1,7 +1,7 @@
-import { ImageIcon, Mic, UserCircle, FileText, Subtitles, Video, Wand2, Sparkles } from 'lucide-react';
+import { ImageIcon, Subtitles, Video, Link2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type StudioAction = 'image' | 'edit_image' | 'avatar_video' | 'video_ai' | 'dubbing' | 'script' | 'subtitles';
+export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
 
 export interface ActionItem {
   id: StudioAction;
@@ -13,12 +13,9 @@ export interface ActionItem {
 
 export const studioActions: ActionItem[] = [
   { id: 'image', label: 'צור תמונה', desc: 'יצירת תמונה שיווקית מתיאור טקסט', icon: ImageIcon, color: 'from-amber-500/20 to-orange-500/20 border-amber-500/30' },
-  { id: 'edit_image', label: 'ערוך תמונה', desc: 'עריכת תמונה קיימת עם AI', icon: Wand2, color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30' },
-  { id: 'avatar_video', label: 'סרטון עם אווטאר', desc: 'צור דמות מדברת מתמונות שלך', icon: UserCircle, color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30' },
   { id: 'video_ai', label: 'וידאו AI', desc: 'צור סרטון מתמונה או טקסט', icon: Video, color: 'from-green-500/20 to-emerald-500/20 border-green-500/30' },
-  { id: 'dubbing', label: 'דיבוב / קול', desc: 'המר טקסט לדיבור או הקלט קול', icon: Mic, color: 'from-red-500/20 to-rose-500/20 border-red-500/30' },
-  { id: 'script', label: 'כתוב תסריט', desc: 'תסריט שיווקי מקצועי עם AI', icon: FileText, color: 'from-indigo-500/20 to-violet-500/20 border-indigo-500/30' },
   { id: 'subtitles', label: 'כתוביות לסרטון', desc: 'תמלול אוטומטי + עריכת כתוביות', icon: Subtitles, color: 'from-teal-500/20 to-cyan-500/20 border-teal-500/30' },
+  { id: 'import_edit', label: 'ייבוא ועריכה', desc: 'שים קישור לתמונה או סרטון וערוך', icon: Link2, color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30' },
 ];
 
 interface StudioActionCardsProps {
@@ -35,7 +32,7 @@ export function StudioActionCards({ onSelect }: StudioActionCardsProps) {
         <h2 className="text-xl font-rubik font-bold">מה תרצה ליצור היום?</h2>
         <p className="text-sm text-muted-foreground">בחר פעולה ואנחה אותך צעד אחר צעד</p>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {studioActions.map(action => {
           const Icon = action.icon;
           return (
