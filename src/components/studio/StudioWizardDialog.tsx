@@ -164,6 +164,13 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     }
   }, [open]);
 
+  // Sync selected category from current project context
+  useEffect(() => {
+    if (!open) return;
+    setSelectedCategory(initialCategory || '');
+    setCustomCategory('');
+  }, [open, initialCategory]);
+
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
