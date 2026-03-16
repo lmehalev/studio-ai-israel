@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Search, Grid3X3, List, Video, Loader2, Building2, Tag } from 'lucide-react';
+import { Search, Grid3X3, List, Loader2, Building2, Tag, FolderOpen, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { projectService, getProjectCategory, type ProjectRow } from '@/services/projectService';
+import { projectService, getProjectSubActivity, type ProjectRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
 
