@@ -312,6 +312,27 @@ export default function SettingsPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <Dialog open={confirmBulkDelete} onOpenChange={() => setConfirmBulkDelete(false)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-right">מחיקת {selectedFiles.size} קבצים</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-center">
+                    האם אתה בטוח שברצונך למחוק <span className="font-semibold">{selectedFiles.size} קבצים</span>?
+                  </p>
+                  <p className="text-xs text-muted-foreground text-center">פעולה זו אינה ניתנת לביטול</p>
+                </div>
+                <DialogFooter className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setConfirmBulkDelete(false)}>ביטול</Button>
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                    {bulkDeleting ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Trash2 className="w-4 h-4 ml-1" />} מחק {selectedFiles.size} קבצים
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="system" className="mt-4 space-y-4">
