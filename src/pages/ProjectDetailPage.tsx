@@ -59,7 +59,7 @@ export default function ProjectDetailPage() {
             <h1 className="text-2xl font-rubik font-bold flex items-center gap-3">{project.name} <StatusBadge status={project.status} /></h1>
             <p className="text-muted-foreground text-sm mt-1">
               {project.avatar_name || '—'} • {project.video_type} • {project.aspect_ratio} • גרסה {project.current_version}
-              {(project as any).category && <span className="text-primary"> • {(project as any).category}</span>}
+              {getProjectCategory(project) && <span className="text-primary"> • {getProjectCategory(project)}</span>}
             </p>
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
