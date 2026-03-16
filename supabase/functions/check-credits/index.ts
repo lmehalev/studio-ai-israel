@@ -62,6 +62,7 @@ async function checkElevenLabs(apiKey: string): Promise<ServiceCredits> {
   try {
     const headers = { "xi-api-key": apiKey };
 
+    // Try subscription endpoint first (works with full API keys)
     const subscriptionRes = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
       headers,
     });
@@ -82,29 +83,42 @@ async function checkElevenLabs(apiKey: string): Promise<ServiceCredits> {
       };
     }
 
-    if (subscriptionRes.status === 401 || subscriptionRes.status === 403) {
-      // Some keys (e.g. scoped/service-account keys) cannot read subscription,
-      // but can still generate TTS. Validate key with a read-only endpoint.
-      const modelsRes = await fetch("https://api.elevenlabs.io/v1/models", { headers });
-
-      if (modelsRes.ok) {
+    // Try /v1/user endpoint as fallback (sometimes accessible with different key types)
+    const userRes = await fetch("https://api.elevenlabs.io/v1/user", { headers });
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      const sub = userData.subscription;
+      if (sub) {
+        const used = sub.character_count || 0;
+        const limit = sub.character_limit || 10000;
         return {
           service: "elevenlabs",
-          used: 0,
-          limit: -1,
+          used,
+          limit,
           unit: "תווים",
-          plan: "API מחובר",
-          canGenerate: true,
+          plan: sub.tier || "free",
+          canGenerate: used < limit,
           dashboardUrl: ELEVENLABS_DASHBOARD_URL,
         };
       }
-
-      const modelsError = await parseErrorBody(modelsRes);
-      throw new Error(`subscription:${subscriptionRes.status}; models:${modelsRes.status} ${modelsError}`);
     }
 
-    const subscriptionError = await parseErrorBody(subscriptionRes);
-    throw new Error(`HTTP ${subscriptionRes.status}: ${subscriptionError}`);
+    // Last resort: validate key can at least call models
+    const modelsRes = await fetch("https://api.elevenlabs.io/v1/models", { headers });
+    if (modelsRes.ok) {
+      return {
+        service: "elevenlabs",
+        used: 0,
+        limit: -1,
+        unit: "תווים",
+        plan: "API מחובר",
+        canGenerate: true,
+        dashboardUrl: ELEVENLABS_DASHBOARD_URL,
+      };
+    }
+
+    const modelsError = await parseErrorBody(modelsRes);
+    throw new Error(`subscription:${subscriptionRes.status}; user:${userRes.status}; models:${modelsRes.status} ${modelsError}`);
   } catch (error) {
     return toErrorResult("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, error);
   }
