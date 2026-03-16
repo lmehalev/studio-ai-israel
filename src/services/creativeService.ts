@@ -318,3 +318,48 @@ export const brandService = {
     return brands;
   },
 };
+
+// ====== Website Scraper Service (Firecrawl) ======
+export interface WebsiteScrapeResult {
+  screenshot?: string;
+  markdown?: string;
+  branding?: {
+    logo?: string;
+    colors?: Record<string, string>;
+    fonts?: { family: string }[];
+    colorScheme?: string;
+  };
+  metadata?: {
+    title?: string;
+    description?: string;
+    sourceURL?: string;
+  };
+  links?: string[];
+}
+
+export const websiteScraperService = {
+  scrape: async (url: string): Promise<WebsiteScrapeResult> => {
+    const { data, error } = await supabase.functions.invoke('firecrawl-scrape', {
+      body: {
+        url,
+        options: {
+          formats: ['markdown', 'screenshot', 'branding'],
+          onlyMainContent: true,
+          waitFor: 3000,
+        },
+      },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בסריקת האתר');
+    if (data?.success === false) throw new Error(data.error || 'שגיאה בסריקת האתר');
+
+    // Firecrawl nests inside data.data
+    const result = data?.data || data;
+    return {
+      screenshot: result?.screenshot,
+      markdown: result?.markdown,
+      branding: result?.branding,
+      metadata: result?.metadata,
+      links: result?.links,
+    };
+  },
+};
