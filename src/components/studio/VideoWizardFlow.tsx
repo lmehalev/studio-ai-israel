@@ -234,23 +234,36 @@ export function VideoWizardFlow({
       let narrationAudioUrl: string | undefined;
       let baseVideoUrl: string | undefined;
 
-      // === Stage 1: Clone voice & generate narration ===
+      // === Stage 1: ALWAYS generate Hebrew narration ===
+      setProgressStage('מייצר קריינות בעברית...');
+      setRunwayProgress(5);
+
       if (selectedVoice?.audio_url) {
-        setProgressStage('משכפל את הקול שלך ומייצר קריינות...');
-        setRunwayProgress(5);
+        // User selected their own voice → clone it
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
             fullScript
           );
           narrationAudioUrl = cloneResult.audioUrl;
-          setRunwayProgress(25);
-          toast.success('הקריינות מוכנה!');
+          toast.success('הקריינות בקול שלך מוכנה!');
         } catch (cloneErr: any) {
-          console.warn('Voice clone failed, falling back to TTS:', cloneErr?.message);
-          toast.info('לא הצלחתי לשכפל את הקול, משתמש בקול AI...');
+          console.warn('Voice clone failed, falling back to AI TTS:', cloneErr?.message);
+          toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
         }
       }
+
+      // If no cloned voice succeeded, generate AI narration
+      if (!narrationAudioUrl) {
+        try {
+          narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+          toast.success('קריינות AI בעברית מוכנה!');
+        } catch (ttsErr: any) {
+          console.warn('TTS failed:', ttsErr?.message);
+          toast.info('לא הצלחתי ליצור קריינות, ממשיך ללא קול...');
+        }
+      }
+      setRunwayProgress(25);
 
       // === Stage 2: Generate base video ===
       if (avatarImage) {
@@ -283,7 +296,7 @@ export function VideoWizardFlow({
             normalizedAvatarUrl,
             runwayPrompt,
             undefined,
-            10, // Always use max duration
+            10,
           );
 
           baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
@@ -295,12 +308,11 @@ export function VideoWizardFlow({
         setProgressStage('מייצר סרטון AI קולנועי...');
         
         const runwayPrompt = buildRunwayPromptFromScript();
-        console.log('Runway prompt:', runwayPrompt);
 
         const taskData = await runwayService.textToVideo(
           runwayPrompt,
           undefined,
-          10, // Always use max duration
+          10,
         );
 
         baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
