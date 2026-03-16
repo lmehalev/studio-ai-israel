@@ -23,6 +23,7 @@ import { UrlImportInput } from '@/components/UrlImportInput';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
 
@@ -98,7 +99,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   // Avatar & Voice selection
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-  interface SavedVoice { id: string; name: string; audioUrl: string; type: string; }
+  interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
   const [availableVoices, setAvailableVoices] = useState<SavedVoice[]>([]);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
@@ -157,10 +158,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   useEffect(() => {
     if (open) {
       avatarDbService.list().then(list => setAvailableAvatars(list)).catch(() => {});
-      try {
-        const voices = JSON.parse(localStorage.getItem('studio-voices') || '[]');
-        setAvailableVoices(voices);
-      } catch { setAvailableVoices([]); }
+      supabase.functions.invoke('voice-manager', { body: { action: 'list' } })
+        .then(({ data }) => {
+          if (data?.voices) setAvailableVoices(data.voices);
+        })
+        .catch(() => {});
     }
   }, [open]);
 
@@ -337,9 +339,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'התוצאה', desc: 'התמונה שנוצרה' },
       ],
       video_ai: [
-        { title: 'סוג הסרטון', desc: 'איך תרצה ליצור?' },
-        { title: 'תאר את הסרטון', desc: 'מה יקרה בסרטון?' },
-        { title: 'הסרטון מוכן', desc: 'הסרטון שנוצר' },
+        { title: 'יצירת סרטון מקצועי', desc: 'תאר, בחר אווטארים וקולות, אשר תסריט ותייצר' },
       ],
       subtitles: [
         { title: 'העלה סרטון', desc: 'בחר סרטון לתמלול' },
@@ -361,7 +361,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 3, subtitles: 3, import_edit: 3,
+      image: 2, video_ai: 1, subtitles: 3, import_edit: 3,
     };
     return counts[selectedAction] + 1;
   };
@@ -640,103 +640,19 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     // ====== VIDEO AI ======
     if (selectedAction === 'video_ai') {
-      if (wizardStep === 0) return (
-        <div className="space-y-4">
-          {avatarVoiceBar}
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => setRunwayMode('image_to_video')}
-              className={cn('p-4 rounded-xl border text-center transition-all', runwayMode === 'image_to_video' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30')}>
-              <span className="text-2xl block mb-1">🖼️</span>
-              <span className="text-sm font-medium">תמונה → וידאו</span>
-            </button>
-            <button onClick={() => setRunwayMode('text_to_video')}
-              className={cn('p-4 rounded-xl border text-center transition-all', runwayMode === 'text_to_video' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30')}>
-              <span className="text-2xl block mb-1">✍️</span>
-              <span className="text-sm font-medium">טקסט → וידאו</span>
-            </button>
-          </div>
-          {selectedAvatar && !runwayImageUrl && runwayMode === 'image_to_video' && (
-            <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
-              <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
-              <div>
-                <span>אווטאר "{selectedAvatar.name}" זמין כתמונת מקור</span>
-                <button onClick={() => setRunwayImageUrl(selectedAvatar.image_url)} className="block text-primary font-semibold underline mt-0.5">השתמש באווטאר</button>
-              </div>
-            </div>
-          )}
-          {runwayMode === 'image_to_video' && (
-            <div className="space-y-3">
-              {runwayImageUrl && (
-                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-primary/40">
-                  <img src={runwayImageUrl} alt="מקור" className="w-full h-full object-cover" />
-                  <button onClick={() => setRunwayImageUrl('')} className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-              {!runwayImageUrl && (
-                <>
-                  <FileUploadZone accept="image/*" label="העלה תמונה" hint="JPG, PNG, WebP" onUploaded={url => setRunwayImageUrl(url)} />
-                  <UrlImportInput onSubmit={url => setRunwayImageUrl(url)} placeholder="הדבק קישור לתמונה..." />
-                </>
-              )}
-            </div>
-          )}
-          <button onClick={() => setStep(step + 1)}
-            disabled={runwayMode === 'image_to_video' && !runwayImageUrl}
-            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm disabled:opacity-50">
-            המשך <ArrowRight className="w-4 h-4 inline mr-1 rotate-180" />
-          </button>
-        </div>
+      return (
+        <VideoWizardFlow
+          avatars={availableAvatars}
+          voices={availableVoices}
+          activeBrand={activeBrand}
+          activeBrandId={activeBrandId}
+          buildPrompt={buildPrompt}
+          initialCategory={initialCategory}
+          brandDepartments={brandDepartments}
+          onBack={() => { setSelectedAction(null); setStep(0); }}
+          onClose={() => onOpenChange(false)}
+        />
       );
-      if (wizardStep === 1) return (
-        <div className="space-y-4">
-          {renderPromptInput({ placeholder: 'תאר את הסרטון... למשל: "מוצר מסתובב על רקע לבן עם תאורה רכה"' })}
-          <button
-            onClick={async () => {
-              if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
-              setLoading(true);
-              try {
-                let taskData;
-                if (runwayMode === 'image_to_video') {
-                  taskData = await runwayService.imageToVideo(runwayImageUrl, buildPrompt(prompt));
-                } else {
-                  taskData = await runwayService.textToVideo(buildPrompt(prompt));
-                }
-                toast.success('הסרטון בהכנה...');
-                setRunwayPolling(true);
-                setRunwayProgress(0);
-                let attempts = 0;
-                const poll = async () => {
-                  try {
-                    const status = await runwayService.checkStatus(taskData.taskId);
-                    setRunwayProgress(status.progress * 100);
-                    if (status.status === 'SUCCEEDED' && status.resultUrl) {
-                      setResult({ videoUrl: status.resultUrl });
-                      setRunwayPolling(false);
-                      setStep(step + 1);
-                      toast.success('הסרטון מוכן!');
-                      return;
-                    }
-                    if (status.status === 'FAILED') { setRunwayPolling(false); toast.error(status.failureReason || 'שגיאה'); return; }
-                    attempts++;
-                    if (attempts < 120) setTimeout(poll, 5000);
-                    else { setRunwayPolling(false); toast.error('תם הזמן'); }
-                  } catch { setRunwayPolling(false); toast.error('שגיאה'); }
-                };
-                poll();
-              } catch (e: any) { toast.error(e.message); }
-              finally { setLoading(false); }
-            }}
-            disabled={loading || runwayPolling}
-            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {(loading || runwayPolling) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {runwayPolling ? `מייצר... ${Math.round(runwayProgress)}%` : 'צור סרטון'}
-          </button>
-        </div>
-      );
-      if (wizardStep === 2 && result?.videoUrl) return renderResultView();
     }
 
     // ====== SUBTITLES ======
@@ -1038,7 +954,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             </div>
           </div>
 
-          {selectedAction && (
+          {selectedAction && selectedAction !== 'video_ai' && (
             <div className="flex items-center gap-1.5 mt-3">
               {Array.from({ length: totalSteps }).map((_, i) => (
                 <div

@@ -236,6 +236,30 @@ export type Database = {
         }
         Relationships: []
       }
+      voices: {
+        Row: {
+          audio_url: string
+          created_at: string
+          id: string
+          name: string
+          type: string
+        }
+        Insert: {
+          audio_url: string
+          created_at?: string
+          id?: string
+          name: string
+          type?: string
+        }
+        Update: {
+          audio_url?: string
+          created_at?: string
+          id?: string
+          name?: string
+          type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
