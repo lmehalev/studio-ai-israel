@@ -678,9 +678,12 @@ export function VideoWizardFlow({
     setProgressStage('משפר את הסרטון לפי הבקשה שלך...');
 
     try {
-      const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
+      const workingScenes = generatedScript?.scenes?.length
+        ? generatedScript.scenes
+        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle);
+      const fullScript = workingScenes.map(s => s.spokenText).join(' ');
       const narrationText = toNarrationText(fullScript);
-      const totalScenes = generatedScript?.scenes.length || 1;
+      const totalScenes = workingScenes.length;
 
       // Generate narration for improved video too
       let narrationAudioUrl: string | undefined;
