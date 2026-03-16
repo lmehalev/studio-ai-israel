@@ -98,7 +98,7 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle } = await req.json();
+    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle, websiteUrl, websiteContext, hasScreenshot } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "יש להזין תיאור לסרטון" }), {
@@ -121,6 +121,13 @@ serve(async (req) => {
 
     const brandInfo = brandContext
       ? `\nהמותג: ${brandContext}. חובה לשלב את שם המותג ואת המסר המרכזי שלו בתסריט.`
+      : "";
+
+    const websiteInfo = websiteContext
+      ? `\n## מידע מהאתר של הלקוח (${websiteUrl || 'לא צוין URL'})
+המערכת סרקה את האתר ומצאה את המידע הבא. **חובה** לשלב את התוכן, הצבעים, והמסרים מהאתר בתסריט:
+${websiteContext}
+${hasScreenshot ? '\nיש צילום מסך של האתר — שלב סצנה שמציגה את האתר (מסך מחשב/טלפון שמציג את הדף, גלילה באתר, אינטראקציה עם הממשק).' : ''}`
       : "";
 
     const styleMap: Record<string, string> = {
@@ -169,7 +176,7 @@ ${chosenStyle}
 3. **סצנת סיום (CTA)**: קריאה לפעולה ברורה עם שם המותג
 
 בהתבסס על בקשת המשתמש, צור תסריט מלא לסרטון AI קולנועי.
-${avatarContext}${voiceContext}${imageContext}${brandInfo}
+${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
 
 החזר JSON בפורמט הבא בלבד (ללא טקסט נוסף):
 {

@@ -3,14 +3,14 @@ import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
   ImageIcon, Video, Volume2, Check, X, Edit3, RefreshCw,
-  FileText, Sparkles, Plus
+  FileText, Sparkles, Plus, Globe, Link2, Loader2 as Loader2Icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   runwayService, didService, storageService, voiceCloneService, composeService,
-  voiceService, type Brand,
+  voiceService, websiteScraperService, type Brand, type WebsiteScrapeResult,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
@@ -106,6 +106,29 @@ export function VideoWizardFlow({
     onResult: (text) => setPrompt(prev => prev ? `${prev} ${text}` : text),
   });
 
+  // Website scraping
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
+  const [scrapingWebsite, setScrapingWebsite] = useState(false);
+
+  const handleScrapeWebsite = async () => {
+    if (!websiteUrl.trim()) return;
+    setScrapingWebsite(true);
+    try {
+      const result = await websiteScraperService.scrape(websiteUrl.trim());
+      setWebsiteData(result);
+      toast.success('האתר נסרק בהצלחה! המידע ישולב בסרטון');
+      // If branding has a logo, add it as first image
+      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo)) {
+        setUploadedImages(prev => [result.branding!.logo!, ...prev].slice(0, MAX_IMAGES));
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בסריקת האתר');
+    } finally {
+      setScrapingWebsite(false);
+    }
+  };
+
   const selectedAvatars = avatars.filter(a => selectedAvatarIds.includes(a.id));
   const selectedVoices = voices.filter(v => selectedVoiceIds.includes(v.id));
 
@@ -126,6 +149,26 @@ export function VideoWizardFlow({
     if (!prompt.trim()) { toast.error('יש להזין תיאור לסרטון'); return; }
     setLoading(true);
     try {
+      // Build website context for the script generator
+      let websiteContext: string | undefined;
+      if (websiteData) {
+        const parts: string[] = [];
+        if (websiteData.metadata?.title) parts.push(`כותרת האתר: ${websiteData.metadata.title}`);
+        if (websiteData.metadata?.description) parts.push(`תיאור האתר: ${websiteData.metadata.description}`);
+        if (websiteData.branding?.colors) {
+          const colorList = Object.entries(websiteData.branding.colors).map(([k, v]) => `${k}: ${v}`).join(', ');
+          parts.push(`צבעי המותג מהאתר: ${colorList}`);
+        }
+        if (websiteData.branding?.fonts?.length) {
+          parts.push(`פונטים באתר: ${websiteData.branding.fonts.map(f => f.family).join(', ')}`);
+        }
+        // Include first 800 chars of markdown as content summary
+        if (websiteData.markdown) {
+          parts.push(`תוכן האתר (תקציר):\n${websiteData.markdown.slice(0, 800)}`);
+        }
+        websiteContext = parts.join('\n');
+      }
+
       const { data, error } = await supabase.functions.invoke('generate-script', {
         body: {
           prompt: buildPrompt(prompt),
@@ -134,6 +177,9 @@ export function VideoWizardFlow({
           brandContext: activeBrand ? `${activeBrand.name} — ${activeBrand.industry || ''} — טון: ${activeBrand.tone || ''}` : undefined,
           hasImages: uploadedImages.length > 0,
           videoStyle,
+          websiteUrl: websiteUrl.trim() || undefined,
+          websiteContext,
+          hasScreenshot: !!websiteData?.screenshot,
         },
       });
       if (error) throw new Error(error.message || 'שגיאה ביצירת תסריט');
@@ -709,6 +755,64 @@ export function VideoWizardFlow({
                 onUploaded={url => { if (url) setUploadedImages(prev => [...prev, url]); }}
                 onMultipleUploaded={urls => setUploadedImages(prev => [...prev, ...urls].slice(0, MAX_IMAGES))}
               />
+            )}
+          </div>
+
+          {/* Website URL scraper */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5" /> קישור לאתר (אופציונלי)
+            </p>
+            <p className="text-[10px] text-muted-foreground">הדבק קישור לאתר שלך — המערכת תסרוק אותו ותשלב תוכן, צבעים ומבנה בסרטון</p>
+
+            {websiteData ? (
+              <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                    <span className="text-sm font-medium truncate">{websiteData.metadata?.title || websiteUrl}</span>
+                  </div>
+                  <button onClick={() => { setWebsiteData(null); setWebsiteUrl(''); }}
+                    className="w-6 h-6 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+                {websiteData.metadata?.description && (
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{websiteData.metadata.description}</p>
+                )}
+                {websiteData.branding?.colors && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">צבעי האתר:</span>
+                    {Object.values(websiteData.branding.colors).slice(0, 6).map((color, i) => (
+                      <div key={i} className="w-4 h-4 rounded-full border border-border" style={{ backgroundColor: color }} />
+                    ))}
+                  </div>
+                )}
+                {websiteData.screenshot && (
+                  <div className="rounded-lg overflow-hidden border border-border max-h-32">
+                    <img src={`data:image/png;base64,${websiteData.screenshot}`} alt="צילום מסך" className="w-full object-cover object-top" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Globe className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    value={websiteUrl}
+                    onChange={e => setWebsiteUrl(e.target.value)}
+                    onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleScrapeWebsite(); }}
+                    placeholder="https://www.example.com"
+                    className="w-full bg-muted/50 border border-border rounded-lg pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="ltr"
+                  />
+                </div>
+                <button onClick={handleScrapeWebsite} disabled={!websiteUrl.trim() || scrapingWebsite}
+                  className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted disabled:opacity-50 flex items-center gap-1.5">
+                  {scrapingWebsite ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  {scrapingWebsite ? 'סורק...' : 'סרוק'}
+                </button>
+              </div>
             )}
           </div>
 
