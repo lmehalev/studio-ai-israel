@@ -180,12 +180,18 @@ export const avatarDbService = {
 // ====== Voice Clone + TTS Service ======
 export const voiceCloneService = {
   cloneAndSpeak: async (audioUrl: string, scriptText: string): Promise<{ audioUrl: string; voiceId: string }> => {
-    const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
-      body: { audioUrl, scriptText },
-    });
-    if (error) throw new Error(error.message || "שגיאה בשכפול קול");
-    if (data?.error) throw new Error(data.error);
-    return data;
+    return withTimeout(
+      (async () => {
+        const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
+          body: { audioUrl, scriptText },
+        });
+        if (error) throw new Error(error.message || "שגיאה בשכפול קול");
+        if (data?.error) throw new Error(data.error);
+        return data;
+      })(),
+      120000,
+      'שכפול הקול לקח יותר מדי זמן (timeout)'
+    );
   },
 };
 

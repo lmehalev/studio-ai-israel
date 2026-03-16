@@ -576,15 +576,16 @@ export function VideoWizardFlow({
         throw new Error('תם הזמן להרכבת הסרטון הסופי');
       } catch (composeErr: any) {
         console.warn('Shotstack compositing failed:', composeErr?.message);
-        if (sceneVideoUrls.length === 1) {
-          toast.info('שלב ההרכבה נכשל — מציג את הקליפ היחיד שנוצר.');
+
+        if (sceneVideoUrls.length > 0) {
+          toast.warning('שלב ההרכבה המלאה נכשל — מציג תוצר חלקי כדי שלא תאבד עבודה.');
           setResultVideoUrl(sceneVideoUrls[0]);
           setStep(4);
           setProgressStage('');
           return;
         }
 
-        throw new Error('כל הסצנות נוצרו, אבל שלב ההרכבה הסופית נכשל. נסה שוב בעוד רגע.');
+        throw new Error('שלב ההרכבה הסופית נכשל ולא נוצר אף קליפ זמין להצגה.');
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה ביצירת סרטון');
