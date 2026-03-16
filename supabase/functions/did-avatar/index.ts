@@ -26,43 +26,53 @@ serve(async (req) => {
 
     // ====== Create talking avatar video ======
     if (action === "create_talk") {
-      const { imageUrl, text, voiceId, language } = params;
-
-      // Allow longer scripts for 3-4 minute videos while staying within provider limits
-      const normalizedText = typeof text === "string" ? text.trim() : "";
-      const safeText = normalizedText.length > 4200 ? `${normalizedText.slice(0, 4200)}...` : normalizedText;
-      if (!safeText) {
-        return new Response(
-          JSON.stringify({ error: "טקסט ריק — אין מה לייצר" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const { imageUrl, text, voiceId, language, audioUrl } = params;
 
       const body: any = {
         source_url: imageUrl,
-        script: {
-          type: "text",
-          input: safeText,
-          provider: {
-            type: "microsoft",
-            voice_id: "he-IL-AvriNeural",
-          },
-        },
         config: {
           stitch: true,
           result_format: "mp4",
         },
       };
 
-      // If ElevenLabs voice is provided (long IDs)
-      if (voiceId && voiceId.length > 15) {
-        body.script.provider = {
-          type: "elevenlabs",
-          voice_id: voiceId,
+      // Priority: audioUrl (pre-generated narration) > text (TTS)
+      if (audioUrl) {
+        // Use pre-generated audio (e.g. from cloned voice TTS)
+        console.log("D-ID: Using pre-generated audio URL");
+        body.script = {
+          type: "audio",
+          audio_url: audioUrl,
         };
-      } else if (voiceId) {
-        // Microsoft voice ID provided directly
-        body.script.provider.voice_id = voiceId;
+      } else {
+        // Fallback to text-based TTS
+        const normalizedText = typeof text === "string" ? text.trim() : "";
+        const safeText = normalizedText.length > 4200 ? `${normalizedText.slice(0, 4200)}...` : normalizedText;
+        if (!safeText) {
+          return new Response(
+            JSON.stringify({ error: "טקסט ריק — אין מה לייצר" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        body.script = {
+          type: "text",
+          input: safeText,
+          provider: {
+            type: "microsoft",
+            voice_id: "he-IL-AvriNeural",
+          },
+        };
+
+        // If ElevenLabs voice is provided (long IDs)
+        if (voiceId && voiceId.length > 15) {
+          body.script.provider = {
+            type: "elevenlabs",
+            voice_id: voiceId,
+          };
+        } else if (voiceId) {
+          body.script.provider.voice_id = voiceId;
+        }
       }
 
       const response = await fetch(`${DID_API_URL}/talks`, {
