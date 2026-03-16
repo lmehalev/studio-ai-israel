@@ -110,11 +110,50 @@ export const avatarDbService = {
   },
 };
 
+// ====== Voice Clone + TTS Service ======
+export const voiceCloneService = {
+  cloneAndSpeak: async (audioUrl: string, scriptText: string): Promise<{ audioUrl: string; voiceId: string }> => {
+    const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
+      body: { audioUrl, scriptText },
+    });
+    if (error) throw new Error(error.message || "שגיאה בשכפול קול");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+};
+
+// ====== Video Compositing Service (Shotstack) ======
+export const composeService = {
+  render: async (params: {
+    videoUrl: string;
+    scenes: any[];
+    logoUrl?: string;
+    brandColors?: string[];
+    audioUrl?: string;
+  }): Promise<{ renderId: string; status: string }> => {
+    const { data, error } = await supabase.functions.invoke("compose-video", {
+      body: { action: "render", ...params },
+    });
+    if (error) throw new Error(error.message || "שגיאה בהרכבת סרטון");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  checkStatus: async (renderId: string): Promise<{ status: string; url: string | null; progress: number }> => {
+    const { data, error } = await supabase.functions.invoke("compose-video", {
+      body: { action: "check_status", renderId },
+    });
+    if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+};
+
 // ====== D-ID Avatar Service ======
 export const didService = {
-  createTalk: async (imageUrl: string, text: string, voiceId?: string): Promise<{ id: string; status: string }> => {
+  createTalk: async (imageUrl: string, text?: string, voiceId?: string, audioUrl?: string): Promise<{ id: string; status: string }> => {
     const { data, error } = await supabase.functions.invoke("did-avatar", {
-      body: { action: "create_talk", imageUrl, text, voiceId },
+      body: { action: "create_talk", imageUrl, text, voiceId, audioUrl },
     });
     if (error) throw new Error(error.message || "שגיאה ביצירת אווטאר מדבר");
     if (data?.error) throw new Error(data.error);
