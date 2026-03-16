@@ -25,7 +25,13 @@ export interface ProjectRow {
 
 /** Helper to get category from project content JSON */
 export function getProjectCategory(p: ProjectRow): string | null {
-  return (p.content as any)?.category || null;
+  const content = (p.content as any) || {};
+  return content.category || content.sub_activity || content.subActivity || null;
+}
+
+/** Alias helper for UI readability */
+export function getProjectSubActivity(p: ProjectRow): string | null {
+  return getProjectCategory(p);
 }
 
 export interface ProjectOutputRow {
