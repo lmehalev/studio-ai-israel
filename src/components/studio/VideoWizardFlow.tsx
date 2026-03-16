@@ -711,7 +711,7 @@ export function VideoWizardFlow({
       const sceneVideoUrls: string[] = [];
 
       for (let i = 0; i < totalScenes; i++) {
-        const scene = generatedScript!.scenes[i];
+        const scene = workingScenes[i];
         setProgressStage(`משפר סצנה ${i + 1} מתוך ${totalScenes}...`);
         const improveContext = [
           improvePrompt,
