@@ -139,16 +139,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       }
 
       const cat = effectiveCategory || undefined;
-      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
+      const project = await projectService.findOrCreateByBrand(brandId, brandObj.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
-        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${brandObj.name}${cat ? ` — ${cat}` : ''}`,
         description: prompt || undefined,
         video_url: isVideo ? finalUrl : null,
         thumbnail_url: !isVideo ? finalUrl : null,
         prompt: prompt || null,
       });
-      toast.success(`נשמר בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"!`);
+      toast.success(`נשמר בפרויקט "${brandObj.name}${cat ? ` — ${cat}` : ''}"!`);
+      clearSession();
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
