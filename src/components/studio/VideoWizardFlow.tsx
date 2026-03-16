@@ -569,6 +569,32 @@ export function VideoWizardFlow({
             )}
           </div>
 
+          {/* Video style selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Video className="w-3.5 h-3.5" /> סגנון הסרטון
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { value: 'cinematic', label: '🎬 קולנועי ריאליסטי', desc: 'אנשים אמיתיים, לוקיישנים אמיתיים' },
+                { value: 'disney', label: '🏰 דיסני / פיקסאר', desc: 'אנימציה תלת-ממדית צבעונית' },
+                { value: 'anime', label: '🎌 אנימה', desc: 'סגנון יפני מפורט' },
+                { value: 'cartoon', label: '🎨 קריקטורה / איור', desc: 'ציורים חיים ומצוירים' },
+                { value: 'documentary', label: '📹 דוקומנטרי', desc: 'סגנון תיעודי מקצועי' },
+                { value: 'commercial', label: '📺 פרסומת TV', desc: 'הפקה ברמת פרסומת טלוויזיה' },
+              ].map(s => (
+                <button key={s.value} onClick={() => setVideoStyle(s.value)}
+                  className={cn('text-right p-2.5 rounded-lg border text-xs transition-all',
+                    videoStyle === s.value
+                      ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                      : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                  <div className="font-medium">{s.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{s.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Info about duration */}
           <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
             <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
