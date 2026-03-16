@@ -28,9 +28,23 @@ export default function CreativeStudioPage() {
 
   const activeBrand = brands.find(b => b.id === activeBrandId);
 
+  useEffect(() => {
+    const projectId = searchParams.get('projectId');
+    if (!projectId) return;
+
+    projectService.getById(projectId)
+      .then((project) => {
+        if (!project) return;
+        if (project.brand_id) setActiveBrandId(project.brand_id);
+        setActiveSubActivity(getProjectCategory(project) || '');
+      })
+      .catch(() => {});
+  }, [searchParams]);
+
   const buildPrompt = (basePrompt: string) => {
     if (!activeBrand) return basePrompt;
-    return `${basePrompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.`;
+    const subActivityContext = activeSubActivity ? ` תת-פעילות נבחרת: ${activeSubActivity}.` : '';
+    return `${basePrompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.${subActivityContext}`;
   };
 
   const handleAddBrand = () => {
