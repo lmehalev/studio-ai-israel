@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Trash2, Download, Plug } from 'lucide-react';
+import { Loader2, Trash2, Download, Plug, Eye, X } from 'lucide-react';
 import { ConnectionsTab } from '@/components/settings/ConnectionsTab';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface StoredFile {
   name: string;
@@ -18,6 +20,8 @@ export default function SettingsPage() {
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<StoredFile | null>(null);
 
   const loadFiles = async () => {
     setLoadingFiles(true);
@@ -86,6 +90,20 @@ export default function SettingsPage() {
     return '📄';
   };
 
+  const isImageFile = (name: string) => /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
+  const isVideoFile = (name: string) => /\.(mp4|webm|mov)$/i.test(name);
+
+  const getPublicUrl = (fileName: string) => {
+    const { data } = supabase.storage.from('media').getPublicUrl(`uploads/${fileName}`);
+    return data.publicUrl;
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    await handleDeleteFile(confirmDelete.name);
+    setConfirmDelete(null);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -131,36 +149,39 @@ export default function SettingsPage() {
                   <p className="text-xs mt-1">קבצים שתעלה בסטודיו הקריאייטיב יופיעו כאן</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
                   {files.map(file => (
-                    <div key={file.name} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border group">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-lg">{getFileIcon(file.name)}</span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate max-w-[300px]">
-                            {file.name.replace(/^\d+-/, '')}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatSize(file.metadata?.size)}
-                            {file.created_at && ` • ${new Date(file.created_at).toLocaleDateString('he-IL')}`}
-                          </p>
+                    <div key={file.name} className="bg-muted/30 rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors">
+                      {/* Thumbnail */}
+                      <div className="relative w-full h-32 bg-muted/50 flex items-center justify-center cursor-pointer" onClick={() => setPreviewFile(file)}>
+                        {isImageFile(file.name) ? (
+                          <img src={getPublicUrl(file.name)} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
+                        ) : isVideoFile(file.name) ? (
+                          <video src={getPublicUrl(file.name)} className="w-full h-full object-cover" muted />
+                        ) : (
+                          <span className="text-3xl">{getFileIcon(file.name)}</span>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleDownloadFile(file.name)}
-                          className="px-2.5 py-1.5 border border-border rounded-lg text-xs hover:bg-muted flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" /> הורד
-                        </button>
-                        <button
-                          onClick={() => handleDeleteFile(file.name)}
-                          disabled={deletingId === file.name}
-                          className="px-2.5 py-1.5 border border-destructive/30 rounded-lg text-xs text-destructive hover:bg-destructive/10 flex items-center gap-1 disabled:opacity-50"
-                        >
-                          {deletingId === file.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                          מחק
-                        </button>
+                      {/* Info */}
+                      <div className="p-3">
+                        <p className="text-xs font-medium truncate" title={file.name.replace(/^\d+-/, '')}>
+                          {file.name.replace(/^\d+-/, '')}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {formatSize(file.metadata?.size)}
+                          {file.created_at && ` • ${new Date(file.created_at).toLocaleDateString('he-IL')}`}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <button onClick={() => handleDownloadFile(file.name)} className="flex-1 px-2 py-1 border border-border rounded-lg text-xs hover:bg-muted flex items-center justify-center gap-1">
+                            <Download className="w-3 h-3" /> הורד
+                          </button>
+                          <button onClick={() => setConfirmDelete(file)} disabled={deletingId === file.name} className="flex-1 px-2 py-1 border border-destructive/30 rounded-lg text-xs text-destructive hover:bg-destructive/10 flex items-center justify-center gap-1 disabled:opacity-50">
+                            {deletingId === file.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} מחק
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -171,6 +192,56 @@ export default function SettingsPage() {
                 💡 הורד את הקבצים לדרייב שלך ואז מחק כדי לפנות מקום
               </p>
             </div>
+
+            {/* Preview Dialog */}
+            <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-right">{previewFile?.name.replace(/^\d+-/, '')}</DialogTitle>
+                </DialogHeader>
+                <div className="flex items-center justify-center min-h-[300px] bg-muted/30 rounded-lg overflow-hidden">
+                  {previewFile && isImageFile(previewFile.name) ? (
+                    <img src={getPublicUrl(previewFile.name)} alt={previewFile.name} className="max-w-full max-h-[500px] object-contain" />
+                  ) : previewFile && isVideoFile(previewFile.name) ? (
+                    <video src={getPublicUrl(previewFile.name)} controls className="max-w-full max-h-[500px]" />
+                  ) : (
+                    <span className="text-5xl">{previewFile ? getFileIcon(previewFile.name) : ''}</span>
+                  )}
+                </div>
+                <DialogFooter className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => previewFile && handleDownloadFile(previewFile.name)}>
+                    <Download className="w-4 h-4 ml-1" /> הורד
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => { if (previewFile) { setConfirmDelete(previewFile); setPreviewFile(null); } }}>
+                    <Trash2 className="w-4 h-4 ml-1" /> מחק
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-right">מחיקת קובץ</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  {confirmDelete && isImageFile(confirmDelete.name) && (
+                    <img src={getPublicUrl(confirmDelete.name)} alt="" className="w-full max-h-48 object-contain rounded-lg bg-muted/30" />
+                  )}
+                  <p className="text-sm text-center">
+                    האם אתה בטוח שברצונך למחוק את <span className="font-semibold">{confirmDelete?.name.replace(/^\d+-/, '')}</span>?
+                  </p>
+                  <p className="text-xs text-muted-foreground text-center">פעולה זו אינה ניתנת לביטול</p>
+                </div>
+                <DialogFooter className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)}>ביטול</Button>
+                  <Button variant="destructive" size="sm" onClick={handleConfirmDelete} disabled={!!deletingId}>
+                    {deletingId ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Trash2 className="w-4 h-4 ml-1" />} מחק לצמיתות
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="system" className="mt-4 space-y-4">

@@ -4,6 +4,7 @@ import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, Refresh
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService } from '@/services/creativeService';
+import { supabase } from '@/integrations/supabase/client';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 const MAX_PHOTOS = 7;
@@ -150,8 +151,31 @@ export default function AvatarsManagePage() {
   };
 
   const handleDelete = async (id: string) => {
-    try { await avatarDbService.remove(id); setAvatars((prev) => prev.filter((a) => a.id !== id)); toast.success('האווטאר הוסר'); }
-    catch (e: any) { toast.error(e.message); }
+    try {
+      const avatar = avatars.find(a => a.id === id);
+      await avatarDbService.remove(id);
+      // Also delete avatar image and source photos from storage
+      if (avatar) {
+        const filesToDelete: string[] = [];
+        const extractPath = (url: string) => {
+          const match = url.match(/\/media\/(.+)$/);
+          return match ? match[1] : null;
+        };
+        if (avatar.image_url) {
+          const path = extractPath(avatar.image_url);
+          if (path) filesToDelete.push(path);
+        }
+        for (const photo of avatar.source_photos || []) {
+          const path = extractPath(photo);
+          if (path) filesToDelete.push(path);
+        }
+        if (filesToDelete.length > 0) {
+          await supabase.storage.from('media').remove(filesToDelete);
+        }
+      }
+      setAvatars((prev) => prev.filter((a) => a.id !== id));
+      toast.success('האווטאר הוסר');
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const startVariationFromAvatar = (avatar: SavedAvatar) => {
