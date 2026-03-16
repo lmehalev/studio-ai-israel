@@ -54,15 +54,14 @@ export default function ProjectDetailPage() {
 
   const handleSaveProjectMeta = async () => {
     if (!project) return;
-    const nextName = editName.trim();
-    if (!nextName) {
-      toast.error('יש להזין שם פרויקט');
-      return;
-    }
 
-    setSavingEdit(true);
+    const nextName = window.prompt('שם פרויקט חדש', project.name)?.trim();
+    if (!nextName) return;
+
+    const currentCategory = getProjectCategory(project) || '';
+    const nextCategory = window.prompt('תת-פעילות / קטגוריה', currentCategory)?.trim() ?? currentCategory;
+
     try {
-      const nextCategory = editCategory.trim();
       const updated = await projectService.update(project.id, {
         name: nextName,
         content: {
@@ -73,11 +72,8 @@ export default function ProjectDetailPage() {
       });
       setProject(updated);
       toast.success('פרטי הפרויקט עודכנו');
-      setEditOpen(false);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בעדכון הפרויקט');
-    } finally {
-      setSavingEdit(false);
     }
   };
 
