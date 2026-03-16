@@ -9,6 +9,8 @@ interface FileUploadZoneProps {
   label: string;
   hint?: string;
   onUploaded: (url: string) => void;
+  onMultipleUploaded?: (urls: string[]) => void;
+  multiple?: boolean;
   className?: string;
 }
 
