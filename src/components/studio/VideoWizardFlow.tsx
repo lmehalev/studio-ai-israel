@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
-  runwayService, didService, storageService,
+  runwayService, didService, storageService, voiceCloneService, composeService,
   type Brand,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
