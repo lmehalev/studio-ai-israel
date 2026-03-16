@@ -469,20 +469,12 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (avatarImage && sceneIdx === 0) {
-            // First scene with avatar → try D-ID
-            const normalizedAvatarUrl = await normalizeAvatarForVideo(avatarImage);
+          if (runwayBlocked && normalizedAvatarUrl) {
+            clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+          } else if (normalizedAvatarUrl && sceneIdx === 0) {
+            // First scene with avatar → try D-ID first
             try {
-              const talkResult = await didService.createTalk(
-                normalizedAvatarUrl,
-                narrationAudioUrl ? undefined : scene.spokenText,
-                undefined,
-                narrationAudioUrl
-              );
-              if (!talkResult?.id) throw new Error('D-ID error');
-              clipUrl = await waitForDidResult(talkResult.id, (p) => {
-                updateSceneProgress(sceneIdx, p);
-              });
+              clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {
               // Fallback to Runway image-to-video
               try {
@@ -541,6 +533,27 @@ export function VideoWizardFlow({
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
           const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
+
+          if (isRunwayCreditsErrorMessage(errMsg)) {
+            if (normalizedAvatarUrl) {
+              runwayBlocked = true;
+              toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
+              try {
+                const didFallbackUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+                sceneResults[sceneIdx] = {
+                  url: didFallbackUrl,
+                  scene: { ...scene, duration: sceneDuration },
+                };
+                toast.success(`סצנה ${sceneNum} הושלמה במסלול חלופי`);
+                continue;
+              } catch (didFallbackErr: any) {
+                throw new Error(didFallbackErr?.message || 'נכשל גם במסלול אווטאר חלופי');
+              }
+            }
+
+            throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים או בחר מסלול עם אווטאר.');
+          }
+
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
           failedSceneIndexes.push(sceneIdx);
           console.error(`Scene ${sceneNum} failed:`, errMsg);
