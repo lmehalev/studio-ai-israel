@@ -32,10 +32,12 @@ export default function ProjectsPage() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (brandFilter && p.brand_id !== brandFilter) return false;
     if (typeFilter && p.video_type !== typeFilter) return false;
+    if (categoryFilter && p.category !== categoryFilter) return false;
     return true;
   });
 
   const videoTypes = [...new Set(projects.map(p => p.video_type))];
+  const categories = [...new Set(projects.map(p => p.category).filter(Boolean))] as string[];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
   return (
