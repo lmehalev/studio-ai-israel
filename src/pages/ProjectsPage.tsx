@@ -123,9 +123,9 @@ export default function ProjectsPage() {
                         ) : '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {p.category ? (
+                        {getProjectCategory(p) ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                            <Tag className="w-3 h-3" /> {p.category}
+                            <Tag className="w-3 h-3" /> {getProjectCategory(p)}
                           </span>
                         ) : '—'}
                       </td>
