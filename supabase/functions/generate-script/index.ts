@@ -6,6 +6,89 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const escapeControlCharsInJsonStrings = (input: string): string => {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of input) {
+    if (escaped) {
+      output += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      output += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      output += ch;
+      continue;
+    }
+
+    if (inString) {
+      if (ch === "\n") {
+        output += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        output += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        output += "\\t";
+        continue;
+      }
+
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        output += `\\u${code.toString(16).padStart(4, "0")}`;
+        continue;
+      }
+    }
+
+    output += ch;
+  }
+
+  return output;
+};
+
+const parseModelJsonContent = (content: string) => {
+  const candidates: string[] = [];
+
+  const fencedMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) candidates.push(fencedMatch[1].trim());
+
+  const braceMatch = content.match(/\{[\s\S]*\}/);
+  if (braceMatch?.[0]) candidates.push(braceMatch[0].trim());
+
+  candidates.push(content.trim());
+
+  let lastErr: unknown = null;
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    try {
+      return JSON.parse(candidate);
+    } catch (firstErr) {
+      lastErr = firstErr;
+    }
+
+    try {
+      return JSON.parse(escapeControlCharsInJsonStrings(candidate));
+    } catch (secondErr) {
+      lastErr = secondErr;
+    }
+  }
+
+  throw lastErr instanceof Error ? lastErr : new Error("Failed to parse AI JSON");
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
