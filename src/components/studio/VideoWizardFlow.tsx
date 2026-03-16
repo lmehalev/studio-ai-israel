@@ -370,14 +370,8 @@ export function VideoWizardFlow({
     setProgressStage('משפר את הסרטון לפי הבקשה שלך...');
 
     try {
-      const improveContext = [
-        improvePrompt,
-        generatedScript?.scenes[0]?.visualDescription || '',
-        activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
-      ].filter(Boolean).join('. ');
-
-      const runwayPrompt = toRunwayPrompt(improveContext);
       const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
+      const totalScenes = generatedScript?.scenes.length || 1;
 
       // Generate narration for improved video too
       let narrationAudioUrl: string | undefined;
@@ -394,33 +388,55 @@ export function VideoWizardFlow({
         } catch { /* continue without narration */ }
       }
 
-      setProgressStage('מייצר סרטון משופר...');
+      setProgressStage('מייצר סצנות משופרות...');
       const avatarImage = selectedAvatars[0]?.image_url;
-      let newVideoUrl: string;
+      const sceneVideoUrls: string[] = [];
 
-      if (avatarImage) {
-        const normalizedUrl = await normalizeAvatarForVideo(avatarImage);
-        const taskData = await runwayService.imageToVideo(normalizedUrl, runwayPrompt, undefined, 10);
-        newVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(p));
-      } else {
-        const taskData = await runwayService.textToVideo(runwayPrompt, undefined, 10);
-        newVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(p));
+      for (let i = 0; i < totalScenes; i++) {
+        const scene = generatedScript!.scenes[i];
+        setProgressStage(`משפר סצנה ${i + 1} מתוך ${totalScenes}...`);
+        const improveContext = [
+          improvePrompt,
+          scene?.visualDescription || '',
+          (scene as any)?.backgroundAction || '',
+          activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+        ].filter(Boolean).join('. ');
+
+        const runwayPrompt = toRunwayPrompt(improveContext);
+
+        try {
+          let clipUrl: string;
+          if (avatarImage && i === 0) {
+            const normalizedUrl = await normalizeAvatarForVideo(avatarImage);
+            const taskData = await runwayService.imageToVideo(normalizedUrl, runwayPrompt, undefined, 10);
+            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+          } else {
+            const taskData = await runwayService.textToVideo(runwayPrompt, undefined, 10);
+            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+          }
+          sceneVideoUrls.push(clipUrl);
+        } catch {
+          // Skip failed scene
+        }
       }
 
+      let newVideoUrl = sceneVideoUrls[0] || resultVideoUrl || '';
+
       // Composite with narration + subtitles + logo
-      if (generatedScript) {
+      if (generatedScript && sceneVideoUrls.length > 0) {
         const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
         setProgressStage('מרכיב כתוביות, קריינות ולוגו...');
         try {
           const renderResult = await composeService.render({
-            videoUrl: newVideoUrl,
-            scenes: generatedScript.scenes,
+            videoUrl: sceneVideoUrls[0],
+            videoUrls: sceneVideoUrls,
+            scenes: generatedScript.scenes.slice(0, sceneVideoUrls.length),
             logoUrl,
             brandColors: activeBrand?.colors || [],
             audioUrl: narrationAudioUrl,
-          });
+          } as any);
           if (renderResult?.renderId) {
-            for (let i = 0; i < 60; i++) {
+            for (let i = 0; i < 90; i++) {
               const status = await composeService.checkStatus(renderResult.renderId);
               if (status.status === 'done' && status.url) {
                 newVideoUrl = status.url;
