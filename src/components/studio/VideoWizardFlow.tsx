@@ -192,27 +192,18 @@ export function VideoWizardFlow({
     throw new Error('תם הזמן ליצירת הסרטון');
   };
 
-  // Build the best possible prompt for Runway from the script
-  const buildRunwayPromptFromScript = (): string => {
-    if (!generatedScript) return prompt;
-    
-    // Use the first scene's visual description as the primary prompt (since Runway generates one clip)
-    const mainScene = generatedScript.scenes[0];
-    if (!mainScene) return generatedScript.script || prompt;
-
+  // Build prompt for a specific scene
+  const buildRunwayPromptForScene = (scene: ScriptScene): string => {
     const parts: string[] = [];
     
-    // Visual description is most important
-    if (mainScene.visualDescription) parts.push(mainScene.visualDescription);
-    if (mainScene.cameraDirection) parts.push(`Camera: ${mainScene.cameraDirection}`);
-    if (mainScene.environment) parts.push(mainScene.environment);
-    if (mainScene.characters) parts.push(mainScene.characters);
+    if (scene.visualDescription) parts.push(scene.visualDescription);
+    if ((scene as any).backgroundAction) parts.push((scene as any).backgroundAction);
+    if (scene.cameraDirection) parts.push(`Camera: ${scene.cameraDirection}`);
+    if (scene.environment) parts.push(scene.environment);
+    if (scene.characters) parts.push(scene.characters);
     
-    // Add style context
-    const style = generatedScript.style;
+    const style = generatedScript?.style;
     if (style?.cinematicStyle) parts.push(`Style: ${style.cinematicStyle}`);
-    
-    // Add brand context
     if (activeBrand?.name) parts.push(`Brand: ${activeBrand.name}`);
     
     return toRunwayPrompt(parts.join('. '));
