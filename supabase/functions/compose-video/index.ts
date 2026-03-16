@@ -26,9 +26,12 @@ serve(async (req) => {
 
     // ====== Render composited video ======
     if (action === "render") {
-      const { videoUrl, scenes, logoUrl, brandColors, audioUrl } = params;
+      // Support both single videoUrl and multiple videoUrls (one per scene)
+      const { videoUrl, videoUrls, scenes, logoUrl, brandColors, audioUrl } = params;
 
-      if (!videoUrl) {
+      const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
+      
+      if (clipUrls.length === 0) {
         return new Response(JSON.stringify({ error: "חסר קישור לסרטון בסיס" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -36,10 +39,10 @@ serve(async (req) => {
       }
 
       const totalDuration = (scenes || []).reduce(
-        (sum: number, s: any) => sum + (s.duration || 5),
+        (sum: number, s: any) => sum + (s.duration || 10),
         0
       );
-      const safeDuration = Math.max(totalDuration, 5);
+      const safeDuration = Math.max(totalDuration, clipUrls.length * 10);
 
       const tracks: any[] = [];
 
@@ -65,7 +68,7 @@ serve(async (req) => {
       let cumulativeTime = 0;
 
       for (const scene of scenes || []) {
-        const dur = scene.duration || 5;
+        const dur = scene.duration || 10;
         const icons = (scene.icons || []).join(" ");
         const subtitle =
           scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
@@ -164,16 +167,20 @@ serve(async (req) => {
         tracks.push({ clips: textClips });
       }
 
-      // === Track: Main video (avatar or AI-generated) ===
-      tracks.push({
-        clips: [
-          {
-            asset: { type: "video", src: videoUrl },
-            start: 0,
-            length: "auto",
-          },
-        ],
-      });
+      // === Track: Video clips (multiple clips stitched sequentially) ===
+      const videoClips: any[] = [];
+      let videoStart = 0;
+      for (let i = 0; i < clipUrls.length; i++) {
+        const sceneDur = scenes?.[i]?.duration || 10;
+        videoClips.push({
+          asset: { type: "video", src: clipUrls[i] },
+          start: videoStart,
+          length: sceneDur,
+          transition: i > 0 ? { in: "fade" } : undefined,
+        });
+        videoStart += sceneDur;
+      }
+      tracks.push({ clips: videoClips });
 
       // === Track: Background gradient ===
       const bgColor = brandColors?.[0] || "#0f0f23";
