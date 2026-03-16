@@ -684,11 +684,25 @@ export function VideoWizardFlow({
       {step === 3 && (
         <div className="space-y-4 text-center py-8">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
-          <p className="text-sm font-medium">מייצר את הסרטון...</p>
-          <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-            <div className="bg-primary h-full rounded-full transition-all duration-500" style={{ width: `${runwayProgress}%` }} />
+          <p className="text-sm font-medium">{progressStage || 'מייצר את הסרטון...'}</p>
+          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary to-primary/70 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${runwayProgress}%` }} />
           </div>
           <p className="text-xs text-muted-foreground">{Math.round(runwayProgress)}% הושלם</p>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            {[
+              { label: 'שכפול קול', done: runwayProgress > 25 },
+              { label: 'אווטאר מדבר', done: runwayProgress > 65 },
+              { label: 'הרכבה מקצועית', done: runwayProgress > 95 },
+            ].map(s => (
+              <span key={s.label} className={cn(
+                'text-[10px] px-2 py-0.5 rounded-full border',
+                s.done ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border'
+              )}>
+                {s.done ? '✓' : '○'} {s.label}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
