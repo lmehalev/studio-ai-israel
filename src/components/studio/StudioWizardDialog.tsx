@@ -422,10 +422,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
         </button>
-        <button onClick={async () => {
-          if (result?.imageUrl) { await navigator.clipboard.writeText(result.imageUrl); toast.success('הועתק'); }
-        }} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
-          <Copy className="w-4 h-4" /> העתק
+        <button onClick={handleSaveToProject} disabled={savingOutput}
+          className="flex-1 px-3 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+          {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
       <div className="bg-muted/30 rounded-xl border border-border p-3 space-y-3">
