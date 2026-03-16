@@ -820,12 +820,14 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
 
     // ====== IMPORT & EDIT ======
     if (selectedAction === 'import_edit') {
+      // Collect all images: imported + avatar + extra uploads
+      const importImages = importUrl ? [importUrl] : [];
+      
       if (wizardStep === 0) return (
         <div className="space-y-4">
           {avatarVoiceBar}
           <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube (נחלץ את התמונה הממוזערת)</p>
           <UrlImportInput onSubmit={url => {
-            // Extract YouTube thumbnail
             const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
             if (ytMatch) {
               const videoId = ytMatch[1];
@@ -836,7 +838,6 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               setStep(step + 1);
               return;
             }
-            // Block other social media pages
             const blocked = /^https?:\/\/(www\.)?(facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com)/i;
             if (blocked.test(url)) {
               toast.error('יש להדביק קישור ישיר לתמונה או סרטון — לא קישור לאתר');
@@ -844,60 +845,83 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
             }
             setImportUrl(url);
             const lower = url.toLowerCase();
-            if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/)) {
-              setImportType('image');
-            } else if (lower.match(/\.(mp4|mov|webm|avi)(\?|$)/)) {
-              setImportType('video');
-            } else {
-              setImportType('image');
-            }
+            if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/)) setImportType('image');
+            else if (lower.match(/\.(mp4|mov|webm|avi)(\?|$)/)) setImportType('video');
+            else setImportType('image');
             setStep(step + 1);
           }} placeholder="הדבק קישור לתמונה, סרטון, או YouTube..." />
-          <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /> או העלה קובץ <span className="h-px flex-1 bg-border" /></div>
-          <FileUploadZone accept="image/*,video/*" label="העלה תמונה או סרטון" hint="JPG, PNG, MP4, WebP"
+          <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /> או העלה קבצים <span className="h-px flex-1 bg-border" /></div>
+          <FileUploadZone accept="image/*,video/*" multiple label="העלה תמונות או סרטון" hint={`JPG, PNG, MP4 — עד ${MAX_REF_IMAGES} קבצים`}
             onUploaded={url => {
-              if (url) {
-                setImportUrl(url);
+              if (url) { setImportUrl(url); setImportType('image'); setStep(step + 1); }
+            }}
+            onMultipleUploaded={urls => {
+              if (urls.length > 0) {
+                setImportUrl(urls[0]);
                 setImportType('image');
+                // Store extra images in imageRefPhotos for use in the edit step
+                if (urls.length > 1) setImageRefPhotos(prev => [...prev, ...urls.slice(1)].slice(0, MAX_REF_IMAGES));
                 setStep(step + 1);
               }
-            }} />
-        </div>
-      );
-      if (wizardStep === 1) return (
-        <div className="space-y-4">
-          {importUrl && importType === 'image' && (
-            <div className="rounded-lg overflow-hidden border border-border bg-muted/30 max-h-[200px] flex items-center justify-center">
-              <img src={importUrl} alt="מקור" className="max-h-[200px] object-contain" />
-            </div>
-          )}
-          {importUrl && importType === 'video' && (
-            <div className="rounded-lg overflow-hidden border border-border bg-muted/30">
-              <video src={importUrl} controls className="w-full max-h-[200px]" />
-            </div>
-          )}
-          {renderPromptInput({ placeholder: 'תאר מה תרצה לשנות... למשל: "שנה את הצבעים למותג שלי", "הוסף כיתוב בעברית"' })}
-          <button
-            onClick={async () => {
-              if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
-              setLoading(true);
-              try {
-                const data = await imageService.edit(buildPrompt(prompt), importUrl);
-                setResult({ imageUrl: data.imageUrl });
-                setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
-                setStep(step + 1);
-                toast.success('העריכה הושלמה!');
-              } catch (e: any) { toast.error(e.message); }
-              finally { setLoading(false); }
             }}
-            disabled={loading}
-            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {loading ? 'עורך...' : 'ערוך'}
-          </button>
+          />
+          {selectedAvatar && (
+            <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+              <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
+              <span>אווטאר "{selectedAvatar.name}" יצורף אוטומטית כרפרנס</span>
+            </div>
+          )}
         </div>
       );
+      if (wizardStep === 1) {
+        const allEditRefs = [
+          ...importImages,
+          ...(selectedAvatar ? [selectedAvatar.image_url] : []),
+          ...imageRefPhotos,
+        ];
+
+        return (
+          <div className="space-y-4">
+            {/* Show all reference images */}
+            <div className="flex flex-wrap gap-2">
+              {allEditRefs.map((url, i) => (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border">
+                  <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                  {i === 0 && <div className="absolute bottom-0 inset-x-0 text-[8px] text-center bg-background/80 text-foreground py-0.5">ראשי</div>}
+                </div>
+              ))}
+              {allEditRefs.length < MAX_REF_IMAGES && (
+                <FileUploadZone accept="image/*" multiple label="+" hint=""
+                  onUploaded={url => { if (url) setImageRefPhotos(prev => [...prev, url]); }}
+                  onMultipleUploaded={urls => setImageRefPhotos(prev => [...prev, ...urls].slice(0, MAX_REF_IMAGES))}
+                />
+              )}
+            </div>
+            {renderPromptInput({ placeholder: 'תאר מה תרצה לשנות... למשל: "שנה את הצבעים למותג שלי", "הוסף כיתוב בעברית"' })}
+            <button
+              onClick={async () => {
+                if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
+                setLoading(true);
+                try {
+                  const avatarContext = selectedAvatar ? `\n\nIMPORTANT: The avatar/person reference is included — preserve their exact likeness in the output.` : '';
+                  const extraRefs = allEditRefs.length > 1 ? `\n\nAdditional reference images are provided (${allEditRefs.length} total). Use ALL of them as context.` : '';
+                  const data = await imageService.edit(buildPrompt(prompt) + avatarContext + extraRefs, importUrl);
+                  setResult({ imageUrl: data.imageUrl });
+                  setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
+                  setStep(step + 1);
+                  toast.success('העריכה הושלמה!');
+                } catch (e: any) { toast.error(e.message); }
+                finally { setLoading(false); }
+              }}
+              disabled={loading}
+              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+              {loading ? 'עורך...' : 'ערוך'}
+            </button>
+          </div>
+        );
+      }
       if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
     }
 
