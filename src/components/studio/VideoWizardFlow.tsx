@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   runwayService, didService, storageService, voiceCloneService, composeService,
-  type Brand,
+  voiceService, type Brand,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
