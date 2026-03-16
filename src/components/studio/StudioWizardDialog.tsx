@@ -106,8 +106,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [customCategory, setCustomCategory] = useState<string>('');
 
   const brandDepartments = activeBrand?.departments || [];
+  const effectiveCategory = customCategory.trim() || selectedCategory;
 
   const handleSaveToProject = async () => {
     if (!activeBrandId || !activeBrand) {
