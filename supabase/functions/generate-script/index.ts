@@ -307,29 +307,52 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}
 
     let parsed;
     try {
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1].trim());
-      } else {
-        const braceMatch = content.match(/\{[\s\S]*\}/);
-        if (braceMatch) {
-          parsed = JSON.parse(braceMatch[0]);
-        } else {
-          parsed = JSON.parse(content.trim());
-        }
-      }
+      parsed = parseModelJsonContent(content || "");
+
       if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
         parsed.scenes = [];
       }
+
+      // Fallback: if JSON parsed but scenes are missing, create baseline scenes from script
+      if (parsed.scenes.length === 0 && typeof parsed.script === "string" && parsed.script.trim()) {
+        const sentences = parsed.script
+          .split(/\n+|(?<=[.!?！？。])\s+/)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+
+        const grouped: string[] = [];
+        for (let i = 0; i < sentences.length; i += 2) {
+          grouped.push(sentences.slice(i, i + 2).join(" "));
+          if (grouped.length >= 6) break;
+        }
+
+        const fallbackScenes = grouped.length > 0 ? grouped : [parsed.script.trim()];
+        parsed.scenes = fallbackScenes.slice(0, 6).map((text: string, idx: number) => ({
+          id: idx + 1,
+          title: `סצנה ${idx + 1}`,
+          speaker: "קריין",
+          spokenText: text,
+          visualDescription: "סצנה קולנועית מפורטת המתאימה לתחום הפעילות, עם עומק שדה, תאורה מקצועית ורקע חי ודינמי.",
+          backgroundAction: "ברקע נראים אנשים בתנועה טבעית, פעילות סביבתית ותאורה משתנה שמעניקים תחושת חיים לסצנה.",
+          cameraDirection: "Wide shot בפתיחה עם Dolly-in איטי אל הדמות המרכזית",
+          environment: "סביבה מקצועית מותאמת לתחום העסקי שהוגדר בפרומפט",
+          characters: "דמויות רלוונטיות לתוכן, בלבוש מתאים ובשפת גוף טבעית",
+          subtitleText: text.slice(0, 64),
+          icons: ["🎬", "✨"],
+          duration: 10,
+          transition: "fade",
+          videoStyle: videoStyle || "cinematic",
+        }));
+      }
+
       // Enforce each scene = 10s, total = scenes * 10
       for (const scene of parsed.scenes) {
         scene.duration = 10;
       }
       parsed.duration = parsed.scenes.length * 10;
-      
+
       // Clamp to 3-6 scenes (30-60 seconds)
       if (parsed.scenes.length < 3) {
-        // If AI generated fewer than 3, keep what we have but don't force
         parsed.duration = parsed.scenes.length * 10;
       }
       if (parsed.scenes.length > 6) {
