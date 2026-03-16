@@ -1,5 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Settings, ImageIcon, Shield } from 'lucide-react';
+import { Settings, ImageIcon, Shield, CheckSquare, Square } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +22,45 @@ export default function SettingsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StoredFile | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  const toggleSelect = (name: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === files.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(files.map(f => f.name)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const names = Array.from(selectedFiles);
+      for (const fileName of names) {
+        await supabase.functions.invoke('storage-manager', {
+          body: { action: 'delete', fileName },
+        });
+      }
+      setFiles(prev => prev.filter(f => !selectedFiles.has(f.name)));
+      toast.success(`${names.length} קבצים נמחקו`);
+      setSelectedFiles(new Set());
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה במחיקה');
+    } finally {
+      setBulkDeleting(false);
+      setConfirmBulkDelete(false);
+    }
+  };
 
   const loadFiles = async () => {
     setLoadingFiles(true);
@@ -149,43 +188,74 @@ export default function SettingsPage() {
                   <p className="text-xs mt-1">קבצים שתעלה בסטודיו הקריאייטיב יופיעו כאן</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
-                  {files.map(file => (
-                    <div key={file.name} className="bg-muted/30 rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors">
-                      {/* Thumbnail */}
-                      <div className="relative w-full h-32 bg-muted/50 flex items-center justify-center cursor-pointer" onClick={() => setPreviewFile(file)}>
-                        {isImageFile(file.name) ? (
-                          <img src={getPublicUrl(file.name)} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
-                        ) : isVideoFile(file.name) ? (
-                          <video src={getPublicUrl(file.name)} className="w-full h-full object-cover" muted />
-                        ) : (
-                          <span className="text-3xl">{getFileIcon(file.name)}</span>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                          <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                <>
+                  {/* Bulk actions bar */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted flex items-center gap-1"
+                    >
+                      {selectedFiles.size === files.length ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                      {selectedFiles.size === files.length ? 'בטל בחירה' : 'בחר הכל'}
+                    </button>
+                    {selectedFiles.size > 0 && (
+                      <button
+                        onClick={() => setConfirmBulkDelete(true)}
+                        className="text-xs px-3 py-1.5 border border-destructive/30 rounded-lg text-destructive hover:bg-destructive/10 flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" /> מחק {selectedFiles.size} קבצים
+                      </button>
+                    )}
+                    {selectedFiles.size > 0 && (
+                      <span className="text-xs text-muted-foreground">{selectedFiles.size} נבחרו</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
+                    {files.map(file => (
+                      <div key={file.name} className={`bg-muted/30 rounded-xl border overflow-hidden group transition-colors ${selectedFiles.has(file.name) ? 'border-primary ring-1 ring-primary/30' : 'border-border hover:border-primary/30'}`}>
+                        {/* Thumbnail */}
+                        <div className="relative w-full h-32 bg-muted/50 flex items-center justify-center cursor-pointer" onClick={() => setPreviewFile(file)}>
+                          {isImageFile(file.name) ? (
+                            <img src={getPublicUrl(file.name)} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
+                          ) : isVideoFile(file.name) ? (
+                            <video src={getPublicUrl(file.name)} className="w-full h-full object-cover" muted />
+                          ) : (
+                            <span className="text-3xl">{getFileIcon(file.name)}</span>
+                          )}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          {/* Selection checkbox */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleSelect(file.name); }}
+                            className="absolute top-2 right-2 w-6 h-6 rounded bg-background/80 border border-border flex items-center justify-center hover:bg-background z-10"
+                          >
+                            {selectedFiles.has(file.name) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
+                          </button>
+                        </div>
+                        {/* Info */}
+                        <div className="p-3">
+                          <p className="text-xs font-medium truncate" title={file.name.replace(/^\d+-/, '')}>
+                            {file.name.replace(/^\d+-/, '')}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {formatSize(file.metadata?.size)}
+                            {file.created_at && ` • ${new Date(file.created_at).toLocaleDateString('he-IL')}`}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <button onClick={() => handleDownloadFile(file.name)} className="flex-1 px-2 py-1 border border-border rounded-lg text-xs hover:bg-muted flex items-center justify-center gap-1">
+                              <Download className="w-3 h-3" /> הורד
+                            </button>
+                            <button onClick={() => setConfirmDelete(file)} disabled={deletingId === file.name} className="flex-1 px-2 py-1 border border-destructive/30 rounded-lg text-xs text-destructive hover:bg-destructive/10 flex items-center justify-center gap-1 disabled:opacity-50">
+                              {deletingId === file.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} מחק
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      {/* Info */}
-                      <div className="p-3">
-                        <p className="text-xs font-medium truncate" title={file.name.replace(/^\d+-/, '')}>
-                          {file.name.replace(/^\d+-/, '')}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatSize(file.metadata?.size)}
-                          {file.created_at && ` • ${new Date(file.created_at).toLocaleDateString('he-IL')}`}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <button onClick={() => handleDownloadFile(file.name)} className="flex-1 px-2 py-1 border border-border rounded-lg text-xs hover:bg-muted flex items-center justify-center gap-1">
-                            <Download className="w-3 h-3" /> הורד
-                          </button>
-                          <button onClick={() => setConfirmDelete(file)} disabled={deletingId === file.name} className="flex-1 px-2 py-1 border border-destructive/30 rounded-lg text-xs text-destructive hover:bg-destructive/10 flex items-center justify-center gap-1 disabled:opacity-50">
-                            {deletingId === file.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} מחק
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </>
               )}
 
               <p className="text-xs text-muted-foreground mt-3">
@@ -238,6 +308,27 @@ export default function SettingsPage() {
                   <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)}>ביטול</Button>
                   <Button variant="destructive" size="sm" onClick={handleConfirmDelete} disabled={!!deletingId}>
                     {deletingId ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Trash2 className="w-4 h-4 ml-1" />} מחק לצמיתות
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <Dialog open={confirmBulkDelete} onOpenChange={() => setConfirmBulkDelete(false)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-right">מחיקת {selectedFiles.size} קבצים</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-center">
+                    האם אתה בטוח שברצונך למחוק <span className="font-semibold">{selectedFiles.size} קבצים</span>?
+                  </p>
+                  <p className="text-xs text-muted-foreground text-center">פעולה זו אינה ניתנת לביטול</p>
+                </div>
+                <DialogFooter className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setConfirmBulkDelete(false)}>ביטול</Button>
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                    {bulkDeleting ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Trash2 className="w-4 h-4 ml-1" />} מחק {selectedFiles.size} קבצים
                   </Button>
                 </DialogFooter>
               </DialogContent>
