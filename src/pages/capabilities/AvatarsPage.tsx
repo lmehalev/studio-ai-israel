@@ -156,8 +156,15 @@ export default function AvatarsManagePage() {
                 </div>
               )}
               {photos.length < MAX_PHOTOS && (
-                <FileUploadZone accept="image/*" label="העלה תמונה" hint={`JPG, PNG — עד ${MAX_PHOTOS} תמונות`}
-                  onUploaded={url => { if (url && photos.length < MAX_PHOTOS) setPhotos(prev => [...prev, url]); }} />
+                <FileUploadZone accept="image/*" multiple label="העלה תמונות" hint={`JPG, PNG — עד ${MAX_PHOTOS} תמונות, אפשר לבחור כמה בבת אחת`}
+                  onUploaded={url => { if (url && photos.length < MAX_PHOTOS) setPhotos(prev => prev.length < MAX_PHOTOS ? [...prev, url] : prev); }}
+                  onMultipleUploaded={urls => {
+                    setPhotos(prev => {
+                      const remaining = MAX_PHOTOS - prev.length;
+                      return [...prev, ...urls.slice(0, remaining)];
+                    });
+                  }}
+                />
               )}
             </div>
             {selectedStyleObj && (
