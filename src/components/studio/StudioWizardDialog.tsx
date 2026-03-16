@@ -781,6 +781,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'import_edit') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
+          {avatarVoiceBar}
           <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube (נחלץ את התמונה הממוזערת)</p>
           <UrlImportInput onSubmit={url => {
             // Extract YouTube thumbnail
