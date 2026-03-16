@@ -420,9 +420,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'יצירת סרטון מקצועי', desc: 'תאר, בחר אווטארים וקולות, אשר תסריט ותייצר' },
       ],
       subtitles: [
-        { title: 'העלה סרטון', desc: 'בחר סרטון לתמלול' },
-        { title: 'תמלול ועריכה', desc: 'ערוך את הכתוביות' },
-        { title: 'שמירה', desc: 'שמור או הורד SRT' },
+        { title: 'כתוביות וסטודיו', desc: 'תמלול, עיצוב, מוזיקה והרכבה' },
       ],
       import_edit: [
         { title: 'הדבק קישור', desc: 'שים קישור לתמונה או סרטון' },
