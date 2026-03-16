@@ -102,15 +102,38 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
+      const raw = await response.text();
+      const gatewayMessage = extractGatewayMessage(raw);
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד רגע" }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+
+      if (response.status === 400) {
+        const invalidImageMsg =
+          gatewayMessage.includes("did not return an image") ||
+          gatewayMessage.includes("image") && gatewayMessage.includes("URL");
+
+        return new Response(
+          JSON.stringify({
+            error: invalidImageMsg
+              ? "הקישור אינו תמונה ישירה. הדבק קישור ישיר לקובץ תמונה (jpg/png/webp)."
+              : "בקשה לא תקינה ליצירת תמונה. בדוק את הטקסט/הקישור ונסה שוב.",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      console.error("AI gateway error:", response.status, raw);
       return new Response(JSON.stringify({ error: "שגיאה בשירות יצירת התמונות" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
