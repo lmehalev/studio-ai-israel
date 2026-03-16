@@ -63,6 +63,27 @@ export const voiceService = {
     if (data?.error) throw new Error(data.error);
     throw new Error("תגובה לא צפויה מהשרת");
   },
+
+  /**
+   * Generate TTS and upload to cloud storage, returning a public URL
+   * suitable for use with Shotstack / D-ID compositing.
+   */
+  generateAndUpload: async (text: string, voiceId?: string): Promise<string> => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ text, voiceId }),
+    });
+    if (!response.ok) throw new Error(`שגיאה ביצירת קריינות: ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
+    return storageService.upload(file);
+  },
 };
 
 // ====== Avatar Generation Service (AI) ======
