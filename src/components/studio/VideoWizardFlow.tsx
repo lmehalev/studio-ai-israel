@@ -769,7 +769,7 @@ export function VideoWizardFlow({
               <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     <span className="text-sm font-medium truncate">{websiteData.metadata?.title || websiteUrl}</span>
                   </div>
                   <button onClick={() => { setWebsiteData(null); setWebsiteUrl(''); }}
