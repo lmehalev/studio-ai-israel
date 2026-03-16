@@ -67,9 +67,13 @@ export const voiceService = {
 
 // ====== Avatar Generation Service (AI) ======
 export const avatarGenService = {
-  generate: async (imageUrls: string[], style?: string): Promise<{ imageUrl: string | null; text: string }> => {
+  generate: async (
+    imageUrls: string[],
+    style?: string,
+    options?: { baseAvatarUrl?: string; strictIdentity?: boolean }
+  ): Promise<{ imageUrl: string | null; text: string }> => {
     const { data, error } = await supabase.functions.invoke("generate-avatar", {
-      body: { imageUrls, style },
+      body: { imageUrls, style, ...options },
     });
     if (error) throw new Error(error.message || "שגיאה ביצירת אווטאר");
     if (data?.error) throw new Error(data.error);

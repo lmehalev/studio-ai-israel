@@ -1,9 +1,184 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const MAX_REFERENCE_IMAGES = 7;
+
+type GenerateAvatarRequest = {
+  imageUrls?: string[];
+  style?: string;
+  baseAvatarUrl?: string;
+  strictIdentity?: boolean;
+};
+
+const dedupeUrls = (urls: string[]) =>
+  Array.from(new Set(urls.filter((url) => typeof url === "string" && url.trim().length > 0)));
+
+const getStyleInstructions = (styleDesc: string) => {
+  const normalizedStyle = styleDesc.toLowerCase();
+
+  if (normalizedStyle.includes("cartoon") || normalizedStyle.includes("pixar")) {
+    return `
+- Apply Pixar/3D animation rendering style ONLY
+- Keep facial geometry unchanged: same jawline, same nose bridge, same eye spacing
+- Keep beard line, hairline, and ear proportions identical
+- Keep the same kippa/head covering shape and placement
+- Do NOT alter face proportions to be "cuter" or exaggerated`;
+  }
+
+  if (normalizedStyle.includes("disney")) {
+    return `
+- Apply classic Disney illustration style ONLY
+- Identity lock is mandatory: keep exact facial structure and proportions
+- Preserve hairline, eyebrow shape, nose profile, lips, and beard boundaries
+- Keep kippa/head covering exactly positioned and recognizable
+- Avoid beautification or age changes`;
+  }
+
+  if (normalizedStyle.includes("anime")) {
+    return `
+- Apply anime rendering style ONLY
+- Keep exact skull shape, jaw width, nose proportions, and eye spacing
+- Preserve beard shape and hairline details exactly
+- Keep identity recognizable at first glance`;
+  }
+
+  if (normalizedStyle.includes("comic")) {
+    return `
+- Apply western comic style ONLY
+- Keep face geometry and all proportions unchanged
+- Preserve distinguishing features: beard shape, brow thickness, nose silhouette
+- Do not add heroic exaggeration to face proportions`;
+  }
+
+  if (normalizedStyle.includes("watercolor")) {
+    return `
+- Apply watercolor texture and brushwork ONLY
+- Keep exact facial landmarks and proportions
+- Preserve realistic facial structure under the painting style`;
+  }
+
+  if (normalizedStyle.includes("pop art")) {
+    return `
+- Apply pop-art color treatment and graphic styling ONLY
+- Keep the same face geometry and expression structure
+- Preserve facial hair, hairline, and identity markers exactly`;
+  }
+
+  return `
+- Generate a clean, well-lit professional portrait
+- Face centered and clearly visible, neutral background
+- Preserve photorealistic identity with no beautification`;
+};
+
+const getIdentityInstructions = (strictIdentity: boolean, hasBaseAvatar: boolean) => {
+  const baseAnchorInstruction = hasBaseAvatar
+    ? "- The provided base avatar image is an IDENTITY ANCHOR; preserve it exactly while changing style only"
+    : "";
+
+  if (!strictIdentity) {
+    return `
+- Keep the person recognizable across all references
+${baseAnchorInstruction}`;
+  }
+
+  return `
+CRITICAL IDENTITY LOCK (MANDATORY):
+- Preserve EXACT craniofacial geometry: forehead height, cheekbone width, jaw shape, chin size
+- Preserve EXACT eyes: shape, spacing, brow thickness and arch
+- Preserve EXACT nose: bridge, tip shape, nostril width, profile
+- Preserve EXACT mouth and lips: width, upper/lower lip thickness, corner shape
+- Preserve EXACT skin tone and complexion; keep natural marks if visible
+- Preserve EXACT hairline, hair density, beard/mustache boundaries and texture
+- Preserve EXACT ears and head proportions
+- Preserve accessories/head covering (including kippa) exactly as shown
+- Do NOT beautify, slim, age-change, or stylize facial proportions
+- Output must be immediately recognizable as the SAME real person
+${baseAnchorInstruction}`;
+};
+
+const buildSystemPrompt = (styleDesc: string, strictIdentity: boolean, hasBaseAvatar: boolean) => {
+  const styleInstructions = getStyleInstructions(styleDesc);
+  const identityInstructions = getIdentityInstructions(strictIdentity, hasBaseAvatar);
+
+  return `You are an elite identity-preserving portrait generator.
+
+${identityInstructions}
+
+STYLE DIRECTIVE:
+- Requested style: ${styleDesc}
+${styleInstructions}
+
+OUTPUT RULES:
+- Return one final portrait image
+- Keep identity consistency across all supplied references
+- If style is artistic, change rendering style ONLY while preserving face geometry 1:1
+- Do not explain; generate the image directly.`;
+};
+
+const extractGeneratedImage = (choice: any): { imageUrl: string | null; text: string } => {
+  let generatedImageUrl: string | null = null;
+  let textResponse = "";
+
+  if (choice?.images && Array.isArray(choice.images) && choice.images.length > 0) {
+    generatedImageUrl = choice.images[0]?.image_url?.url || null;
+  }
+
+  if (choice?.content) {
+    if (typeof choice.content === "string") {
+      textResponse = choice.content;
+    } else if (Array.isArray(choice.content)) {
+      for (const part of choice.content) {
+        if (!generatedImageUrl && part.type === "image_url" && part.image_url?.url) {
+          generatedImageUrl = part.image_url.url;
+        } else if (part.type === "text") {
+          textResponse = part.text || "";
+        } else if (!generatedImageUrl && part.inline_data) {
+          generatedImageUrl = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
+        }
+      }
+    }
+  }
+
+  return { imageUrl: generatedImageUrl, text: textResponse };
+};
+
+const uploadDataUrlToStorage = async (dataUrl: string) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseKey) return dataUrl;
+
+  const matches = dataUrl.match(/^data:(.+?);base64,(.+)$/);
+  if (!matches) return dataUrl;
+
+  const mimeType = matches[1];
+  const base64Data = matches[2];
+  const binaryStr = atob(base64Data);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  const ext = mimeType.includes("png") ? "png" : "jpg";
+  const path = `avatars/${Date.now()}-generated.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("media")
+    .upload(path, bytes, { contentType: mimeType, cacheControl: "3600" });
+
+  if (uploadError) {
+    console.error("upload avatar error:", uploadError);
+    return dataUrl;
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("media").getPublicUrl(path);
+  return publicUrlData.publicUrl;
 };
 
 serve(async (req) => {
@@ -15,89 +190,41 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { imageUrls, style } = await req.json();
+    const body = (await req.json()) as GenerateAvatarRequest;
+    const styleDesc = (body.style || "professional headshot").trim();
+    const strictIdentity = body.strictIdentity !== false;
 
-    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "יש להעלות לפחות תמונה אחת" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const referenceUrls = dedupeUrls([
+      ...(body.baseAvatarUrl ? [body.baseAvatarUrl] : []),
+      ...(Array.isArray(body.imageUrls) ? body.imageUrls : []),
+    ]).slice(0, MAX_REFERENCE_IMAGES);
+
+    if (referenceUrls.length === 0) {
+      return new Response(JSON.stringify({ error: "יש להעלות לפחות תמונה אחת" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Build image content parts for the multimodal request
-    const imageContentParts = imageUrls.map((url: string) => ({
+    const hasBaseAvatar = Boolean(body.baseAvatarUrl);
+
+    const systemPrompt = buildSystemPrompt(styleDesc, strictIdentity, hasBaseAvatar);
+
+    const imageContentParts = referenceUrls.map((url) => ({
       type: "image_url" as const,
       image_url: { url },
     }));
 
-    const styleDesc = style || "professional headshot";
+    const userPrompt = `I am providing ${referenceUrls.length} reference image(s) of the SAME person.
 
-    // Build style-specific instructions
-    let styleInstructions = "";
-    if (styleDesc.includes("cartoon") || styleDesc.includes("pixar")) {
-      styleInstructions = `
-- Create a 3D animated/Pixar-style character based on the person's features
-- Use vibrant colors, smooth skin textures, and slightly exaggerated proportions
-- Large expressive eyes, rounded features
-- The character should be clearly recognizable as the same person`;
-    } else if (styleDesc.includes("disney")) {
-      styleInstructions = `
-- Create a classic Disney hand-drawn animation style portrait
-- Elegant lines, warm color palette, magical lighting
-- Slightly idealized but clearly recognizable as the same person
-- Add subtle sparkle or magical atmosphere`;
-    } else if (styleDesc.includes("anime")) {
-      styleInstructions = `
-- Create a Japanese anime/manga style portrait
-- Large expressive eyes, sharp features, dynamic hair
-- Clean line art with cel-shading style coloring
-- The character should be clearly recognizable as the same person`;
-    } else if (styleDesc.includes("comic")) {
-      styleInstructions = `
-- Create a Western comic book / graphic novel style portrait
-- Bold outlines, dramatic shading, halftone dots effect
-- Heroic proportions, dynamic pose
-- The character should be clearly recognizable as the same person`;
-    } else if (styleDesc.includes("watercolor")) {
-      styleInstructions = `
-- Create an artistic watercolor painting portrait
-- Soft flowing colors, visible brush strokes, organic textures
-- Dreamy ethereal quality
-- The person should be clearly recognizable`;
-    } else if (styleDesc.includes("pop art")) {
-      styleInstructions = `
-- Create a bold pop art style portrait inspired by Andy Warhol / Roy Lichtenstein
-- Bright contrasting colors, bold outlines, Ben-Day dots
-- Dramatic and eye-catching composition
-- The person should be clearly recognizable`;
-    } else {
-      // Professional / photorealistic styles
-      styleInstructions = `
-- Generate a clean, well-lit, professional-looking portrait
-- The face should be clearly visible, centered, and facing forward
-- Use clean, neutral or slightly blurred background
-- Maintain photorealistic quality
-- The result should look like a professional studio headshot suitable for video avatars`;
-    }
-    
-    const systemPrompt = `You are an expert portrait artist specializing in creating photorealistic avatars from reference photos.
+Identity requirements:
+- Build one consistent identity map from all angles.
+- Keep the person identical to references (1:1 identity), not approximate.
+- Preserve exact likeness even in artistic style.
 
-CRITICAL ACCURACY REQUIREMENTS:
-- You MUST preserve the EXACT facial structure: jaw shape, chin, cheekbones, forehead size and shape
-- You MUST preserve the EXACT nose shape and size
-- You MUST preserve the EXACT eye shape, color, spacing, and brow thickness
-- You MUST preserve the EXACT mouth shape and lip thickness
-- You MUST preserve the EXACT skin tone, complexion, and any facial marks (moles, freckles, scars)
-- You MUST preserve the EXACT hair color, texture, style, hairline, and any facial hair (beard shape, mustache)
-- You MUST preserve the EXACT ear shape and size
-- You MUST preserve any head coverings (kippa, hat, glasses) exactly as shown
-- The generated person must be IMMEDIATELY recognizable as the same individual in the reference photos
-- Do NOT idealize, beautify, or change any facial proportions
+${hasBaseAvatar ? "Base avatar image is provided and must be treated as identity anchor." : ""}
 
-${styleInstructions}
-- Style: ${styleDesc}
-
-IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. The result MUST look like the SAME PERSON from the photos.`;
+Requested style: ${styleDesc}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -108,16 +235,17 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. T
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         modalities: ["image", "text"],
+        temperature: 0.05,
         messages: [
           { role: "system", content: systemPrompt },
           {
             role: "user",
             content: [
-              ...imageContentParts,
               {
                 type: "text",
-                text: `I am providing ${imageUrls.length} reference photo(s) of the SAME person from different angles. Study every detail of their face carefully: bone structure, skin tone, hair, eyes, nose, mouth, beard/facial hair, and any accessories like glasses or head coverings. Generate a single high-quality avatar portrait that looks EXACTLY like this person. Style: ${styleDesc}. The result must be immediately recognizable as the same individual.`,
+                text: userPrompt,
               },
+              ...imageContentParts,
             ],
           },
         ],
@@ -126,17 +254,18 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. T
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד דקה" }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד דקה" }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "נדרש חידוש קרדיטים" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "נדרש חידוש קרדיטים" }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
+
       const errText = await response.text();
       console.error("AI gateway error:", response.status, errText);
       throw new Error(`שגיאה ביצירת אווטאר: ${response.status}`);
@@ -144,75 +273,25 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. T
 
     const data = await response.json();
     const choice = data.choices?.[0]?.message;
+    const extracted = extractGeneratedImage(choice);
 
-    // Extract image from response
-    let generatedImageUrl: string | null = null;
-    let textResponse = "";
-
-    // Check for images array (new format)
-    if (choice?.images && Array.isArray(choice.images) && choice.images.length > 0) {
-      generatedImageUrl = choice.images[0]?.image_url?.url || null;
-    }
-
-    if (choice?.content) {
-      if (typeof choice.content === "string") {
-        textResponse = choice.content;
-      } else if (Array.isArray(choice.content)) {
-        for (const part of choice.content) {
-          if (!generatedImageUrl && part.type === "image_url" && part.image_url?.url) {
-            generatedImageUrl = part.image_url.url;
-          } else if (part.type === "text") {
-            textResponse = part.text || "";
-          } else if (!generatedImageUrl && part.inline_data) {
-            generatedImageUrl = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
-          }
-        }
-      }
-    }
-
-    // If we got a base64 image, upload it to storage
+    let generatedImageUrl = extracted.imageUrl;
     if (generatedImageUrl && generatedImageUrl.startsWith("data:")) {
-      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      const matches = generatedImageUrl.match(/^data:(.+?);base64,(.+)$/);
-      if (matches) {
-        const mimeType = matches[1];
-        const base64Data = matches[2];
-        const binaryStr = atob(base64Data);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
-        }
-
-        const ext = mimeType.includes("png") ? "png" : "jpg";
-        const path = `avatars/${Date.now()}-generated.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(path, bytes, { contentType: mimeType, cacheControl: "3600" });
-
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage.from("media").getPublicUrl(path);
-          generatedImageUrl = publicUrlData.publicUrl;
-        }
-      }
+      generatedImageUrl = await uploadDataUrlToStorage(generatedImageUrl);
     }
 
     return new Response(
       JSON.stringify({
         imageUrl: generatedImageUrl,
-        text: textResponse || "האווטאר נוצר בהצלחה",
+        text: extracted.text || "האווטאר נוצר בהצלחה",
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("generate-avatar error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה ביצירת אווטאר" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה ביצירת אווטאר" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
