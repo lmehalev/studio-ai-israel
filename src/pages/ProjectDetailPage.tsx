@@ -106,7 +106,8 @@ export default function ProjectDetailPage() {
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
+            <button onClick={() => setEditOpen(true)} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Edit className="w-3.5 h-3.5" /> עריכה</button>
+            <Link to={`/creative-studio?projectId=${project.id}`} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Wand2 className="w-3.5 h-3.5" /> ערוך בסטודיו</Link>
             <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Copy className="w-3.5 h-3.5" /> שכפול</button>
             <button onClick={() => toast.info('המערכת מכינה את הבקשה...')} className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><RefreshCw className="w-3.5 h-3.5" /> יצירה מחדש</button>
             <button className="flex items-center gap-1 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted"><Archive className="w-3.5 h-3.5" /> ארכוב</button>
