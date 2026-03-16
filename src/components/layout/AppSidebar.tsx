@@ -2,21 +2,34 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
-  ChevronRight, ChevronLeft, Video, HelpCircle
+  ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
+  ChevronDown
 } from 'lucide-react';
 import { useState } from 'react';
 import { OpenGuideTourButton } from '@/components/GuidedTour';
 
-const menuItems = [
+const mainMenuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
   { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
   { title: 'פרויקטים', icon: FolderOpen, path: '/projects' },
-  { title: 'הגדרות', icon: Settings, path: '/settings' },
+];
+
+const capabilityItems = [
+  { title: 'אווטארים', icon: UserCircle, path: '/capabilities/avatars' },
+  { title: 'דיבוב / קול', icon: Mic, path: '/capabilities/voices' },
+  { title: 'תסריטים', icon: FileText, path: '/capabilities/scripts' },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(
+    location.pathname.startsWith('/capabilities')
+  );
+
+  const isCapabilityActive = capabilityItems.some(
+    item => location.pathname.startsWith(item.path)
+  );
 
   return (
     <aside
@@ -46,7 +59,7 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 overflow-y-auto">
         <ul className="space-y-1">
-          {menuItems.map((item) => {
+          {mainMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path));
@@ -67,6 +80,67 @@ export function AppSidebar() {
               </li>
             );
           })}
+        </ul>
+
+        {/* Capabilities Section */}
+        <div className="mt-4">
+          {!collapsed && (
+            <button
+              onClick={() => setCapabilitiesOpen(!capabilitiesOpen)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200',
+                isCapabilityActive
+                  ? 'text-primary'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              )}
+            >
+              <span>יכולות</span>
+              <ChevronDown className={cn('w-4 h-4 transition-transform', capabilitiesOpen && 'rotate-180')} />
+            </button>
+          )}
+          {(capabilitiesOpen || collapsed) && (
+            <ul className="space-y-1 mt-1">
+              {capabilityItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname.startsWith(item.path);
+                return (
+                  <li key={item.path}>
+                    <Link
+                      to={item.path}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                        !collapsed && 'pr-6',
+                        isActive
+                          ? 'bg-primary/10 text-primary shadow-gold'
+                          : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                      )}
+                    >
+                      <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-primary')} />
+                      {!collapsed && <span>{item.title}</span>}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Settings */}
+        <ul className="mt-4 space-y-1">
+          <li>
+            <Link
+              to="/settings"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                location.pathname === '/settings'
+                  ? 'bg-primary/10 text-primary shadow-gold'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )}
+            >
+              <Settings className={cn('w-5 h-5 flex-shrink-0', location.pathname === '/settings' && 'text-primary')} />
+              {!collapsed && <span>הגדרות</span>}
+            </Link>
+          </li>
         </ul>
       </nav>
 
