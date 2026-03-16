@@ -45,10 +45,11 @@ interface StudioWizardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   activeBrand: Brand | undefined;
+  activeBrandId: string | null;
   buildPrompt: (base: string) => string;
 }
 
-export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPrompt }: StudioWizardDialogProps) {
+export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt }: StudioWizardDialogProps) {
   const [selectedAction, setSelectedAction] = useState<StudioAction | null>(null);
   const [step, setStep] = useState(0);
 
