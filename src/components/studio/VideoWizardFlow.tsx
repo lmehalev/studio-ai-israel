@@ -292,9 +292,11 @@ export function VideoWizardFlow({
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
       const fullScript = generatedScript.scenes.map(s => s.spokenText).join(' ');
+      const narrationText = toNarrationText(fullScript);
       const selectedVoice = selectedVoices[0];
       let narrationAudioUrl: string | undefined;
       const sceneVideoUrls: string[] = [];
+      const sceneErrors: string[] = [];
       const totalScenes = generatedScript.scenes.length;
 
       // === Stage 1: ALWAYS generate Hebrew narration ===
