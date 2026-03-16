@@ -788,10 +788,10 @@ export function VideoWizardFlow({
                         placeholder="תאר כאילו אתה במאי: פריים פתיחה, דמות מרכזית, פעולה, Foreground, Midground, Background, תאורה, צבעים, טקסטורות..." />
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground font-semibold text-amber-600">🎭 אקשן ברקע — מה שנותן חיים לסצנה!</label>
+                      <label className="text-[10px] text-muted-foreground font-semibold text-primary">🎭 אקשן ברקע — מה שנותן חיים לסצנה!</label>
                       <textarea value={scene.backgroundAction || ''} onChange={e => updateSceneText(idx, 'backgroundAction', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
-                        rows={3} className="w-full bg-amber-500/5 border border-amber-500/30 rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
+                        rows={3} className="w-full bg-primary/5 border border-primary/30 rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
                         placeholder="אנשים ברקע, תנועה סביבתית, אינטראקציות, אלמנטים חיים, צלילים ויזואליים..." />
                     </div>
                     <div>
