@@ -184,8 +184,31 @@ async function checkRunway(apiKey: string): Promise<ServiceCredits> {
   }
 }
 
-async function checkShotstack(_apiKey: string): Promise<ServiceCredits> {
+async function checkShotstack(apiKey: string): Promise<ServiceCredits> {
   try {
+    // Try to get usage from Shotstack API
+    const res = await fetch("https://api.shotstack.io/stage/render", {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+    });
+
+    // If we get any valid response (even 400), the key is valid
+    if (res.ok || res.status === 400 || res.status === 404) {
+      return {
+        service: "shotstack",
+        used: 0,
+        limit: -1,
+        unit: "רינדורים",
+        plan: "sandbox",
+        canGenerate: true,
+        dashboardUrl: "https://dashboard.shotstack.io/",
+      };
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`API key invalid (${res.status})`);
+    }
+
     return {
       service: "shotstack",
       used: 0,
