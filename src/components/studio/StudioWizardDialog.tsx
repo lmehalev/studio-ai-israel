@@ -399,26 +399,31 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     </div>
   );
 
-  // ============ CATEGORY SELECTOR ============
-  const renderCategorySelector = () => {
-    if (brandDepartments.length === 0) return null;
-    return (
-      <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-muted-foreground">קטגוריה / תת-פרויקט</label>
+  const renderCategorySelector = () => (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-muted-foreground">תת-פעילות / קטגוריה לפרויקט</label>
+      {brandDepartments.length > 0 && (
         <select
           value={selectedCategory}
           onChange={e => setSelectedCategory(e.target.value)}
           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           dir="rtl"
         >
-          <option value="">בחר קטגוריה...</option>
+          <option value="">בחר תת-פעילות...</option>
           {brandDepartments.map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-      </div>
-    );
-  };
+      )}
+      <input
+        value={customCategory}
+        onChange={e => setCustomCategory(e.target.value)}
+        placeholder="או כתוב תת-פעילות חדשה (למשל: הערכת שווי)"
+        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+        dir="rtl"
+      />
+    </div>
+  );
 
   // ============ RESULT VIEW ============
   const renderResultView = () => (
