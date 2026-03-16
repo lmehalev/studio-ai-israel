@@ -509,31 +509,20 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   };
 
   // Helper: render inline brand selector for result view (when no brand selected)
+  const [inlineBrandId, setInlineBrandId] = useState<string | null>(null);
+  const [inlineNewBrandName, setInlineNewBrandName] = useState('');
+
+  const effectiveBrandId = activeBrandId || inlineBrandId;
+  const effectiveBrandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
+
   const renderInlineBrandSelector = () => {
     if (activeBrand) return renderCategorySelector();
     return (
       <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
         <label className="block text-xs font-medium text-muted-foreground">שם חברה / מותג (לשמירה)</label>
         <select
-          value={activeBrandId || ''}
-          onChange={e => {
-            if (e.target.value === '__new__') {
-              // Will be handled by parent — for now just prompt
-              const name = window.prompt('הזן שם חברה חדשה:');
-              if (name?.trim()) {
-                const brand: Brand = {
-                  id: crypto.randomUUID(),
-                  name: name.trim(),
-                  tone: '', targetAudience: '', industry: '', colors: [], departments: [],
-                };
-                const updated = brandService.add(brand);
-                // We need to propagate this up — but since we have the setter from props context, 
-                // we'll use a workaround: dispatch a custom event
-                window.dispatchEvent(new CustomEvent('studio:brand-added', { detail: { brand, brands: updated } }));
-                toast.success(`"${name}" נוצר`);
-              }
-            }
-          }}
+          value={inlineBrandId || ''}
+          onChange={e => setInlineBrandId(e.target.value || null)}
           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           dir="rtl"
         >
@@ -541,8 +530,30 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {brands.map(b => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
-          <option value="__new__">+ הוסף חברה חדשה</option>
         </select>
+        <div className="flex gap-2">
+          <input
+            value={inlineNewBrandName}
+            onChange={e => setInlineNewBrandName(e.target.value)}
+            placeholder="או הוסף חברה חדשה..."
+            className="flex-1 bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            dir="rtl"
+          />
+          {inlineNewBrandName.trim() && (
+            <button onClick={() => {
+              const brand: Brand = {
+                id: crypto.randomUUID(), name: inlineNewBrandName.trim(),
+                tone: '', targetAudience: '', industry: '', colors: [], departments: [],
+              };
+              brandService.add(brand);
+              setInlineBrandId(brand.id);
+              setInlineNewBrandName('');
+              toast.success(`"${brand.name}" נוצר`);
+            }} className="px-3 py-2 gradient-gold text-primary-foreground rounded-lg text-xs font-semibold">
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     );
   };
