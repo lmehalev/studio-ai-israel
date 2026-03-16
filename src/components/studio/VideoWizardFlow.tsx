@@ -41,7 +41,7 @@ interface GeneratedScript {
   duration: number;
   script: string;
   scenes: ScriptScene[];
-  style: { tone?: string; pace?: string; music?: string };
+  style: { tone?: string; pace?: string; music?: string; cinematicStyle?: string };
 }
 
 interface VideoWizardFlowProps {
@@ -262,14 +262,30 @@ export function VideoWizardFlow({
           });
         }
       } else {
-        // No avatar → text-to-video via Runway
-        setProgressStage('מייצר סרטון AI...');
-        const promptText = generatedScript.scenes
-          .map(s => `${s.visualDescription}. ${s.subtitleText}`)
-          .join('. ');
+        // No avatar → cinematic text-to-video via Runway
+        setProgressStage('מייצר סרטון AI קולנועי...');
+        
+        // Build a rich cinematic prompt from all scene descriptions
+        const cinematicPrompt = generatedScript.scenes
+          .map((s, i) => {
+            const parts: string[] = [];
+            if (s.visualDescription) parts.push(s.visualDescription);
+            if (s.cameraDirection) parts.push(`Camera: ${s.cameraDirection}`);
+            if (s.environment) parts.push(`Setting: ${s.environment}`);
+            if (s.characters) parts.push(`Characters: ${s.characters}`);
+            if (s.videoStyle) parts.push(`Style: ${s.videoStyle}`);
+            return `Scene ${i + 1}: ${parts.join('. ')}`;
+          })
+          .join(' | ');
+
+        const styleInfo = generatedScript.style 
+          ? `Overall style: ${generatedScript.style.cinematicStyle || generatedScript.style.tone || 'cinematic'}. Pace: ${generatedScript.style.pace || 'medium'}. Music mood: ${generatedScript.style.music || 'cinematic score'}.`
+          : '';
+
+        const fullPrompt = buildPrompt(`${cinematicPrompt}. ${styleInfo}`.slice(0, 2000));
 
         const taskData = await runwayService.textToVideo(
-          buildPrompt(promptText),
+          fullPrompt,
           undefined,
           generatedScript.duration >= 90 ? 10 : 5,
         );
