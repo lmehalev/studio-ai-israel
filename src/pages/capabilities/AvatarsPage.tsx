@@ -359,13 +359,18 @@ export default function AvatarsManagePage() {
                     </div>
                   )}
                   {remainingPhotoSlots > 0 && (
-                    <FileUploadZone accept="image/*" multiple label="העלה תמונות" hint={`JPG, PNG — אפשר להעלות כמה בבת אחת. נשארו ${remainingPhotoSlots} מקומות`}
+                    <FileUploadZone accept="image/*" multiple label="העלה תמונות" hint={`JPG, PNG — לדיוק גבוה חובה לפחות 3 תמונות מזוויות שונות (מומלץ 4-7). נשארו ${remainingPhotoSlots} מקומות`}
                       onUploaded={(url) => { if (!url) return; setPhotos((prev) => { const merged = Array.from(new Set([...baseReferences, ...prev, url])).slice(0, MAX_PHOTOS); return merged.filter((item) => !baseReferences.includes(item)); }); }}
                       onMultipleUploaded={(urls) => { setPhotos((prev) => { const merged = Array.from(new Set([...baseReferences, ...prev, ...urls])).slice(0, MAX_PHOTOS); return merged.filter((item) => !baseReferences.includes(item)); }); }}
                     />
                   )}
                   {remainingPhotoSlots === 0 && (
                     <div className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">הגעת למקסימום {MAX_PHOTOS} תמונות רפרנס.</div>
+                  )}
+                  {mergedReferencePreview.length < 3 && (
+                    <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 mt-2">
+                      כרגע יש {mergedReferencePreview.length} תמונות. נדרשות לפחות 3 תמונות כדי לקבל זהות פנים מדויקת.
+                    </div>
                   )}
                 </div>
 
@@ -374,6 +379,7 @@ export default function AvatarsManagePage() {
                   <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
                     <div><span className="font-semibold text-foreground">{selectedStyleObj.label}</span> — {selectedStyleObj.desc}</div>
                     <div><span className="font-semibold text-foreground">{selectedExpressionObj?.label}</span> — {selectedExpressionObj?.desc}</div>
+                    <div className="text-primary">🎯 מצב דיוק זהות פעיל — המערכת תקבע פנים לפי כל תמונות הרפרנס</div>
                     {style !== 'professional headshot' ? (
                       <span className="block text-primary">✨ סגנון אמנותי — תישמר זהות הפנים, וישתנה רק סגנון הרינדור</span>
                     ) : (
@@ -382,9 +388,9 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                <button onClick={handleGenerate} disabled={generating} className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+                <button onClick={handleGenerate} disabled={generating || mergedReferencePreview.length < 3} className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-4 h-4" />}
-                  {generating ? 'מייצר אווטאר...' : 'צור אווטאר'}
+                  {generating ? 'מייצר אווטאר...' : mergedReferencePreview.length < 3 ? 'צריך לפחות 3 תמונות' : 'צור אווטאר'}
                 </button>
               </>
             )}
