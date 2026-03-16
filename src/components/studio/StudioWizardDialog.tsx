@@ -173,7 +173,74 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     setCustomCategory('');
   }, [open, initialCategory]);
 
-  // Reset when dialog closes
+  // Session persistence key
+  const SESSION_KEY = 'studio_wizard_session';
+
+  // Save session to localStorage on meaningful state changes
+  useEffect(() => {
+    if (!open) return;
+    if (step === 0 && !selectedAction) return; // Don't save initial state
+    const session = {
+      selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
+      importUrl, importType, selectedAvatarId, selectedVoiceId,
+      selectedCategory, customCategory, timestamp: Date.now(),
+    };
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory]);
+
+  // Restore session when dialog opens
+  const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
+  const [hasPendingSession, setHasPendingSession] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const session = JSON.parse(raw);
+      // Only offer restore if session is less than 24h old and has content
+      if (Date.now() - session.timestamp > 86400000) { localStorage.removeItem(SESSION_KEY); return; }
+      if (session.selectedAction || session.prompt || session.result) {
+        setHasPendingSession(true);
+      }
+    } catch { localStorage.removeItem(SESSION_KEY); }
+  }, [open]);
+
+  const restoreSession = () => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.selectedAction) setSelectedAction(s.selectedAction);
+      if (s.step) setStep(s.step);
+      if (s.prompt) setPrompt(s.prompt);
+      if (s.result) setResult(s.result);
+      if (s.imageRefPhotos) setImageRefPhotos(s.imageRefPhotos);
+      if (s.editHistory) setEditHistory(s.editHistory);
+      if (s.editPrompt) setEditPrompt(s.editPrompt);
+      if (s.importUrl) setImportUrl(s.importUrl);
+      if (s.importType) setImportType(s.importType);
+      if (s.selectedAvatarId) setSelectedAvatarId(s.selectedAvatarId);
+      if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
+      if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
+      if (s.customCategory) setCustomCategory(s.customCategory);
+      toast.success('הסשן שוחזר בהצלחה!');
+    } catch {}
+    setHasPendingSession(false);
+    setSessionRestoreOffered(true);
+  };
+
+  const dismissSession = () => {
+    localStorage.removeItem(SESSION_KEY);
+    setHasPendingSession(false);
+    setSessionRestoreOffered(true);
+  };
+
+  const clearSession = () => {
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+  };
+
+  // Reset when dialog closes — but don't clear session (only clear on explicit "start fresh")
   useEffect(() => {
     if (!open) {
       setTimeout(() => {
@@ -196,6 +263,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setShowAvatarVoicePanel(false);
         setSelectedCategory('');
         setCustomCategory('');
+        setSessionRestoreOffered(false);
+        setHasPendingSession(false);
       }, 300);
     }
   }, [open]);
