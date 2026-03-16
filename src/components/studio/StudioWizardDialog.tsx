@@ -24,6 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
+import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
 
