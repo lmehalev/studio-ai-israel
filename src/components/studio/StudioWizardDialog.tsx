@@ -494,6 +494,62 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     </div>
   );
 
+  // Helper: delete a single history item
+  const handleDeleteHistoryItem = (index: number) => {
+    setEditHistory(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      // If current result was deleted, switch to last remaining or clear
+      if (prev[index]?.imageUrl === result?.imageUrl) {
+        if (updated.length > 0) setResult({ imageUrl: updated[updated.length - 1].imageUrl });
+        else { setResult(null); setStep(step > 1 ? step - 1 : 0); }
+      }
+      return updated;
+    });
+    toast.success('הפריט נמחק מההיסטוריה');
+  };
+
+  // Helper: render inline brand selector for result view (when no brand selected)
+  const renderInlineBrandSelector = () => {
+    if (activeBrand) return renderCategorySelector();
+    return (
+      <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
+        <label className="block text-xs font-medium text-muted-foreground">שם חברה / מותג (לשמירה)</label>
+        <select
+          value={activeBrandId || ''}
+          onChange={e => {
+            if (e.target.value === '__new__') {
+              // Will be handled by parent — for now just prompt
+              const name = window.prompt('הזן שם חברה חדשה:');
+              if (name?.trim()) {
+                const brand: Brand = {
+                  id: crypto.randomUUID(),
+                  name: name.trim(),
+                  tone: '', targetAudience: '', industry: '', colors: [], departments: [],
+                };
+                const updated = brandService.add(brand);
+                // We need to propagate this up — but since we have the setter from props context, 
+                // we'll use a workaround: dispatch a custom event
+                window.dispatchEvent(new CustomEvent('studio:brand-added', { detail: { brand, brands: updated } }));
+                toast.success(`"${name}" נוצר`);
+              }
+            }
+          }}
+          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          dir="rtl"
+        >
+          <option value="">בחר חברה...</option>
+          {brands.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+          <option value="__new__">+ הוסף חברה חדשה</option>
+        </select>
+      </div>
+    );
+  };
+
+  // Need brands list for inline selector
+  const brands = brandService.getAll();
+
   // ============ RESULT VIEW ============
   const renderResultView = () => (
     <div className="space-y-4">
@@ -507,7 +563,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
-      {activeBrand && renderCategorySelector()}
+      {renderInlineBrandSelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -518,7 +574,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
+      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
@@ -528,14 +584,23 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // ============ IMAGE RESULT WITH ITERATIVE EDITING ============
   const renderImageResultWithEdit = () => (
     <div className="space-y-4">
-      {editHistory.length > 1 && (
+      {editHistory.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-2">
           {editHistory.map((h, i) => (
-            <button key={i} onClick={() => setResult({ imageUrl: h.imageUrl })}
-              className={cn('flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
-                result?.imageUrl === h.imageUrl ? 'border-primary shadow-gold' : 'border-border/50 opacity-60 hover:opacity-100')}>
-              <img src={h.imageUrl} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
-            </button>
+            <div key={i} className="relative group flex-shrink-0">
+              <button onClick={() => setResult({ imageUrl: h.imageUrl })}
+                className={cn('w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
+                  result?.imageUrl === h.imageUrl ? 'border-primary shadow-gold' : 'border-border/50 opacity-60 hover:opacity-100')}>
+                <img src={h.imageUrl} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteHistoryItem(i); }}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                title="מחק"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -544,7 +609,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[250px] object-contain" />
         </div>
       )}
-      {renderCategorySelector()}
+      {renderInlineBrandSelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -593,7 +658,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {loading ? 'מעדכן...' : 'עדכן תמונה'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
+      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
