@@ -79,6 +79,13 @@ export default function ProjectsPage() {
               {videoTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
+          {categories.length > 0 && (
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="">כל הקטגוריות</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           <div className="flex border border-border rounded-lg overflow-hidden">
             <button onClick={() => setView('grid')} className={cn('p-2', view === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card')}><Grid3X3 className="w-4 h-4" /></button>
             <button onClick={() => setView('list')} className={cn('p-2', view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-card')}><List className="w-4 h-4" /></button>
