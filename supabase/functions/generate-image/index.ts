@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const blockedMediaHosts = /(youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com)/i;
+
+const extractGatewayMessage = (raw: string) => {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.error?.message || raw;
+  } catch {
+    return raw;
+  }
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -15,6 +26,18 @@ serve(async (req) => {
     const { prompt, action, imageUrl, referenceImages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const mediaUrls = [
+      ...(action === "edit" && imageUrl ? [imageUrl] : []),
+      ...(Array.isArray(referenceImages) ? referenceImages : []),
+    ].filter(Boolean) as string[];
+
+    if (mediaUrls.some((url) => blockedMediaHosts.test(url))) {
+      return new Response(
+        JSON.stringify({ error: "הקישור שהוזן הוא עמוד אתר (למשל YouTube) ולא קובץ תמונה ישיר. הדבק קישור ישיר ל‑JPG/PNG/WebP." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const messages: any[] = [];
 
@@ -79,15 +102,38 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
+      const raw = await response.text();
+      const gatewayMessage = extractGatewayMessage(raw);
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד רגע" }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+
+      if (response.status === 400) {
+        const invalidImageMsg =
+          gatewayMessage.includes("did not return an image") ||
+          gatewayMessage.includes("image") && gatewayMessage.includes("URL");
+
+        return new Response(
+          JSON.stringify({
+            error: invalidImageMsg
+              ? "הקישור אינו תמונה ישירה. הדבק קישור ישיר לקובץ תמונה (jpg/png/webp)."
+              : "בקשה לא תקינה ליצירת תמונה. בדוק את הטקסט/הקישור ונסה שוב.",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      console.error("AI gateway error:", response.status, raw);
       return new Response(JSON.stringify({ error: "שגיאה בשירות יצירת התמונות" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
