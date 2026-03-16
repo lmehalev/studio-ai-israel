@@ -26,6 +26,7 @@ interface ScriptScene {
   speaker: string;
   spokenText: string;
   visualDescription: string;
+  backgroundAction?: string;
   subtitleText: string;
   icons: string[];
   duration: number;
