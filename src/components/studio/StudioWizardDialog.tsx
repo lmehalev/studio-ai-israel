@@ -135,7 +135,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         finalUrl = await storageService.upload(file);
       }
 
-      const cat = selectedCategory || undefined;
+      const cat = effectiveCategory || undefined;
       const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
