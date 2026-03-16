@@ -10,7 +10,6 @@ export interface ProjectRow {
   provider: string | null;
   aspect_ratio: string;
   brand_id: string | null;
-  category: string | null;
   content: Record<string, any>;
   scenes: any[];
   settings: Record<string, any>;
@@ -22,6 +21,11 @@ export interface ProjectRow {
   output_count: number;
   created_at: string;
   updated_at: string;
+}
+
+/** Helper to get category from project content JSON */
+export function getProjectCategory(p: ProjectRow): string | null {
+  return (p.content as any)?.category || null;
 }
 
 export interface ProjectOutputRow {
