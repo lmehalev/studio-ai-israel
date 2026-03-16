@@ -508,6 +508,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     toast.success('הפריט נמחק מההיסטוריה');
   };
 
+  // Need brands list for inline selector
+  const brands = brandService.getAll();
+
   // Helper: render inline brand selector for result view (when no brand selected)
   const [inlineBrandId, setInlineBrandId] = useState<string | null>(null);
   const [inlineNewBrandName, setInlineNewBrandName] = useState('');
