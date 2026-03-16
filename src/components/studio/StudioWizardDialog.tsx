@@ -361,7 +361,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 3, subtitles: 3, import_edit: 3,
+      image: 2, video_ai: 1, subtitles: 3, import_edit: 3,
     };
     return counts[selectedAction] + 1;
   };
