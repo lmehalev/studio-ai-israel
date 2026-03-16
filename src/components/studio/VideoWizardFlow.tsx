@@ -348,13 +348,22 @@ export function VideoWizardFlow({
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
-      const fullScript = generatedScript.scenes.map(s => s.spokenText).join(' ');
+      const workingScenes = generatedScript.scenes.length > 0
+        ? generatedScript.scenes
+        : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle);
+
+      if (generatedScript.scenes.length === 0) {
+        toast.info('התסריט הגיע בלי סצנות; יצרתי סצנות אוטומטיות כדי למנוע נפילה.');
+      }
+
+      const fullScript = workingScenes.map((s) => s.spokenText).join(' ');
       const narrationText = toNarrationText(fullScript);
       const selectedVoice = selectedVoices[0];
       let narrationAudioUrl: string | undefined;
-      const sceneVideoUrls: string[] = [];
       const sceneErrors: string[] = [];
-      const totalScenes = generatedScript.scenes.length;
+      const totalScenes = workingScenes.length;
+      const sceneResults: Array<{ url: string; scene: ScriptScene } | null> = Array(totalScenes).fill(null);
+      const failedSceneIndexes: number[] = [];
 
       // === Stage 1: ALWAYS generate Hebrew narration ===
       setProgressStage('מייצר קריינות בעברית...');
@@ -392,11 +401,15 @@ export function VideoWizardFlow({
       setRunwayProgress(15);
 
       // === Stage 2: Generate video clips — one per scene ===
-      const progressPerScene = 50 / totalScenes;
+      const progressPerScene = totalScenes > 0 ? 50 / totalScenes : 50;
+      const updateSceneProgress = (sceneIdx: number, progress: number) => {
+        setRunwayProgress(15 + sceneIdx * progressPerScene + (progress / 100) * progressPerScene);
+      };
 
       for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
-        const scene = generatedScript.scenes[sceneIdx];
+        const scene = workingScenes[sceneIdx];
         const sceneNum = sceneIdx + 1;
+        const sceneDuration = Math.max(5, Math.min(10, Number(scene.duration) || 10));
         setProgressStage(`מייצר סצנה ${sceneNum} מתוך ${totalScenes}: ${scene.title}...`);
 
         const scenePrompt = buildRunwayPromptForScene(scene);
@@ -416,51 +429,112 @@ export function VideoWizardFlow({
               );
               if (!talkResult?.id) throw new Error('D-ID error');
               clipUrl = await waitForDidResult(talkResult.id, (p) => {
-                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+                updateSceneProgress(sceneIdx, p);
               });
             } catch {
-              // Fallback to Runway
-              const taskData = await runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, 10);
-              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
-              });
+              // Fallback to Runway image-to-video
+              try {
+                const taskData = await runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration);
+                clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
+                  updateSceneProgress(sceneIdx, p);
+                });
+              } catch {
+                // Final fallback to simple text-to-video for first scene
+                const emergencyPrompt = toRunwayPrompt([
+                  scene.title,
+                  scene.spokenText,
+                  activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+                ].filter(Boolean).join('. '));
+                const emergencyTask = await runwayService.textToVideo(emergencyPrompt, undefined, sceneDuration);
+                clipUrl = await waitForRunwayResult(emergencyTask.taskId, (p) => {
+                  updateSceneProgress(sceneIdx, p);
+                });
+              }
             }
           } else {
             // Cinematic scene via Runway
             try {
-              const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
+              const taskData = await runwayService.textToVideo(scenePrompt, undefined, sceneDuration);
               clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+                updateSceneProgress(sceneIdx, p);
               });
             } catch {
               // Retry with simplified fallback prompt
-              const fallbackPrompt = toRunwayPrompt([
-                scene.title,
-                scene.spokenText,
-                activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
-              ].filter(Boolean).join('. '));
+              try {
+                const fallbackPrompt = toRunwayPrompt([
+                  scene.title,
+                  scene.spokenText,
+                  activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+                ].filter(Boolean).join('. '));
 
-              const fallbackTask = await runwayService.textToVideo(fallbackPrompt, undefined, 10);
-              clipUrl = await waitForRunwayResult(fallbackTask.taskId, (p) => {
-                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
-              });
+                const fallbackTask = await runwayService.textToVideo(fallbackPrompt, undefined, sceneDuration);
+                clipUrl = await waitForRunwayResult(fallbackTask.taskId, (p) => {
+                  updateSceneProgress(sceneIdx, p);
+                });
+              } catch {
+                // Final fallback with ultra-simple prompt
+                const emergencyPrompt = toRunwayPrompt(`Cinematic scene. ${scene.spokenText || scene.title}`);
+                const emergencyTask = await runwayService.textToVideo(emergencyPrompt, undefined, sceneDuration);
+                clipUrl = await waitForRunwayResult(emergencyTask.taskId, (p) => {
+                  updateSceneProgress(sceneIdx, p);
+                });
+              }
             }
           }
 
-          sceneVideoUrls.push(clipUrl);
+          sceneResults[sceneIdx] = {
+            url: clipUrl,
+            scene: { ...scene, duration: sceneDuration },
+          };
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
           const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
+          failedSceneIndexes.push(sceneIdx);
           console.error(`Scene ${sceneNum} failed:`, errMsg);
-          toast.error(`סצנה ${sceneNum} נכשלה — ממשיך...`);
-          // Skip failed scene but continue with others
+          toast.error(`סצנה ${sceneNum} נכשלה — מבצע ניסיון נוסף...`);
         }
       }
 
-      if (sceneVideoUrls.length === 0) {
-        throw new Error(`לא הצלחתי ליצור אף סצנה. ${sceneErrors[0] ? `פרטי שגיאה: ${sceneErrors[0]}` : ''}`.trim());
+      // Retry failed scenes once more with a short safe prompt
+      if (failedSceneIndexes.length > 0) {
+        setProgressStage('מנסה שוב את הסצנות שנכשלו...');
+        for (const sceneIdx of failedSceneIndexes) {
+          if (sceneResults[sceneIdx]) continue;
+          const scene = workingScenes[sceneIdx];
+          const retryPrompt = toRunwayPrompt([
+            scene.title,
+            scene.spokenText,
+            'simple cinematic realistic video scene',
+          ].filter(Boolean).join('. '));
+
+          try {
+            const retryTask = await runwayService.textToVideo(retryPrompt, undefined, 10);
+            const retryUrl = await waitForRunwayResult(retryTask.taskId, (p) => updateSceneProgress(sceneIdx, p));
+            sceneResults[sceneIdx] = {
+              url: retryUrl,
+              scene: { ...scene, duration: 10 },
+            };
+            toast.success(`סצנה ${sceneIdx + 1} הושלמה בניסיון נוסף`);
+          } catch (retryErr: any) {
+            const retryMsg = retryErr?.message || 'שגיאה לא ידועה';
+            sceneErrors.push(`סצנה ${sceneIdx + 1} (ניסיון נוסף): ${retryMsg}`);
+          }
+        }
       }
+
+      const missingSceneNumbers = sceneResults
+        .map((result, idx) => (result ? null : idx + 1))
+        .filter((value): value is number => value !== null);
+
+      if (missingSceneNumbers.length > 0) {
+        throw new Error(
+          `לא הצלחתי להשלים את כל הסצנות (${missingSceneNumbers.join(', ')}). ${sceneErrors.at(-1) || ''}`.trim()
+        );
+      }
+
+      const finalScenes = sceneResults.map((result) => result!.scene);
+      const sceneVideoUrls = sceneResults.map((result) => result!.url);
 
       // === Stage 3: Composite all clips with Shotstack ===
       setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
@@ -473,7 +547,7 @@ export function VideoWizardFlow({
         const renderResult = await composeService.render({
           videoUrl: sceneVideoUrls[0],
           videoUrls: sceneVideoUrls,
-          scenes: generatedScript.scenes.slice(0, sceneVideoUrls.length),
+          scenes: finalScenes,
           logoUrl,
           brandColors,
           audioUrl: narrationAudioUrl,
@@ -481,27 +555,36 @@ export function VideoWizardFlow({
 
         if (!renderResult?.renderId) throw new Error('Shotstack error');
 
+        const composeMaxAttempts = Math.max(240, sceneVideoUrls.length * 120);
         setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
-        for (let i = 0; i < 120; i++) {
+
+        for (let i = 0; i < composeMaxAttempts; i++) {
           const status = await composeService.checkStatus(renderResult.renderId);
           if (status.status === 'done' && status.url) {
+            const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
             setResultVideoUrl(status.url);
             setStep(4);
             setProgressStage('');
-            toast.success(`🎬 סרטון של ${sceneVideoUrls.length * 10} שניות מוכן!`);
+            toast.success(`🎬 סרטון של ${totalDuration} שניות מוכן!`);
             return;
           }
           if (status.status === 'failed') throw new Error('Shotstack render failed');
-          setRunwayProgress(70 + (i / 120) * 28);
-          await sleep(3000);
+          setRunwayProgress(70 + (i / composeMaxAttempts) * 28);
+          await sleep(COMPOSE_STATUS_POLL_MS);
         }
-        throw new Error('תם הזמן להרכבת הסרטון');
+
+        throw new Error('תם הזמן להרכבת הסרטון הסופי');
       } catch (composeErr: any) {
-        console.warn('Shotstack compositing failed, using first clip:', composeErr?.message);
-        toast.info('ההרכבה לא הצליחה — מציג את הקליפ הראשון. ניתן לשפר.');
-        setResultVideoUrl(sceneVideoUrls[0]);
-        setStep(4);
-        setProgressStage('');
+        console.warn('Shotstack compositing failed:', composeErr?.message);
+        if (sceneVideoUrls.length === 1) {
+          toast.info('שלב ההרכבה נכשל — מציג את הקליפ היחיד שנוצר.');
+          setResultVideoUrl(sceneVideoUrls[0]);
+          setStep(4);
+          setProgressStage('');
+          return;
+        }
+
+        throw new Error('כל הסצנות נוצרו, אבל שלב ההרכבה הסופית נכשל. נסה שוב בעוד רגע.');
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה ביצירת סרטון');
