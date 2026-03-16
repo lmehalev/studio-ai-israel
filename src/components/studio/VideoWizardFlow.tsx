@@ -106,6 +106,29 @@ export function VideoWizardFlow({
     onResult: (text) => setPrompt(prev => prev ? `${prev} ${text}` : text),
   });
 
+  // Website scraping
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
+  const [scrapingWebsite, setScrapingWebsite] = useState(false);
+
+  const handleScrapeWebsite = async () => {
+    if (!websiteUrl.trim()) return;
+    setScrapingWebsite(true);
+    try {
+      const result = await websiteScraperService.scrape(websiteUrl.trim());
+      setWebsiteData(result);
+      toast.success('האתר נסרק בהצלחה! המידע ישולב בסרטון');
+      // If branding has a logo, add it as first image
+      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo)) {
+        setUploadedImages(prev => [result.branding!.logo!, ...prev].slice(0, MAX_IMAGES));
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בסריקת האתר');
+    } finally {
+      setScrapingWebsite(false);
+    }
+  };
+
   const selectedAvatars = avatars.filter(a => selectedAvatarIds.includes(a.id));
   const selectedVoices = voices.filter(v => selectedVoiceIds.includes(v.id));
 
