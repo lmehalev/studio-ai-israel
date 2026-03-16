@@ -741,14 +741,14 @@ export function VideoWizardFlow({
       let newVideoUrl = sceneVideoUrls[0] || resultVideoUrl || '';
 
       // Composite with narration + subtitles + logo
-      if (generatedScript && sceneVideoUrls.length > 0) {
+      if (sceneVideoUrls.length > 0) {
         const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
         setProgressStage('מרכיב כתוביות, קריינות ולוגו...');
         try {
           const renderResult = await composeService.render({
             videoUrl: sceneVideoUrls[0],
             videoUrls: sceneVideoUrls,
-            scenes: generatedScript.scenes.slice(0, sceneVideoUrls.length),
+            scenes: workingScenes.slice(0, sceneVideoUrls.length),
             logoUrl,
             brandColors: activeBrand?.colors || [],
             audioUrl: narrationAudioUrl,
