@@ -22,128 +22,35 @@ const dedupeUrls = (urls: string[]) =>
 
 const getExpressionInstruction = (expression?: string) => {
   if (!expression || expression === "neutral") {
-    return "- Expression: neutral, natural resting face as shown in references";
+    return "neutral, natural resting face exactly as shown in references";
   }
   const map: Record<string, string> = {
-    smile: "- Expression: genuine warm smile with slight teeth showing, eyes slightly squinted naturally",
-    big_smile: "- Expression: big joyful smile, wide and open, happy eyes",
-    serious: "- Expression: serious and confident, slight intensity in eyes, closed mouth",
-    friendly: "- Expression: soft friendly smile, approachable and warm",
-    thinking: "- Expression: thoughtful look, slight head tilt, contemplative eyes",
+    smile: "genuine warm smile with slight teeth showing, eyes slightly squinted naturally",
+    big_smile: "big joyful smile, wide and open, happy eyes",
+    serious: "serious and confident, slight intensity in eyes, closed mouth",
+    friendly: "soft friendly smile, approachable and warm",
+    thinking: "thoughtful look, slight head tilt, contemplative eyes",
   };
-  return map[expression] || `- Expression: ${expression}`;
+  return map[expression] || expression;
 };
 
 const getStyleInstructions = (styleDesc: string) => {
   const s = styleDesc.toLowerCase();
 
-  if (s.includes("pixar") || s.includes("3d animated")) return `
-- Apply Pixar/3D animation rendering style ONLY
-- Keep facial geometry UNCHANGED: same jawline, nose bridge, eye spacing, ear shape
-- Keep beard line, hairline, and head proportions identical
-- Do NOT make features "cuter" or exaggerated — preserve adult proportions`;
+  if (s.includes("pixar") || s.includes("3d animated")) return `Pixar/3D animation rendering. Keep facial geometry UNCHANGED: same jawline, nose bridge, eye spacing, ear shape. Keep beard line, hairline, and head proportions identical. Do NOT make features "cuter" or exaggerated — preserve adult proportions.`;
+  if (s.includes("disney")) return `Classic Disney hand-drawn illustration style. Identity lock mandatory: exact facial structure and proportions preserved. Preserve hairline, eyebrow shape, nose profile, lips, and beard boundaries exactly. Avoid beautification, age changes, or proportion shifts.`;
+  if (s.includes("anime") || s.includes("manga")) return `Anime/manga rendering style. Keep exact skull shape, jaw width, nose proportions, and eye spacing. Preserve beard shape, hairline, and all distinguishing marks exactly. Keep identity recognizable at first glance — no generic anime face.`;
+  if (s.includes("comic") || s.includes("graphic novel")) return `Western comic book / graphic novel style. Keep face geometry and all proportions unchanged. Preserve distinguishing features: beard shape, brow thickness, nose silhouette. Do NOT add heroic exaggeration to face proportions.`;
+  if (s.includes("watercolor")) return `Watercolor texture and brushwork. Keep exact facial landmarks and proportions under the painting style. Preserve realistic facial structure — only the medium changes.`;
+  if (s.includes("pop art")) return `Bold pop-art color treatment and graphic styling. Keep the same face geometry and expression structure. Preserve facial hair, hairline, and identity markers exactly.`;
+  if (s.includes("oil painting") || s.includes("renaissance")) return `Classical oil painting / Renaissance portrait style. Keep exact facial proportions and identity. Rich color depth and traditional brushwork texture.`;
+  if (s.includes("caricature")) return `Caricature style with mild exaggeration. Keep the person CLEARLY recognizable — exaggerate proportions slightly, not drastically. Preserve key identity markers: nose shape, beard, hairline.`;
+  if (s.includes("minimalist") || s.includes("line art")) return `Clean minimalist line art / vector illustration style. Capture the person's unique features with minimal lines. Keep proportions accurate to source — identity must be obvious.`;
+  if (s.includes("retro") || s.includes("vintage")) return `Retro/vintage poster style with muted tones. Keep facial identity exact — only color palette and texture change. Warm film-grain aesthetic.`;
+  if (s.includes("cyberpunk") || s.includes("neon")) return `Cyberpunk/neon aesthetic: dramatic neon lighting, sci-fi elements. Keep facial identity EXACT — only lighting and background change. Preserve all facial features precisely.`;
+  if (s.includes("sticker") || s.includes("chibi")) return `Cute chibi/sticker style with large head proportions. Despite stylization, preserve KEY facial markers: beard shape, nose, eyes, hairline. Keep the person recognizable even in chibi form.`;
 
-  if (s.includes("disney")) return `
-- Apply classic Disney hand-drawn illustration style ONLY
-- Identity lock mandatory: exact facial structure and proportions preserved
-- Preserve hairline, eyebrow shape, nose profile, lips, and beard boundaries exactly
-- Avoid beautification, age changes, or proportion shifts`;
-
-  if (s.includes("anime") || s.includes("manga")) return `
-- Apply anime/manga rendering style ONLY
-- Keep exact skull shape, jaw width, nose proportions, and eye spacing
-- Preserve beard shape, hairline, and all distinguishing marks exactly
-- Keep identity recognizable at first glance — no generic anime face`;
-
-  if (s.includes("comic") || s.includes("graphic novel")) return `
-- Apply western comic book / graphic novel style ONLY
-- Keep face geometry and all proportions unchanged
-- Preserve distinguishing features: beard shape, brow thickness, nose silhouette
-- Do NOT add heroic exaggeration to face proportions`;
-
-  if (s.includes("watercolor")) return `
-- Apply watercolor texture and brushwork ONLY
-- Keep exact facial landmarks and proportions under the painting style
-- Preserve realistic facial structure — only the medium changes`;
-
-  if (s.includes("pop art")) return `
-- Apply bold pop-art color treatment and graphic styling ONLY
-- Keep the same face geometry and expression structure
-- Preserve facial hair, hairline, and identity markers exactly`;
-
-  if (s.includes("oil painting") || s.includes("renaissance")) return `
-- Apply classical oil painting / Renaissance portrait style ONLY
-- Keep exact facial proportions and identity
-- Rich color depth and traditional brushwork texture`;
-
-  if (s.includes("caricature")) return `
-- Apply caricature style with mild exaggeration ONLY
-- Keep the person CLEARLY recognizable — exaggerate proportions slightly, not drastically
-- Preserve key identity markers: nose shape, beard, hairline`;
-
-  if (s.includes("minimalist") || s.includes("line art")) return `
-- Apply clean minimalist line art / vector illustration style
-- Capture the person's unique features with minimal lines
-- Keep proportions accurate to source — identity must be obvious`;
-
-  if (s.includes("retro") || s.includes("vintage")) return `
-- Apply retro/vintage poster style with muted tones
-- Keep facial identity exact — only color palette and texture change
-- Warm film-grain aesthetic`;
-
-  if (s.includes("cyberpunk") || s.includes("neon")) return `
-- Apply cyberpunk/neon aesthetic: dramatic neon lighting, sci-fi elements
-- Keep facial identity EXACT — only lighting and background change
-- Preserve all facial features precisely`;
-
-  if (s.includes("sticker") || s.includes("chibi")) return `
-- Apply cute chibi/sticker style with large head proportions
-- Despite stylization, preserve KEY facial markers: beard shape, nose, eyes, hairline
-- Keep the person recognizable even in chibi form`;
-
-  // Default: professional/realistic
-  return `
-- Generate a clean, well-lit professional portrait
-- Face centered and clearly visible, neutral/gradient background
-- Preserve photorealistic identity with no beautification or AI smoothing`;
-};
-
-const buildSystemPrompt = (styleDesc: string, strictIdentity: boolean, hasBaseAvatar: boolean, expression?: string) => {
-  const styleInstructions = getStyleInstructions(styleDesc);
-  const expressionInstruction = getExpressionInstruction(expression);
-
-  const baseAnchor = hasBaseAvatar
-    ? "\n- The base avatar image is the PRIMARY IDENTITY ANCHOR — match it exactly, change style only"
-    : "";
-
-  return `You are an elite identity-preserving portrait generator. Your #1 priority is EXACT facial likeness.
-
-ABSOLUTE IDENTITY PRESERVATION RULES (NON-NEGOTIABLE):
-- Study ALL reference images carefully before generating
-- Map the EXACT craniofacial geometry: forehead height & shape, cheekbone width & angle, jaw shape & chin
-- Map EXACT eyes: shape, color, spacing, depth, brow thickness and arch position
-- Map EXACT nose: bridge width, tip shape, nostril width, length, profile angle
-- Map EXACT mouth: lip width, upper/lower lip thickness, philtrum shape
-- Map EXACT ears: size, angle, lobe shape
-- Map EXACT skin: tone, texture, any marks, moles, or wrinkles visible
-- Map EXACT hair: color, texture, density, hairline shape, part direction
-- Map EXACT facial hair: beard density, mustache shape, sideburn length, neckline
-- Preserve ALL accessories: glasses, head coverings (kippa/hat), earrings, etc.
-- Do NOT beautify, smooth, slim, age, or alter ANY facial proportions
-- The generated image must be INDISTINGUISHABLE in identity from the reference photos
-- A friend or family member MUST be able to immediately recognize this as the same person
-${baseAnchor}
-
-${expressionInstruction}
-
-STYLE DIRECTIVE:
-- Requested style: ${styleDesc}
-${styleInstructions}
-
-OUTPUT:
-- Return one final portrait image
-- If style is artistic, change ONLY the rendering medium — face geometry stays pixel-perfect to source
-- Do not explain; generate the image directly.`;
+  return `Clean, well-lit professional portrait. Face centered and clearly visible, neutral/gradient background. Preserve photorealistic identity with no beautification or AI smoothing.`;
 };
 
 const extractGeneratedImage = (choice: any): { imageUrl: string | null; text: string } => {
@@ -218,7 +125,6 @@ serve(async (req) => {
     const body = (await req.json()) as GenerateAvatarRequest;
     const styleDesc = (body.style || "professional headshot").trim();
     const expression = body.expression || "neutral";
-    const strictIdentity = body.strictIdentity !== false;
 
     const referenceUrls = dedupeUrls([
       ...(body.baseAvatarUrl ? [body.baseAvatarUrl] : []),
@@ -233,27 +139,112 @@ serve(async (req) => {
     }
 
     const hasBaseAvatar = Boolean(body.baseAvatarUrl);
-    const systemPrompt = buildSystemPrompt(styleDesc, strictIdentity, hasBaseAvatar, expression);
 
     const imageContentParts = referenceUrls.map((url) => ({
       type: "image_url" as const,
       image_url: { url },
     }));
 
-    const userPrompt = `I am providing ${referenceUrls.length} reference photo(s) of the SAME REAL person taken from different angles.
+    // =====================================================
+    // PASS 1: Deep face analysis — extract precise identity
+    // =====================================================
+    console.log("Pass 1: Analyzing face from", referenceUrls.length, "reference images...");
 
-CRITICAL INSTRUCTIONS:
-1. Analyze ALL ${referenceUrls.length} photos to build a complete 3D mental model of this person's face
-2. Cross-reference every facial feature across all angles to ensure accuracy
-3. The output MUST look like a real photo of THIS EXACT person — not someone who "looks similar"
-4. Pay special attention to: nose shape from front AND side, exact beard density and boundaries, eye shape and color, skin tone, hairline
+    const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        temperature: 0.05,
+        messages: [
+          {
+            role: "system",
+            content: `You are a forensic facial analysis expert. Your job is to produce an EXTREMELY detailed facial description from reference photos. This description will be used to generate an identical portrait — so precision is critical.
 
-${hasBaseAvatar ? "The FIRST image is the base avatar — this is the PRIMARY identity reference. Match it exactly." : ""}
+Analyze ALL provided photos and cross-reference features across angles. Write a single comprehensive report covering EVERY detail below. Be specific with measurements (relative proportions), colors (exact shade), and shapes.`
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analyze these ${referenceUrls.length} photos of the SAME person. Produce an exhaustive facial identity report:
 
-Style: ${styleDesc}
-Expression: ${expression === "neutral" ? "natural resting face" : expression}
+1. FACE SHAPE & STRUCTURE: Overall shape (oval/round/square/heart/oblong), forehead height & width, cheekbone prominence & width, jawline angle & width, chin shape & size, face length-to-width ratio
+2. EYES: Shape (almond/round/hooded/deep-set), size, color (exact shade), spacing (close/average/wide), brow-to-eye distance, upper eyelid visibility, under-eye features, lash density
+3. EYEBROWS: Thickness, arch type (flat/soft/high), color, length, starting point relative to nose, tail shape
+4. NOSE: Bridge width (narrow/medium/wide), bridge profile (straight/convex/concave), tip shape (pointed/bulbous/upturned), nostril width & shape, nose length relative to face, any asymmetry
+5. MOUTH & LIPS: Width, upper lip thickness vs lower lip, cupid's bow shape, lip color, mouth corners direction
+6. SKIN: Exact tone/shade, texture (smooth/textured), any visible marks/moles/scars (describe location precisely), wrinkle patterns
+7. FACIAL HAIR: Beard density (patchy/medium/full), color, mustache style, cheek line shape, neckline boundary, stubble length, any gray hairs
+8. HAIR: Color (exact shade), texture (straight/wavy/curly), density, hairline shape (straight/M-shaped/receding), parting side, length on top vs sides
+9. EARS: Size relative to head, angle (flat/protruding), lobe type (attached/free)
+10. DISTINGUISHING FEATURES: Anything unique — dimples, facial asymmetry, distinctive marks, expression lines, head shape quirks
+11. APPROXIMATE AGE & ETHNICITY markers for accurate skin tone rendering
+12. ACCESSORIES: Glasses, earrings, head coverings, etc.
 
-Generate the portrait now.`;
+Be extremely precise. This report will be used to generate an IDENTICAL portrait of this person.`
+              },
+              ...imageContentParts,
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!analysisResponse.ok) {
+      console.error("Face analysis failed:", analysisResponse.status);
+      // Fall back to single-pass if analysis fails
+    }
+
+    let faceDescription = "";
+    if (analysisResponse.ok) {
+      const analysisData = await analysisResponse.json();
+      faceDescription = analysisData.choices?.[0]?.message?.content || "";
+      console.log("Face analysis complete, length:", faceDescription.length);
+    }
+
+    // =====================================================
+    // PASS 2: Generate portrait using analysis + references
+    // =====================================================
+    console.log("Pass 2: Generating portrait with style:", styleDesc);
+
+    const styleInstructions = getStyleInstructions(styleDesc);
+    const expressionText = getExpressionInstruction(expression);
+
+    const generationSystemPrompt = `You are an elite identity-preserving portrait generator. You have been given:
+1. A detailed forensic facial analysis of a real person
+2. ${referenceUrls.length} reference photo(s) of that same person
+
+Your ABSOLUTE #1 PRIORITY is producing an image where the person is IMMEDIATELY recognizable as the EXACT same person in the references. A family member must look at your output and say "that's definitely them."
+
+IDENTITY RULES (NON-NEGOTIABLE):
+- Every facial measurement, proportion, and feature MUST match the analysis and reference photos exactly
+- Do NOT beautify, smooth skin, slim the face, change skin tone, alter nose shape, or modify ANY feature
+- Facial hair must match EXACTLY: same density, same coverage area, same color
+- Hairline must be pixel-perfect to references
+- Any marks, moles, or scars visible in references MUST appear in the output
+- Eye color, shape, and spacing must be identical
+- If the person has asymmetric features, PRESERVE the asymmetry
+${hasBaseAvatar ? "\n- The FIRST reference image is the primary identity anchor — match it with highest priority" : ""}
+
+STYLE: ${styleInstructions}
+EXPRESSION: ${expressionText}
+
+Generate ONE portrait image. Change ONLY the artistic style/medium — the face underneath must be an exact copy of this person's real face.`;
+
+    const generationUserContent: any[] = [
+      {
+        type: "text",
+        text: `${faceDescription ? `DETAILED FACE ANALYSIS OF THIS PERSON:\n${faceDescription}\n\n` : ""}Here are ${referenceUrls.length} reference photos. Generate a portrait in "${styleDesc}" style with ${expressionText} expression.
+
+REMINDER: The output must look like THIS EXACT person — not a similar-looking person. Match every detail from the analysis and photos: nose shape, beard pattern, eye shape, skin tone, hairline, facial proportions. Generate the image now.`
+      },
+      ...imageContentParts,
+    ];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -264,16 +255,10 @@ Generate the portrait now.`;
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         modalities: ["image", "text"],
-        temperature: 0.02,
+        temperature: 0.01,
         messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              ...imageContentParts,
-            ],
-          },
+          { role: "system", content: generationSystemPrompt },
+          { role: "user", content: generationUserContent },
         ],
       }),
     });
