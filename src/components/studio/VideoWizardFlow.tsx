@@ -378,19 +378,23 @@ export function VideoWizardFlow({
       const failedSceneIndexes: number[] = [];
 
       let forceDidOnlyMode = false;
-      if (avatarImage) {
-        try {
-          const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
-          const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
-          const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
+      try {
+        const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
+        const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
+        const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
 
-          if (!runwayCanGenerate && didCanGenerate) {
+        if (!runwayCanGenerate) {
+          if (avatarImage && didCanGenerate) {
             forceDidOnlyMode = true;
             toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול אווטאר כדי לסיים את הסרטון.');
+          } else {
+            throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו. יש לחדש קרדיטים ואז לנסות שוב.');
           }
-        } catch {
-          // If credit check fails, continue with normal flow.
         }
+      } catch (creditsErr: any) {
+        const msg = creditsErr?.message || '';
+        if (msg.includes('אין קרדיטים')) throw creditsErr;
+        // If credit check fails, continue with normal flow.
       }
 
       const shouldGenerateNarration = !forceDidOnlyMode;
