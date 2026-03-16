@@ -54,7 +54,7 @@ serve(async (req) => {
         },
       };
 
-      // If ElevenLabs voice is provided (longer IDs)
+      // If ElevenLabs voice is provided (long IDs)
       if (voiceId && voiceId.length > 15) {
         body.script.provider = {
           type: "elevenlabs",

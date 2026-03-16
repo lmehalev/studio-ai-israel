@@ -139,7 +139,17 @@ export default function AvatarsManagePage() {
     if (!previewUrl) return;
     setSaving(true);
     try {
-      const saved = await avatarDbService.save(name, previewUrl, style, mergedReferencePreview);
+      let finalImageUrl = previewUrl;
+
+      // Ensure avatar is saved as a public image URL (not data URL)
+      if (finalImageUrl.startsWith('data:image/')) {
+        const res = await fetch(finalImageUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `avatar-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        finalImageUrl = await storageService.upload(file);
+      }
+
+      const saved = await avatarDbService.save(name, finalImageUrl, style, mergedReferencePreview);
       setAvatars((prev) => [saved, ...prev]);
       resetForm();
       toast.success('האווטאר נשמר בהצלחה!');
