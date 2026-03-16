@@ -104,10 +104,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  const brandDepartments = activeBrand?.departments || [];
 
   const handleSaveToProject = async () => {
     if (!activeBrandId || !activeBrand) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
+      return;
+    }
+    if (brandDepartments.length > 0 && !selectedCategory) {
+      toast.error('יש לבחור קטגוריה לפני השמירה');
       return;
     }
     const url = result?.imageUrl || result?.videoUrl;
@@ -115,16 +122,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     setSavingOutput(true);
     try {
-      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name);
+      const cat = selectedCategory || undefined;
+      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
-        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}`,
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
         description: prompt || undefined,
         video_url: isVideo ? url : null,
         thumbnail_url: !isVideo ? url : null,
         prompt: prompt || null,
       });
-      toast.success(`נשמר בפרויקט "${activeBrand.name}"!`);
+      toast.success(`נשמר בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"!`);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {

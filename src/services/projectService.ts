@@ -227,14 +227,21 @@ export const projectService = {
     });
   },
 
-  async findOrCreateByBrand(brandId: string, brandName: string): Promise<ProjectRow> {
-    // Try to find existing project for this brand
-    const existing = await query<ProjectRow[]>('projects', {
+  async findOrCreateByBrand(brandId: string, brandName: string, category?: string): Promise<ProjectRow> {
+    // Try to find existing project for this brand + category
+    const all = await query<ProjectRow[]>('projects', {
       filter: { brand_id: brandId },
       order: { column: 'created_at', ascending: false },
     });
-    if (existing.length > 0) return existing[0];
-    // Create new project for this brand
-    return projectService.create({ name: brandName, brand_id: brandId });
+    const match = category
+      ? all.find(p => p.category === category)
+      : all[0];
+    if (match) return match;
+    // Create new project for this brand + category
+    return projectService.create({
+      name: category ? `${brandName} — ${category}` : brandName,
+      brand_id: brandId,
+      category: category || null,
+    });
   },
 };
