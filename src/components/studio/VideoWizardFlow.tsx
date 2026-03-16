@@ -393,14 +393,16 @@ export function VideoWizardFlow({
           sceneVideoUrls.push(clipUrl);
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
-          console.error(`Scene ${sceneNum} failed:`, sceneErr?.message);
+          const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
+          sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
+          console.error(`Scene ${sceneNum} failed:`, errMsg);
           toast.error(`סצנה ${sceneNum} נכשלה — ממשיך...`);
           // Skip failed scene but continue with others
         }
       }
 
       if (sceneVideoUrls.length === 0) {
-        throw new Error('לא הצלחתי ליצור אף סצנה');
+        throw new Error(`לא הצלחתי ליצור אף סצנה. ${sceneErrors[0] ? `פרטי שגיאה: ${sceneErrors[0]}` : ''}`.trim());
       }
 
       // === Stage 3: Composite all clips with Shotstack ===
