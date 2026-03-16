@@ -15,6 +15,7 @@ import {
   avatarDbService,
   type SubtitleSegment, type Brand,
 } from '@/services/creativeService';
+import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
