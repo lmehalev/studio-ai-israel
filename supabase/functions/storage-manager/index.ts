@@ -17,6 +17,13 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+      'video/mp4', 'video/webm', 'video/quicktime',
+      'audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/mp4',
+      'text/plain', 'application/x-subrip',
+    ];
+
     // Check if bucket exists
     const { data: buckets } = await supabase.storage.listBuckets();
     const exists = buckets?.some(b => b.id === 'media');
@@ -24,15 +31,17 @@ serve(async (req) => {
     if (!exists) {
       const { error } = await supabase.storage.createBucket('media', {
         public: true,
-        fileSizeLimit: 52428800, // 50MB
-        allowedMimeTypes: [
-          'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-          'video/mp4', 'video/webm', 'video/quicktime',
-          'audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/x-m4a',
-          'text/plain', 'application/x-subrip',
-        ],
+        fileSizeLimit: 52428800,
+        allowedMimeTypes,
       });
       if (error) throw error;
+    } else {
+      // Update bucket to ensure mime types are current
+      await supabase.storage.updateBucket('media', {
+        public: true,
+        fileSizeLimit: 52428800,
+        allowedMimeTypes,
+      });
     }
 
     const { action, fileName, fileType, fileBase64 } = await req.json();
