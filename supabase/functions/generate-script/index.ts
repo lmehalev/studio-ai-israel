@@ -57,22 +57,77 @@ const escapeControlCharsInJsonStrings = (input: string): string => {
   return output;
 };
 
+const stripCodeFenceMarkers = (value: string): string =>
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
+const extractFirstJsonObject = (input: string): string | null => {
+  const text = stripCodeFenceMarkers(input);
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+};
+
 const parseModelJsonContent = (content: string) => {
+  const raw = content.trim();
+  const deFenced = stripCodeFenceMarkers(raw);
   const candidates: string[] = [];
+  const seen = new Set<string>();
 
-  const fencedMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) candidates.push(fencedMatch[1].trim());
+  const addCandidate = (value?: string | null) => {
+    const next = value?.trim();
+    if (!next || seen.has(next)) return;
+    seen.add(next);
+    candidates.push(next);
+  };
 
-  const braceMatch = content.match(/\{[\s\S]*\}/);
-  if (braceMatch?.[0]) candidates.push(braceMatch[0].trim());
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const braceMatch = deFenced.match(/\{[\s\S]*\}/);
 
-  candidates.push(content.trim());
+  addCandidate(deFenced);
+  addCandidate(fencedMatch?.[1]);
+  addCandidate(extractFirstJsonObject(raw));
+  addCandidate(braceMatch?.[0]);
+  addCandidate(raw);
 
   let lastErr: unknown = null;
 
   for (const candidate of candidates) {
-    if (!candidate) continue;
-
     try {
       return JSON.parse(candidate);
     } catch (firstErr) {
@@ -87,6 +142,66 @@ const parseModelJsonContent = (content: string) => {
   }
 
   throw lastErr instanceof Error ? lastErr : new Error("Failed to parse AI JSON");
+};
+
+const splitToSentenceChunks = (input: string): string[] => {
+  const sentences = input
+    .split(/\n+|(?<=[.!?！？。])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) return [];
+
+  const targetScenes = Math.min(6, Math.max(3, Math.ceil(sentences.length / 2)));
+  const chunkSize = Math.max(1, Math.ceil(sentences.length / targetScenes));
+  const chunks: string[] = [];
+
+  for (let i = 0; i < sentences.length && chunks.length < 6; i += chunkSize) {
+    chunks.push(sentences.slice(i, i + chunkSize).join(" "));
+  }
+
+  return chunks;
+};
+
+const buildFallbackScenes = (sourceText: string, selectedStyle?: string) => {
+  const chunks = splitToSentenceChunks(sourceText);
+  const baseChunks = chunks.length > 0
+    ? chunks
+    : [
+        "פותחים בהוק ברור שמציג את הערך המרכזי.",
+        "מציגים את הפתרון ואת היתרונות המרכזיים ללקוח.",
+        "מסיימים עם קריאה לפעולה ברורה וממוקדת.",
+      ];
+
+  return baseChunks.slice(0, 6).map((text, idx) => ({
+    id: idx + 1,
+    title: `סצנה ${idx + 1}`,
+    speaker: "קריין",
+    spokenText: text,
+    visualDescription: "סצנה קולנועית מותאמת לנושא, עם תאורה מקצועית, עומק שדה ותנועה טבעית בפריים.",
+    backgroundAction: "ברקע יש תנועה דינמית של אנשים/אלמנטים סביבתיים שמוסיפה חיים ואותנטיות.",
+    cameraDirection: "פתיחה ב-Wide shot ולאחריה Dolly-in עדין למוקד הסצנה",
+    environment: "סביבה ריאליסטית מתאימה לעולם התוכן של הסרטון",
+    characters: "דמות מרכזית ודמויות משנה רלוונטיות עם שפת גוף טבעית",
+    subtitleText: text.slice(0, 64),
+    icons: ["🎬", "✨"],
+    duration: 10,
+    transition: "fade",
+    videoStyle: selectedStyle || "cinematic",
+  }));
+};
+
+const buildFallbackScriptPayload = (rawContent: string, promptText: string, selectedStyle?: string) => {
+  const baseText = stripCodeFenceMarkers(rawContent).trim() || promptText.trim();
+  const scenes = buildFallbackScenes(baseText || promptText, selectedStyle);
+
+  return {
+    title: "תסריט וידאו",
+    script: scenes.map((scene) => scene.spokenText).join(" "),
+    scenes,
+    duration: scenes.length * 10,
+    style: { cinematicStyle: selectedStyle || "cinematic" },
+  };
 };
 
 serve(async (req) => {
