@@ -62,6 +62,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     onResult: (text) => setPrompt(prev => prev ? `${prev} ${text}` : text),
   });
 
+  const MAX_REF_IMAGES = 7;
+
   // Image generation - reference images & iterative editing
   const [imageRefPhotos, setImageRefPhotos] = useState<string[]>([]);
   const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string }[]>([]);
