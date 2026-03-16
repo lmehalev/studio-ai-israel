@@ -15,7 +15,7 @@ export const studioActions: ActionItem[] = [
   { id: 'image', label: 'צור תמונה', desc: 'יצירת תמונה שיווקית מתיאור טקסט', icon: ImageIcon, color: 'from-amber-500/20 to-orange-500/20 border-amber-500/30' },
   { id: 'video_ai', label: 'וידאו AI', desc: 'צור סרטון מתמונה או טקסט', icon: Video, color: 'from-green-500/20 to-emerald-500/20 border-green-500/30' },
   { id: 'subtitles', label: 'כתוביות לסרטון', desc: 'תמלול אוטומטי + עריכת כתוביות', icon: Subtitles, color: 'from-teal-500/20 to-cyan-500/20 border-teal-500/30' },
-  { id: 'import_edit', label: 'ייבוא ועריכה', desc: 'שים קישור לתמונה או סרטון וערוך', icon: Link2, color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30' },
+  { id: 'import_edit', label: 'ייבוא ועריכה', desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך', icon: Link2, color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30' },
 ];
 
 interface StudioActionCardsProps {

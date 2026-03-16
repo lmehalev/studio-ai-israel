@@ -28,7 +28,7 @@ const actionOptions: { id: StudioAction; label: string; icon: typeof ImageIcon; 
   { id: 'image', label: 'צור תמונה', icon: ImageIcon, desc: 'יצירת תמונה שיווקית מתיאור טקסט' },
   { id: 'video_ai', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט' },
   { id: 'subtitles', label: 'כתוביות לסרטון', icon: Subtitles, desc: 'תמלול אוטומטי + עריכת כתוביות' },
-  { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'שים קישור לתמונה או סרטון וערוך' },
+  { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך' },
 ];
 
 const subtitleFontOptions = [
