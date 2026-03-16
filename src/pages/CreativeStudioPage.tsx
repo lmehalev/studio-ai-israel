@@ -14,10 +14,12 @@ import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
 export default function CreativeStudioPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [searchParams] = useSearchParams();
 
   // Brand management
   const [brands, setBrands] = useState<Brand[]>([]);
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
+  const [activeSubActivity, setActiveSubActivity] = useState('');
   const [brandDialogOpen, setBrandDialogOpen] = useState(false);
   const [newBrand, setNewBrand] = useState<Partial<Brand>>({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
   const [newDepartment, setNewDepartment] = useState('');
