@@ -749,7 +749,7 @@ export function VideoWizardFlow({
             logoUrl,
             brandColors: activeBrand?.colors || [],
             audioUrl: narrationAudioUrl,
-          } as any);
+          });
           if (renderResult?.renderId) {
             for (let i = 0; i < 90; i++) {
               const status = await composeService.checkStatus(renderResult.renderId, (renderResult as any).shotstackEnv);

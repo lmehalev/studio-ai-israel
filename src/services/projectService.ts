@@ -234,6 +234,7 @@ export const projectService = {
       thumbnail_url: output.thumbnail_url || null,
       prompt: output.prompt || null,
       provider: output.provider || null,
+      script: output.script || null,
     });
     // Increment output_count on the project
     try {

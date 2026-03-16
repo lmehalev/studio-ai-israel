@@ -505,10 +505,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       const renderId = renderResult.renderId;
       const shotstackEnv = renderResult.shotstackEnv;
 
-      if (error || data?.error) throw new Error(data?.error || error?.message);
-
-      const renderId = data.renderId;
-      const shotstackEnv = data.shotstackEnv as 'production' | 'stage' | undefined;
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה');
 
       setRenderProgress(40);
@@ -520,16 +516,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         await new Promise(r => setTimeout(r, 5000));
         attempts++;
 
-        const { data: statusData } = await supabase.functions.invoke('compose-video', {
-          body: { action: 'check_status', renderId, shotstackEnv },
-        });
+        const status = await composeService.checkStatus(renderId, shotstackEnv);
 
-        if (statusData?.status === 'done' && statusData?.url) {
-          setRenderedVideoUrl(statusData.url);
+        if (status.status === 'done' && status.url) {
+          setRenderedVideoUrl(status.url);
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
           break;
-        } else if (statusData?.status === 'failed') {
+        } else if (status.status === 'failed') {
           throw new Error('ההרכבה נכשלה');
         }
 

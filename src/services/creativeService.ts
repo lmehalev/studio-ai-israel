@@ -199,10 +199,15 @@ export const voiceCloneService = {
 export const composeService = {
   render: async (params: {
     videoUrl: string;
+    videoUrls?: string[];
     scenes: any[];
     logoUrl?: string;
     brandColors?: string[];
     audioUrl?: string;
+    subtitleStyle?: Record<string, any>;
+    stickers?: any[];
+    subtitleSegments?: { start: number; end: number; text: string }[];
+    totalDuration?: number;
   }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage' }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
