@@ -56,6 +56,9 @@ interface VideoWizardFlowProps {
   onClose: () => void;
 }
 
+const RUNWAY_PROMPT_MAX_CHARS = 900;
+const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
+
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
   buildPrompt, initialCategory, brandDepartments,
