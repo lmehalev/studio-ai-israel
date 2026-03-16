@@ -8,6 +8,118 @@ const corsHeaders = {
 
 const SHOTSTACK_API_URL = "https://api.shotstack.io/edit/v1";
 
+interface SubtitleSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface SubtitleStyle {
+  font?: string;
+  fontSize?: number;
+  color?: string;
+  bgColor?: string;
+  borderRadius?: number;
+  shadow?: string;
+  fontWeight?: number;
+  padding?: string;
+}
+
+interface StickerItem {
+  emoji: string;
+  position: string;
+  startTime: number;
+  duration: number;
+  scale?: number;
+}
+
+function buildSubtitleClips(
+  segments: SubtitleSegment[],
+  style: SubtitleStyle
+): any[] {
+  const font = style.font || "'Noto Sans Hebrew', sans-serif";
+  const fontSize = style.fontSize || 28;
+  const color = style.color || "#FFFFFF";
+  const bgColor = style.bgColor || "rgba(0,0,0,0.7)";
+  const borderRadius = style.borderRadius ?? 12;
+  const shadow = style.shadow || "0 2px 12px rgba(0,0,0,0.8)";
+  const fontWeight = style.fontWeight || 700;
+  const padding = style.padding || "12px 28px";
+
+  return segments
+    .filter((seg) => seg.text && seg.text.trim())
+    .map((seg) => ({
+      asset: {
+        type: "html",
+        html: `<div style="
+          font-family: ${font};
+          direction: rtl;
+          text-align: center;
+          padding: ${padding};
+          background: ${bgColor};
+          border-radius: ${borderRadius}px;
+          color: ${color};
+          font-size: ${fontSize}px;
+          font-weight: ${fontWeight};
+          line-height: 1.6;
+          text-shadow: ${shadow};
+          letter-spacing: 0.02em;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        ">${seg.text}</div>`,
+        width: 900,
+        height: 150,
+      },
+      start: seg.start,
+      length: Math.max(0.5, seg.end - seg.start),
+      position: "bottom",
+      offset: { y: 0.06 },
+      transition: {
+        in: "fade",
+        out: "fade",
+      },
+    }));
+}
+
+function buildStickerClips(stickers: StickerItem[]): any[] {
+  return stickers.map((s) => ({
+    asset: {
+      type: "html",
+      html: `<div style="font-size:64px;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4));">${s.emoji}</div>`,
+      width: 100,
+      height: 100,
+    },
+    start: s.startTime,
+    length: Math.max(0.5, s.duration),
+    position: s.position || "topRight",
+    offset: {
+      x: s.position?.includes("Right") ? -0.05 : s.position?.includes("Left") ? 0.05 : 0,
+      y: s.position?.includes("top") ? -0.05 : s.position?.includes("bottom") ? 0.05 : 0,
+    },
+    scale: s.scale || 0.8,
+    transition: {
+      in: "zoom",
+      out: "fade",
+    },
+  }));
+}
+
+function buildLogoClip(logoUrl: string, totalDuration: number): any {
+  return {
+    clips: [
+      {
+        asset: { type: "image", src: logoUrl },
+        start: 0,
+        length: totalDuration,
+        position: "topRight",
+        offset: { x: -0.03, y: -0.03 },
+        scale: 0.12,
+        opacity: 0.9,
+      },
+    ],
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -26,11 +138,21 @@ serve(async (req) => {
 
     // ====== Render composited video ======
     if (action === "render") {
-      // Support both single videoUrl and multiple videoUrls (one per scene)
-      const { videoUrl, videoUrls, scenes, logoUrl, brandColors, audioUrl } = params;
+      const {
+        videoUrl,
+        videoUrls,
+        scenes,
+        logoUrl,
+        brandColors,
+        audioUrl,
+        subtitleStyle,
+        stickers,
+        subtitleSegments,
+        totalDuration: requestedDuration,
+      } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
-      
+
       if (clipUrls.length === 0) {
         return new Response(JSON.stringify({ error: "חסר קישור לסרטון בסיס" }), {
           status: 400,
@@ -38,168 +160,124 @@ serve(async (req) => {
         });
       }
 
-      const totalDuration = (scenes || []).reduce(
+      // Calculate duration
+      const sceneDuration = (scenes || []).reduce(
         (sum: number, s: any) => sum + (s.duration || 10),
         0
       );
-      const safeDuration = Math.max(totalDuration, clipUrls.length * 10);
+      const totalDuration = requestedDuration || Math.max(sceneDuration, clipUrls.length * 10) || 30;
 
       const tracks: any[] = [];
 
-      // === Track: Logo overlay (top-right corner) ===
+      // === Logo overlay track ===
       if (logoUrl) {
-        tracks.push({
-          clips: [
-            {
-              asset: { type: "image", src: logoUrl },
-              start: 0,
-              length: safeDuration,
-              position: "topRight",
-              offset: { x: -0.03, y: -0.03 },
-              scale: 0.12,
-              opacity: 0.9,
-            },
-          ],
-        });
+        tracks.push(buildLogoClip(logoUrl, totalDuration));
       }
 
-      // === Track: Scene text overlays (subtitles + icons + scene titles) ===
-      const textClips: any[] = [];
-      let cumulativeTime = 0;
+      // === Sticker overlays track ===
+      if (stickers && stickers.length > 0) {
+        tracks.push({ clips: buildStickerClips(stickers) });
+      }
 
-      for (const scene of scenes || []) {
-        const dur = scene.duration || 10;
-        const icons = (scene.icons || []).join(" ");
-        const subtitle =
-          scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
-
-        // === Cinematic subtitle bar (bottom) ===
-        if (subtitle) {
-          textClips.push({
-            asset: {
-              type: "html",
-              html: `<div style="
-                font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
-                direction: rtl;
-                text-align: center;
-                padding: 16px 32px;
-                background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.85) 100%);
-                border-radius: 16px;
-                color: white;
-                font-size: 28px;
-                font-weight: 700;
-                line-height: 1.6;
-                text-shadow: 0 2px 12px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.4);
-                letter-spacing: 0.02em;
-              ">${icons ? `<span style="font-size:36px;margin-left:12px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));">${icons}</span> ` : ""}${subtitle}</div>`,
-              width: 900,
-              height: 150,
-            },
-            start: cumulativeTime + 0.3,
-            length: dur - 0.5,
-            position: "bottom",
-            offset: { y: 0.05 },
-            transition: {
-              in: "slideUp",
-              out: "fade",
-            },
-          });
+      // === Subtitle track ===
+      // Priority: use subtitleSegments (per-segment timing) if available
+      if (subtitleSegments && subtitleSegments.length > 0) {
+        const subClips = buildSubtitleClips(subtitleSegments, subtitleStyle || {});
+        if (subClips.length > 0) {
+          tracks.push({ clips: subClips });
         }
+      } else if (scenes && scenes.length > 0) {
+        // Fallback: build from scenes (legacy behavior)
+        const textClips: any[] = [];
+        let cumulativeTime = 0;
 
-        // === Scene title badge (top, cinematic entry) ===
-        if (scene.title && dur > 2) {
-          textClips.push({
-            asset: {
-              type: "html",
-              html: `<div style="
-                font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
-                direction: rtl;
-                text-align: center;
-                padding: 10px 28px;
-                background: linear-gradient(135deg, rgba(255,200,50,0.95), rgba(255,140,0,0.95));
-                border-radius: 12px;
-                color: #1a1a1a;
-                font-size: 22px;
-                font-weight: 800;
-                box-shadow: 0 6px 20px rgba(255,160,0,0.5), 0 0 40px rgba(255,160,0,0.2);
-                letter-spacing: 0.03em;
-              ">${scene.title}</div>`,
-              width: 520,
-              height: 60,
-            },
-            start: cumulativeTime + 0.15,
-            length: Math.min(dur - 0.3, 3),
-            position: "top",
-            offset: { y: -0.05 },
-            transition: {
-              in: "slideRight",
-              out: "slideLeft",
-            },
-          });
-        }
+        for (const scene of scenes) {
+          const dur = scene.duration || 10;
+          const subtitle = scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
 
-        // === Floating icons with bounce-in effect ===
-        if (scene.icons && scene.icons.length > 0) {
-          const iconPositions = ["left", "right", "topLeft", "topRight"];
-          scene.icons.slice(0, 4).forEach((icon: string, i: number) => {
+          if (subtitle) {
+            const style = subtitleStyle || {};
+            const subClips = buildSubtitleClips(
+              [{ start: cumulativeTime + 0.3, end: cumulativeTime + dur - 0.3, text: subtitle }],
+              style
+            );
+            textClips.push(...subClips);
+          }
+
+          // Scene title badge
+          if (scene.title && dur > 2) {
             textClips.push({
               asset: {
                 type: "html",
-                html: `<div style="font-size:56px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.4));">${icon}</div>`,
-                width: 90,
-                height: 90,
+                html: `<div style="
+                  font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
+                  direction: rtl;
+                  text-align: center;
+                  padding: 10px 28px;
+                  background: linear-gradient(135deg, rgba(255,200,50,0.95), rgba(255,140,0,0.95));
+                  border-radius: 12px;
+                  color: #1a1a1a;
+                  font-size: 22px;
+                  font-weight: 800;
+                  box-shadow: 0 6px 20px rgba(255,160,0,0.5);
+                  letter-spacing: 0.03em;
+                ">${scene.title}</div>`,
+                width: 520,
+                height: 60,
               },
-              start: cumulativeTime + 0.8 + i * 0.5,
-              length: Math.min(dur - 1.5, 2.5),
-              position: iconPositions[i % iconPositions.length],
-              offset: { x: i % 2 === 0 ? 0.1 : -0.1, y: -0.18 },
-              scale: 0.85,
-              transition: {
-                in: "zoom",
-                out: "fade",
-              },
+              start: cumulativeTime + 0.15,
+              length: Math.min(dur - 0.3, 3),
+              position: "top",
+              offset: { y: -0.05 },
+              transition: { in: "slideRight", out: "slideLeft" },
             });
-          });
+          }
+
+          // Floating icons
+          if (scene.icons && scene.icons.length > 0) {
+            const iconPositions = ["left", "right", "topLeft", "topRight"];
+            scene.icons.slice(0, 4).forEach((icon: string, i: number) => {
+              textClips.push({
+                asset: {
+                  type: "html",
+                  html: `<div style="font-size:56px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.4));">${icon}</div>`,
+                  width: 90,
+                  height: 90,
+                },
+                start: cumulativeTime + 0.8 + i * 0.5,
+                length: Math.min(dur - 1.5, 2.5),
+                position: iconPositions[i % iconPositions.length],
+                offset: { x: i % 2 === 0 ? 0.1 : -0.1, y: -0.18 },
+                scale: 0.85,
+                transition: { in: "zoom", out: "fade" },
+              });
+            });
+          }
+
+          cumulativeTime += dur;
         }
 
-        // === Progress indicator (thin bar at top) ===
-        const progressWidth = Math.round((cumulativeTime / safeDuration) * 100);
-        textClips.push({
-          asset: {
-            type: "html",
-            html: `<div style="width:${progressWidth}%;height:4px;background:linear-gradient(90deg, #FFB800, #FF6B00);border-radius:0 2px 2px 0;"></div>`,
-            width: 1920,
-            height: 6,
-          },
-          start: cumulativeTime,
-          length: dur,
-          position: "top",
-          offset: { y: 0 },
-        });
-
-        cumulativeTime += dur;
+        if (textClips.length > 0) {
+          tracks.push({ clips: textClips });
+        }
       }
 
-      if (textClips.length > 0) {
-        tracks.push({ clips: textClips });
-      }
-
-      // === Track: Video clips (multiple clips stitched sequentially) ===
+      // === Video clips track ===
       const videoClips: any[] = [];
       let videoStart = 0;
       for (let i = 0; i < clipUrls.length; i++) {
-        const sceneDur = scenes?.[i]?.duration || 10;
+        const sceneDur = scenes?.[i]?.duration || totalDuration / clipUrls.length;
         videoClips.push({
           asset: { type: "video", src: clipUrls[i] },
           start: videoStart,
-          length: sceneDur,
+          length: clipUrls.length === 1 ? totalDuration : sceneDur,
           transition: i > 0 ? { in: "fade" } : undefined,
         });
         videoStart += sceneDur;
       }
       tracks.push({ clips: videoClips });
 
-      // === Track: Background gradient ===
+      // === Background track ===
       const bgColor = brandColors?.[0] || "#0f0f23";
       tracks.push({
         clips: [
@@ -211,12 +289,12 @@ serve(async (req) => {
               height: 1080,
             },
             start: 0,
-            length: safeDuration,
+            length: totalDuration,
           },
         ],
       });
 
-      // === Soundtrack (narration audio) ===
+      // === Soundtrack ===
       const soundtrack: any = {};
       if (audioUrl) {
         soundtrack.src = audioUrl;
@@ -236,10 +314,7 @@ serve(async (req) => {
         },
       };
 
-      console.log(
-        "Submitting Shotstack render:",
-        JSON.stringify(renderBody).slice(0, 500)
-      );
+      console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 800));
 
       const response = await fetch(`${SHOTSTACK_API_URL}/render`, {
         method: "POST",
@@ -251,22 +326,14 @@ serve(async (req) => {
         const errText = await response.text();
         console.error("Shotstack render error:", response.status, errText);
         return new Response(
-          JSON.stringify({
-            error: `שגיאה בהרכבת הסרטון (${response.status})`,
-          }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          JSON.stringify({ error: `שגיאה בהרכבת הסרטון (${response.status})` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       const data = await response.json();
       return new Response(
-        JSON.stringify({
-          renderId: data.response?.id,
-          status: "rendering",
-        }),
+        JSON.stringify({ renderId: data.response?.id, status: "rendering" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -275,20 +342,14 @@ serve(async (req) => {
     if (action === "check_status") {
       const { renderId } = params;
 
-      const response = await fetch(
-        `${SHOTSTACK_API_URL}/render/${renderId}`,
-        { headers }
-      );
+      const response = await fetch(`${SHOTSTACK_API_URL}/render/${renderId}`, { headers });
 
       if (!response.ok) {
         const errText = await response.text();
         console.error("Shotstack status error:", response.status, errText);
         return new Response(
           JSON.stringify({ error: "שגיאה בבדיקת סטטוס הרכבה" }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -300,13 +361,9 @@ serve(async (req) => {
           status: r.status,
           url: r.url || null,
           progress:
-            r.status === "done"
-              ? 100
-              : r.status === "rendering"
-              ? 50
-              : r.status === "fetching"
-              ? 20
-              : 10,
+            r.status === "done" ? 100 :
+            r.status === "rendering" ? 50 :
+            r.status === "fetching" ? 20 : 10,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -319,13 +376,8 @@ serve(async (req) => {
   } catch (e) {
     console.error("compose-video error:", e);
     return new Response(
-      JSON.stringify({
-        error: e instanceof Error ? e.message : "שגיאה בהרכבת סרטון",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה בהרכבת סרטון" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
