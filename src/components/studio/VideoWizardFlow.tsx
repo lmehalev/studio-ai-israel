@@ -30,6 +30,10 @@ interface ScriptScene {
   icons: string[];
   duration: number;
   transition: string;
+  cameraDirection?: string;
+  environment?: string;
+  characters?: string;
+  videoStyle?: string;
 }
 
 interface GeneratedScript {
