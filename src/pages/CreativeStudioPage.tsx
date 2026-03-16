@@ -76,7 +76,10 @@ export default function CreativeStudioPage() {
   const handleRemoveBrand = (id: string) => {
     const updated = brandService.remove(id);
     setBrands(updated);
-    if (activeBrandId === id) setActiveBrandId(null);
+    if (activeBrandId === id) {
+      setActiveBrandId(null);
+      setActiveSubActivity('');
+    }
     toast.success('המותג הוסר');
   };
 
