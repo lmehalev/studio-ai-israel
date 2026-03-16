@@ -395,7 +395,6 @@ serve(async (req) => {
         );
       }
 
-      const data = await response.json();
       const r = data.response;
 
       return new Response(
