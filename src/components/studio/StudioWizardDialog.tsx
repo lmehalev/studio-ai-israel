@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  ArrowRight, Loader2, Download, Copy, RefreshCw,
+  ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
   ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown
@@ -13,7 +13,7 @@ import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
   avatarDbService, storageService,
-  type SubtitleSegment, type Brand,
+  type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
@@ -112,8 +112,15 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
+  // Inline brand selector state (for result view when no brand pre-selected)
+  const [inlineBrandId, setInlineBrandId] = useState<string | null>(null);
+  const [inlineNewBrandName, setInlineNewBrandName] = useState('');
+  const brands = brandService.getAll();
+
   const handleSaveToProject = async () => {
-    if (!activeBrandId || !activeBrand) {
+    const brandId = activeBrandId || inlineBrandId;
+    const brandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
+    if (!brandId || !brandObj) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
       return;
     }
@@ -137,16 +144,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       }
 
       const cat = effectiveCategory || undefined;
-      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
+      const project = await projectService.findOrCreateByBrand(brandId, brandObj.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
-        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${brandObj.name}${cat ? ` — ${cat}` : ''}`,
         description: prompt || undefined,
         video_url: isVideo ? finalUrl : null,
         thumbnail_url: !isVideo ? finalUrl : null,
         prompt: prompt || null,
       });
-      toast.success(`נשמר בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"!`);
+      toast.success(`נשמר בפרויקט "${brandObj.name}${cat ? ` — ${cat}` : ''}"!`);
+      clearSession();
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
@@ -173,7 +181,74 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     setCustomCategory('');
   }, [open, initialCategory]);
 
-  // Reset when dialog closes
+  // Session persistence key
+  const SESSION_KEY = 'studio_wizard_session';
+
+  // Save session to localStorage on meaningful state changes
+  useEffect(() => {
+    if (!open) return;
+    if (step === 0 && !selectedAction) return; // Don't save initial state
+    const session = {
+      selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
+      importUrl, importType, selectedAvatarId, selectedVoiceId,
+      selectedCategory, customCategory, timestamp: Date.now(),
+    };
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory]);
+
+  // Restore session when dialog opens
+  const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
+  const [hasPendingSession, setHasPendingSession] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const session = JSON.parse(raw);
+      // Only offer restore if session is less than 24h old and has content
+      if (Date.now() - session.timestamp > 86400000) { localStorage.removeItem(SESSION_KEY); return; }
+      if (session.selectedAction || session.prompt || session.result) {
+        setHasPendingSession(true);
+      }
+    } catch { localStorage.removeItem(SESSION_KEY); }
+  }, [open]);
+
+  const restoreSession = () => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.selectedAction) setSelectedAction(s.selectedAction);
+      if (s.step) setStep(s.step);
+      if (s.prompt) setPrompt(s.prompt);
+      if (s.result) setResult(s.result);
+      if (s.imageRefPhotos) setImageRefPhotos(s.imageRefPhotos);
+      if (s.editHistory) setEditHistory(s.editHistory);
+      if (s.editPrompt) setEditPrompt(s.editPrompt);
+      if (s.importUrl) setImportUrl(s.importUrl);
+      if (s.importType) setImportType(s.importType);
+      if (s.selectedAvatarId) setSelectedAvatarId(s.selectedAvatarId);
+      if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
+      if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
+      if (s.customCategory) setCustomCategory(s.customCategory);
+      toast.success('הסשן שוחזר בהצלחה!');
+    } catch {}
+    setHasPendingSession(false);
+    setSessionRestoreOffered(true);
+  };
+
+  const dismissSession = () => {
+    localStorage.removeItem(SESSION_KEY);
+    setHasPendingSession(false);
+    setSessionRestoreOffered(true);
+  };
+
+  const clearSession = () => {
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+  };
+
+  // Reset when dialog closes — but don't clear session (only clear on explicit "start fresh")
   useEffect(() => {
     if (!open) {
       setTimeout(() => {
@@ -196,6 +271,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setShowAvatarVoicePanel(false);
         setSelectedCategory('');
         setCustomCategory('');
+        setSessionRestoreOffered(false);
+        setHasPendingSession(false);
       }, 300);
     }
   }, [open]);
@@ -425,6 +502,70 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     </div>
   );
 
+  // Helper: delete a single history item
+  const handleDeleteHistoryItem = (index: number) => {
+    setEditHistory(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      // If current result was deleted, switch to last remaining or clear
+      if (prev[index]?.imageUrl === result?.imageUrl) {
+        if (updated.length > 0) setResult({ imageUrl: updated[updated.length - 1].imageUrl });
+        else { setResult(null); setStep(step > 1 ? step - 1 : 0); }
+      }
+      return updated;
+    });
+    toast.success('הפריט נמחק מההיסטוריה');
+  };
+
+
+  // Helper: render inline brand selector for result view (when no brand selected)
+
+  const effectiveBrandId = activeBrandId || inlineBrandId;
+  const effectiveBrandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
+
+  const renderInlineBrandSelector = () => {
+    if (activeBrand) return renderCategorySelector();
+    return (
+      <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
+        <label className="block text-xs font-medium text-muted-foreground">שם חברה / מותג (לשמירה)</label>
+        <select
+          value={inlineBrandId || ''}
+          onChange={e => setInlineBrandId(e.target.value || null)}
+          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          dir="rtl"
+        >
+          <option value="">בחר חברה...</option>
+          {brands.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <input
+            value={inlineNewBrandName}
+            onChange={e => setInlineNewBrandName(e.target.value)}
+            placeholder="או הוסף חברה חדשה..."
+            className="flex-1 bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            dir="rtl"
+          />
+          {inlineNewBrandName.trim() && (
+            <button onClick={() => {
+              const brand: Brand = {
+                id: crypto.randomUUID(), name: inlineNewBrandName.trim(),
+                tone: '', targetAudience: '', industry: '', colors: [], departments: [],
+              };
+              brandService.add(brand);
+              setInlineBrandId(brand.id);
+              setInlineNewBrandName('');
+              toast.success(`"${brand.name}" נוצר`);
+            }} className="px-3 py-2 gradient-gold text-primary-foreground rounded-lg text-xs font-semibold">
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+
   // ============ RESULT VIEW ============
   const renderResultView = () => (
     <div className="space-y-4">
@@ -438,7 +579,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
-      {activeBrand && renderCategorySelector()}
+      {renderInlineBrandSelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -449,7 +590,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
+      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
@@ -459,14 +600,23 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // ============ IMAGE RESULT WITH ITERATIVE EDITING ============
   const renderImageResultWithEdit = () => (
     <div className="space-y-4">
-      {editHistory.length > 1 && (
+      {editHistory.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-2">
           {editHistory.map((h, i) => (
-            <button key={i} onClick={() => setResult({ imageUrl: h.imageUrl })}
-              className={cn('flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
-                result?.imageUrl === h.imageUrl ? 'border-primary shadow-gold' : 'border-border/50 opacity-60 hover:opacity-100')}>
-              <img src={h.imageUrl} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
-            </button>
+            <div key={i} className="relative group flex-shrink-0">
+              <button onClick={() => setResult({ imageUrl: h.imageUrl })}
+                className={cn('w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',
+                  result?.imageUrl === h.imageUrl ? 'border-primary shadow-gold' : 'border-border/50 opacity-60 hover:opacity-100')}>
+                <img src={h.imageUrl} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteHistoryItem(i); }}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                title="מחק"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -475,7 +625,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[250px] object-contain" />
         </div>
       )}
-      {renderCategorySelector()}
+      {renderInlineBrandSelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -524,7 +674,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {loading ? 'מעדכן...' : 'עדכן תמונה'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
+      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
@@ -537,6 +687,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     if (step === 0) {
       return (
         <div className="space-y-2">
+          {hasPendingSession && !sessionRestoreOffered && (
+            <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm">
+                <RefreshCw className="w-4 h-4 text-primary" />
+                <span className="text-foreground font-medium">יש לך עבודה שלא נשמרה</span>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={restoreSession} className="px-3 py-1.5 gradient-gold text-primary-foreground rounded-lg text-xs font-semibold">שחזר</button>
+                <button onClick={dismissSession} className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted">התעלם</button>
+              </div>
+            </div>
+          )}
           {actionOptions.map(opt => {
             const Icon = opt.icon;
             return (
