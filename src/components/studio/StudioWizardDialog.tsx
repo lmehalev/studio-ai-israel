@@ -193,6 +193,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setSelectedVoiceId(null);
         setShowAvatarVoicePanel(false);
         setSelectedCategory('');
+        setCustomCategory('');
       }, 300);
     }
   }, [open]);
