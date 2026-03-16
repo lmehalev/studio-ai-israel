@@ -476,6 +476,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
 
     const wizardStep = step - 1;
 
+    // Show avatar/voice selector on the first step of each action
+    const avatarVoiceBar = wizardStep === 0 ? renderAvatarVoiceSelector() : null;
+
     // ====== IMAGE ======
     if (selectedAction === 'image') {
       if (wizardStep === 0) return (
