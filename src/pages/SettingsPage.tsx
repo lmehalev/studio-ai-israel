@@ -20,6 +20,8 @@ export default function SettingsPage() {
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<StoredFile | null>(null);
 
   const loadFiles = async () => {
     setLoadingFiles(true);
