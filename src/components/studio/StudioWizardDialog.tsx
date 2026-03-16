@@ -113,7 +113,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
   const handleSaveToProject = async () => {
-    if (!activeBrandId || !activeBrand) {
+    const brandId = activeBrandId || inlineBrandId;
+    const brandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
+    if (!brandId || !brandObj) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
       return;
     }
