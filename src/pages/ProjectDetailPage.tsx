@@ -311,6 +311,17 @@ export default function ProjectDetailPage() {
                       <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {mediaUrl && (
                           <>
+                            <button onClick={() => {
+                              setEditingMediaUrl(mediaUrl);
+                              if (isVideo) {
+                                setVideoEditorOpen(true);
+                              } else {
+                                setImageEditorOpen(true);
+                              }
+                            }}
+                              className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="ערוך">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => window.open(mediaUrl, '_blank')}
                               className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="צפה">
                               <Maximize2 className="w-3.5 h-3.5" />
@@ -330,7 +341,7 @@ export default function ProjectDetailPage() {
                                 toast.success('ההורדה החלה');
                               } catch { window.open(mediaUrl, '_blank'); }
                             }}
-                              className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
+                              className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="הורד">
                               <Download className="w-3.5 h-3.5" />
                             </button>
                           </>
