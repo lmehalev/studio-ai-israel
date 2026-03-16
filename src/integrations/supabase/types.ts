@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      avatars: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          name: string
+          source_photos: string[]
+          style: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          name: string
+          source_photos?: string[]
+          style?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          name?: string
+          source_photos?: string[]
+          style?: string
+        }
+        Relationships: []
+      }
       project_outputs: {
         Row: {
           aspect_ratio: string | null
