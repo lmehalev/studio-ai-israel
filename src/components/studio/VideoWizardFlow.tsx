@@ -59,8 +59,60 @@ interface VideoWizardFlowProps {
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;
 const NARRATION_MAX_CHARS = 4500;
+const RUNWAY_STATUS_POLL_MS = 5000;
+const COMPOSE_STATUS_POLL_MS = 3000;
+const RUNWAY_MAX_POLL_ATTEMPTS = 240;
+const DID_MAX_POLL_ATTEMPTS = 180;
+
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
+
+const toSceneChunks = (text: string): string[] => {
+  const sentences = text
+    .split(/\n+|(?<=[.!?！？。])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) return [];
+
+  const targetScenes = Math.min(6, Math.max(3, Math.ceil(sentences.length / 2)));
+  const chunkSize = Math.max(1, Math.ceil(sentences.length / targetScenes));
+  const chunks: string[] = [];
+
+  for (let i = 0; i < sentences.length && chunks.length < 6; i += chunkSize) {
+    chunks.push(sentences.slice(i, i + chunkSize).join(' '));
+  }
+
+  return chunks;
+};
+
+const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptScene[] => {
+  const chunks = toSceneChunks(sourceText);
+  const safeChunks = chunks.length > 0
+    ? chunks
+    : [
+        'פתיחה עם הוק חד שמציג את הערך המרכזי.',
+        'הצגת הפתרון והיתרונות העיקריים בצורה ברורה.',
+        'סיום עם קריאה לפעולה ממוקדת וברורה.',
+      ];
+
+  return safeChunks.slice(0, 6).map((chunk, idx) => ({
+    id: idx + 1,
+    title: `סצנה ${idx + 1}`,
+    speaker: 'קריין',
+    spokenText: chunk,
+    visualDescription: 'סצנה קולנועית ריאליסטית עם עומק שדה, תאורה מקצועית ותנועה טבעית בפריים.',
+    subtitleText: chunk.slice(0, 64),
+    icons: ['🎬', '✨'],
+    duration: 10,
+    transition: 'fade',
+    cameraDirection: 'Wide shot עם Dolly-in איטי למוקד',
+    environment: 'סביבה מקצועית רלוונטית לתוכן הסרטון',
+    characters: 'דמות מרכזית ודמויות משנה רלוונטיות',
+    videoStyle: style || 'cinematic',
+    backgroundAction: 'ברקע יש תנועה טבעית של אנשים/אלמנטים סביבתיים שמוסיפה חיים לסצנה.',
+  }));
+};
 
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
