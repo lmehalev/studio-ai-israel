@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 import {
   Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle,
   Clock, GitBranch, Loader2, Download, Maximize2, Wand2, Image as ImageIcon,
-  Calendar, Monitor, User, Tag, Building2, FolderOpen, Plus, Eye
+  Calendar, Monitor, User, Tag, Building2, FolderOpen, Plus, Eye, Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectService, getProjectCategory, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
+import { ImageEditor } from '@/components/editors/ImageEditor';
+import { VideoEditor } from '@/components/editors/VideoEditor';
 
 const tabs = [
   { id: 'overview', label: 'סקירה', icon: FileText },
@@ -33,6 +35,10 @@ export default function ProjectDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // Editor states
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [videoEditorOpen, setVideoEditorOpen] = useState(false);
+  const [editingMediaUrl, setEditingMediaUrl] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
@@ -305,6 +311,17 @@ export default function ProjectDetailPage() {
                       <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {mediaUrl && (
                           <>
+                            <button onClick={() => {
+                              setEditingMediaUrl(mediaUrl);
+                              if (isVideo) {
+                                setVideoEditorOpen(true);
+                              } else {
+                                setImageEditorOpen(true);
+                              }
+                            }}
+                              className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="ערוך">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => window.open(mediaUrl, '_blank')}
                               className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="צפה">
                               <Maximize2 className="w-3.5 h-3.5" />
@@ -324,7 +341,7 @@ export default function ProjectDetailPage() {
                                 toast.success('ההורדה החלה');
                               } catch { window.open(mediaUrl, '_blank'); }
                             }}
-                              className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
+                              className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="הורד">
                               <Download className="w-3.5 h-3.5" />
                             </button>
                           </>
@@ -418,6 +435,26 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Editors */}
+      <ImageEditor
+        open={imageEditorOpen}
+        onClose={() => setImageEditorOpen(false)}
+        imageUrl={editingMediaUrl}
+        onSave={(url) => {
+          toast.success('התמונה נשמרה בהצלחה!');
+          setImageEditorOpen(false);
+        }}
+      />
+      <VideoEditor
+        open={videoEditorOpen}
+        onClose={() => setVideoEditorOpen(false)}
+        videoUrl={editingMediaUrl}
+        onSave={(data) => {
+          toast.success('העריכה נשמרה!');
+          setVideoEditorOpen(false);
+        }}
+      />
     </AppLayout>
   );
 }
