@@ -6,7 +6,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SHOTSTACK_API_URL = "https://api.shotstack.io/edit/v1";
+const SHOTSTACK_ENDPOINTS = {
+  production: "https://api.shotstack.io/edit/v1",
+  stage: "https://api.shotstack.io/stage/edit/v1",
+} as const;
+
+type ShotstackEnv = keyof typeof SHOTSTACK_ENDPOINTS;
 
 interface SubtitleSegment {
   start: number;
