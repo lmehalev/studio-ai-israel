@@ -106,7 +106,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. T
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model: "google/gemini-3-pro-image-preview",
         modalities: ["image", "text"],
         messages: [
           { role: "system", content: systemPrompt },
@@ -116,7 +116,7 @@ IMPORTANT: Generate the image directly. Do not describe it - CREATE the image. T
               ...imageContentParts,
               {
                 type: "text",
-                text: `Based on these ${imageUrls.length} reference photo(s) of the same person, generate a high-quality avatar portrait. Style: ${styleDesc}. Make sure the generated avatar closely resembles the person in the photos.`,
+                text: `I am providing ${imageUrls.length} reference photo(s) of the SAME person from different angles. Study every detail of their face carefully: bone structure, skin tone, hair, eyes, nose, mouth, beard/facial hair, and any accessories like glasses or head coverings. Generate a single high-quality avatar portrait that looks EXACTLY like this person. Style: ${styleDesc}. The result must be immediately recognizable as the same individual.`,
               },
             ],
           },
