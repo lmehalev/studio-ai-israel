@@ -562,7 +562,7 @@ export function VideoWizardFlow({
       }
 
       // Retry failed scenes once more with a short safe prompt
-      if (failedSceneIndexes.length > 0) {
+      if (!runwayBlocked && failedSceneIndexes.length > 0) {
         setProgressStage('מנסה שוב את הסצנות שנכשלו...');
         for (const sceneIdx of failedSceneIndexes) {
           if (sceneResults[sceneIdx]) continue;
@@ -583,6 +583,9 @@ export function VideoWizardFlow({
             toast.success(`סצנה ${sceneIdx + 1} הושלמה בניסיון נוסף`);
           } catch (retryErr: any) {
             const retryMsg = retryErr?.message || 'שגיאה לא ידועה';
+            if (isRunwayCreditsErrorMessage(retryMsg) && !normalizedAvatarUrl) {
+              throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים.');
+            }
             sceneErrors.push(`סצנה ${sceneIdx + 1} (ניסיון נוסף): ${retryMsg}`);
           }
         }
