@@ -277,18 +277,94 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
   };
 
+  // ── Extract audio from video for transcription (smaller payload) ──
+  const extractAudioBlob = async (video: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const videoEl = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      videoEl.src = URL.createObjectURL(video);
+      videoEl.muted = true;
+
+      // Use AudioContext to extract audio
+      videoEl.onloadedmetadata = () => {
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaElementSource(videoEl);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+
+        const mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+        const chunks: BlobPart[] = [];
+
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          URL.revokeObjectURL(videoEl.src);
+          audioCtx.close();
+          resolve(new Blob(chunks, { type: 'audio/webm' }));
+        };
+        mediaRecorder.onerror = () => {
+          URL.revokeObjectURL(videoEl.src);
+          reject(new Error('שגיאה בחילוץ אודיו'));
+        };
+
+        // Limit to first 2 minutes for transcription
+        const maxDuration = Math.min(videoEl.duration, 120);
+        mediaRecorder.start();
+        videoEl.play();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          videoEl.pause();
+        }, maxDuration * 1000);
+      };
+
+      videoEl.onerror = () => {
+        URL.revokeObjectURL(videoEl.src);
+        reject(new Error('שגיאה בטעינת הווידאו'));
+      };
+    });
+  };
+
   // ── Transcribe ──
   const handleTranscribe = async () => {
     if (!videoFile) return;
     setLoading(true);
     try {
-      const ab = await videoFile.arrayBuffer();
-      const bytes = new Uint8Array(ab);
-      const chunkSize = 8192;
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += chunkSize)
-        binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-      const base64 = btoa(binary);
+      // For small files (<5MB), send directly as base64
+      // For larger files, extract audio first to reduce payload size
+      let base64: string;
+      const MAX_DIRECT_SIZE = 5 * 1024 * 1024; // 5MB
+
+      if (videoFile.size <= MAX_DIRECT_SIZE) {
+        const ab = await videoFile.arrayBuffer();
+        const bytes = new Uint8Array(ab);
+        const chunkSize = 8192;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize)
+          binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+        base64 = btoa(binary);
+      } else {
+        toast.info('מחלץ אודיו מהסרטון לתמלול מהיר יותר...');
+        try {
+          const audioBlob = await extractAudioBlob(videoFile);
+          const ab = await audioBlob.arrayBuffer();
+          const bytes = new Uint8Array(ab);
+          const chunkSize = 8192;
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += chunkSize)
+            binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+          base64 = btoa(binary);
+        } catch {
+          // Fallback: take only first 5MB of the original file
+          toast.info('משתמש בקטע הראשון של הסרטון...');
+          const ab = await videoFile.slice(0, MAX_DIRECT_SIZE).arrayBuffer();
+          const bytes = new Uint8Array(ab);
+          const chunkSize = 8192;
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += chunkSize)
+            binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+          base64 = btoa(binary);
+        }
+      }
+
       const data = await subtitleService.transcribe(base64);
       setSubtitleSegments(data.segments);
       setShowPreview(true);
@@ -398,40 +474,37 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       setRenderProgress(30);
       toast.info('שולח להרכבה...');
 
-      const { data, error } = await supabase.functions.invoke('compose-video', {
-        body: {
-          action: 'render',
-          videoUrl,
-          scenes,
-          logoUrl: logoUrl || undefined,
-          brandColors: activeBrand?.colors || [],
-          audioUrl,
-          subtitleStyle: {
-            font: currentFont.font,
-            fontSize: customFontSize,
-            color: (currentFont as any).textColor || customColor,
-            bgColor: currentFont.bgColor,
-            borderRadius: currentFont.borderRadius,
-            shadow: currentFont.shadow,
-            fontWeight: currentFont.fontWeight,
-            padding: currentFont.padding,
-          },
-          stickers: stickers.map(s => ({
-            emoji: s.emoji,
-            position: s.position,
-            startTime: s.startTime,
-            duration: s.duration,
-            scale: s.scale,
-          })),
-          subtitleSegments: adjusted,
-          totalDuration: videoDuration,
+      const renderParams = {
+        videoUrl,
+        scenes,
+        logoUrl: logoUrl || undefined,
+        brandColors: activeBrand?.colors || [],
+        audioUrl,
+        subtitleStyle: {
+          font: currentFont.font,
+          fontSize: customFontSize,
+          color: (currentFont as any).textColor || customColor,
+          bgColor: currentFont.bgColor,
+          borderRadius: currentFont.borderRadius,
+          shadow: currentFont.shadow,
+          fontWeight: currentFont.fontWeight,
+          padding: currentFont.padding,
         },
-      });
+        stickers: stickers.map(s => ({
+          emoji: s.emoji,
+          position: s.position,
+          startTime: s.startTime,
+          duration: s.duration,
+          scale: s.scale,
+        })),
+        subtitleSegments: adjusted,
+        totalDuration: videoDuration,
+      };
 
-      if (error || data?.error) throw new Error(data?.error || error?.message);
+      const renderResult = await composeService.render(renderParams);
+      const renderId = renderResult.renderId;
+      const shotstackEnv = renderResult.shotstackEnv;
 
-      const renderId = data.renderId;
-      const shotstackEnv = data.shotstackEnv as 'production' | 'stage' | undefined;
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה');
 
       setRenderProgress(40);
@@ -443,16 +516,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         await new Promise(r => setTimeout(r, 5000));
         attempts++;
 
-        const { data: statusData } = await supabase.functions.invoke('compose-video', {
-          body: { action: 'check_status', renderId, shotstackEnv },
-        });
+        const status = await composeService.checkStatus(renderId, shotstackEnv);
 
-        if (statusData?.status === 'done' && statusData?.url) {
-          setRenderedVideoUrl(statusData.url);
+        if (status.status === 'done' && status.url) {
+          setRenderedVideoUrl(status.url);
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
           break;
-        } else if (statusData?.status === 'failed') {
+        } else if (status.status === 'failed') {
           throw new Error('ההרכבה נכשלה');
         }
 
