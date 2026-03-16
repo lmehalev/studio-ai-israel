@@ -288,7 +288,8 @@ export function VideoWizardFlow({
           ? `Overall style: ${generatedScript.style.cinematicStyle || generatedScript.style.tone || 'cinematic'}. Pace: ${generatedScript.style.pace || 'medium'}. Music mood: ${generatedScript.style.music || 'cinematic score'}.`
           : '';
 
-        const fullPrompt = buildPrompt(`${cinematicPrompt}. ${styleInfo}`.slice(0, 2000));
+        const basePrompt = cinematicPrompt || generatedScript.script || prompt;
+        const fullPrompt = toRunwayPrompt(buildPrompt(`${basePrompt}. ${styleInfo}`));
 
         const taskData = await runwayService.textToVideo(
           fullPrompt,
