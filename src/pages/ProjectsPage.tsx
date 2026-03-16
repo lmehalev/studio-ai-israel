@@ -18,6 +18,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     projectService.getAll()
@@ -32,12 +33,12 @@ export default function ProjectsPage() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (brandFilter && p.brand_id !== brandFilter) return false;
     if (typeFilter && p.video_type !== typeFilter) return false;
-    if (categoryFilter && getProjectCategory(p) !== categoryFilter) return false;
+    if (categoryFilter && getProjectSubActivity(p) !== categoryFilter) return false;
     return true;
   });
 
   const videoTypes = [...new Set(projects.map(p => p.video_type))];
-  const categories = [...new Set(projects.map(p => getProjectCategory(p)).filter(Boolean))] as string[];
+  const categories = [...new Set(projects.map(p => getProjectSubActivity(p)).filter(Boolean))] as string[];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
   return (
