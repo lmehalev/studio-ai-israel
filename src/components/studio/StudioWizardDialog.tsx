@@ -535,6 +535,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'video_ai') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
+          {avatarVoiceBar}
           <div className="grid grid-cols-2 gap-3">
             <button onClick={() => setRunwayMode('image_to_video')}
               className={cn('p-4 rounded-xl border text-center transition-all', runwayMode === 'image_to_video' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30')}>
