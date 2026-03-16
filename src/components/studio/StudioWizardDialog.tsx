@@ -671,6 +671,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     if (step === 0) {
       return (
         <div className="space-y-2">
+          {hasPendingSession && !sessionRestoreOffered && (
+            <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm">
+                <RefreshCw className="w-4 h-4 text-primary" />
+                <span className="text-foreground font-medium">יש לך עבודה שלא נשמרה</span>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={restoreSession} className="px-3 py-1.5 gradient-gold text-primary-foreground rounded-lg text-xs font-semibold">שחזר</button>
+                <button onClick={dismissSession} className="px-3 py-1.5 border border-border rounded-lg text-xs hover:bg-muted">התעלם</button>
+              </div>
+            </div>
+          )}
           {actionOptions.map(opt => {
             const Icon = opt.icon;
             return (
