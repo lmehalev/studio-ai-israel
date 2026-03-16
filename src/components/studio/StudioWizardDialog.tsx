@@ -24,6 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
+import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
 
@@ -419,9 +420,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'יצירת סרטון מקצועי', desc: 'תאר, בחר אווטארים וקולות, אשר תסריט ותייצר' },
       ],
       subtitles: [
-        { title: 'העלה סרטון', desc: 'בחר סרטון לתמלול' },
-        { title: 'תמלול ועריכה', desc: 'ערוך את הכתוביות' },
-        { title: 'שמירה', desc: 'שמור או הורד SRT' },
+        { title: 'כתוביות וסטודיו', desc: 'תמלול, עיצוב, מוזיקה והרכבה' },
       ],
       import_edit: [
         { title: 'הדבק קישור', desc: 'שים קישור לתמונה או סרטון' },
@@ -438,7 +437,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 1, subtitles: 3, import_edit: 3,
+      image: 2, video_ai: 1, subtitles: 1, import_edit: 3,
     };
     return counts[selectedAction] + 1;
   };
@@ -819,167 +818,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     // ====== SUBTITLES ======
     if (selectedAction === 'subtitles') {
-      if (wizardStep === 0) return (
-        <div className="space-y-4">
-          {avatarVoiceBar}
-          <div
-            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={e => {
-              e.preventDefault(); setIsDragging(false);
-              const file = e.dataTransfer.files[0];
-              if (file && file.type.startsWith('video/')) { setVideoFile(file); setVideoPreviewUrl(URL.createObjectURL(file)); setStep(step + 1); }
-              else toast.error('יש להעלות קובץ וידאו');
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
-              isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
-            )}
-          >
-            <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) { setVideoFile(f); setVideoPreviewUrl(URL.createObjectURL(f)); setStep(step + 1); } }} />
-            <Upload className={cn('w-10 h-10 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
-            <p className="text-sm font-medium">גרור סרטון לכאן או לחץ לבחירה</p>
-            <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
-          </div>
-        </div>
-      );
-      if (wizardStep === 1) return (
-        <div className="space-y-4">
-          {videoPreviewUrl && (
-            <div className="rounded-xl overflow-hidden border border-border relative">
-              <video ref={videoPreviewRef} src={videoPreviewUrl} controls className="w-full max-h-[200px]"
-                onTimeUpdate={() => {
-                  if (!videoPreviewRef.current) return;
-                  const t = videoPreviewRef.current.currentTime;
-                  const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
-                  setCurrentSubtitle(active?.text || '');
-                }} />
-              {showPreview && currentSubtitle && (
-                <div className="absolute bottom-12 left-0 right-0 flex justify-center pointer-events-none px-4">
-                  <div className={cn('bg-background/85 text-foreground border border-border/70 px-4 py-2 rounded-lg text-sm font-medium max-w-[90%] text-center', subtitleFontClass)} dir="rtl">
-                    {currentSubtitle}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex gap-3 flex-wrap">
-            <button onClick={async () => {
-              if (!videoFile) return;
-              setLoading(true);
-              try {
-                const ab = await videoFile.arrayBuffer();
-                const bytes = new Uint8Array(ab);
-                const chunkSize = 8192;
-                let binary = '';
-                for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-                const base64 = btoa(binary);
-                const data = await subtitleService.transcribe(base64);
-                setSubtitleSegments(data.segments);
-                toast.success('התמלול מוכן!');
-              } catch (e: any) { toast.error(e.message); }
-              finally { setLoading(false); }
-            }} disabled={loading}
-              className="gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Subtitles className="w-4 h-4" />}
-              {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
-            </button>
-            {subtitleSegments.length > 0 && (
-              <>
-                <button onClick={() => setShowPreview(!showPreview)}
-                  className={cn('px-4 py-2.5 border rounded-lg text-sm flex items-center gap-2', showPreview ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted')}>
-                  <Eye className="w-4 h-4" /> {showPreview ? 'הסתר' : 'תצוגה מקדימה'}
-                </button>
-                <button onClick={() => setStep(step + 1)} className="px-4 py-2.5 border border-primary/30 bg-primary/5 text-primary rounded-lg text-sm flex items-center gap-2 hover:bg-primary/10">
-                  שמור / הורד <ArrowRight className="w-4 h-4 rotate-180" />
-                </button>
-              </>
-            )}
-          </div>
-          {subtitleSegments.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-card border border-border rounded-xl p-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">פונט</label>
-                <select value={subtitleFontClass} onChange={e => setSubtitleFontClass(e.target.value)}
-                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                  {subtitleFontOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-muted-foreground">השהיית כתוביות</label>
-                  <span className="text-xs font-medium text-primary">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s</span>
-                </div>
-                <input type="range" min="-2" max="2" step="0.1" value={subtitleOffset} onChange={e => setSubtitleOffset(Number(e.target.value))} className="w-full accent-primary" />
-              </div>
-            </div>
-          )}
-          {subtitleSegments.length > 0 && (
-            <div className="space-y-2 max-h-[200px] overflow-y-auto">
-              {subtitleSegments.map((seg, i) => (
-                <div key={i} className="flex items-start gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
-                  <div className="text-xs text-muted-foreground whitespace-nowrap pt-2 min-w-[80px]">
-                    {Math.max(0, seg.start + subtitleOffset).toFixed(1)}s — {Math.max(Math.max(0, seg.start + subtitleOffset) + 0.1, seg.end + subtitleOffset).toFixed(1)}s
-                  </div>
-                  <input value={seg.text} onChange={e => {
-                    setSubtitleSegments(prev => prev.map((s, idx) => idx === i ? { ...s, text: e.target.value } : s));
-                    setSavedSrtUrl(null);
-                  }} onKeyDown={e => e.stopPropagation()} className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" dir="rtl" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-      if (wizardStep === 2) return (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={async () => {
-                setSavingSrt(true);
-                try {
-                  const srt = subtitleService.toSRT(getAdjustedSegments());
-                  const encoder = new TextEncoder();
-                  const encoded = encoder.encode('\uFEFF' + srt);
-                  let binaryStr = '';
-                  const chunk = 8192;
-                  for (let i = 0; i < encoded.length; i += chunk) binaryStr += String.fromCharCode(...encoded.slice(i, i + chunk));
-                  const base64 = btoa(binaryStr);
-                  const { data, error } = await supabase.functions.invoke("storage-manager", {
-                    body: { action: "upload", fileName: `subtitles-${Date.now()}.srt`, fileType: "text/plain", fileBase64: base64 },
-                  });
-                  if (error || data?.error) throw new Error(data?.error || error?.message);
-                  setSavedSrtUrl(data.publicUrl);
-                  toast.success('נשמר!');
-                } catch (e: any) { toast.error(e.message); }
-                finally { setSavingSrt(false); }
-              }}
-              disabled={savingSrt}
-              className={cn('p-4 rounded-xl border text-center transition-all', savedSrtUrl ? 'border-green-500 bg-green-500/10' : 'border-border hover:bg-muted')}
-            >
-              {savingSrt ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : <Save className="w-5 h-5 mx-auto mb-1" />}
-              <span className="text-sm font-medium block">{savedSrtUrl ? 'נשמר ✓' : 'שמור באחסון'}</span>
-            </button>
-            <button
-              onClick={() => {
-                const srt = subtitleService.toSRT(getAdjustedSegments());
-                const blob = new Blob(['\uFEFF' + srt], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url; link.download = `subtitles-${Date.now()}.srt`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                toast.success('הורד!');
-              }}
-              className="p-4 rounded-xl border border-border hover:bg-muted text-center"
-            >
-              <Download className="w-5 h-5 mx-auto mb-1" />
-              <span className="text-sm font-medium block">הורד SRT</span>
-            </button>
-          </div>
-        </div>
+      return (
+        <SubtitleEditor
+          activeBrand={activeBrand}
+          onBack={() => { setSelectedAction(null); setStep(0); }}
+        />
       );
     }
 
@@ -1116,7 +959,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             </div>
           </div>
 
-          {selectedAction && selectedAction !== 'video_ai' && (
+          {selectedAction && selectedAction !== 'video_ai' && selectedAction !== 'subtitles' && (
             <div className="flex items-center gap-1.5 mt-3">
               {Array.from({ length: totalSteps }).map((_, i) => (
                 <div
