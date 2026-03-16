@@ -77,6 +77,35 @@ export const avatarGenService = {
   },
 };
 
+// ====== Avatar DB Service (CRUD) ======
+export const avatarDbService = {
+  list: async () => {
+    const { data, error } = await supabase.functions.invoke("avatar-manager", {
+      body: { action: "list" },
+    });
+    if (error) throw new Error(error.message || "שגיאה בטעינת אווטארים");
+    if (data?.error) throw new Error(data.error);
+    return data.avatars || [];
+  },
+
+  save: async (name: string, imageUrl: string, style: string, sourcePhotos: string[]) => {
+    const { data, error } = await supabase.functions.invoke("avatar-manager", {
+      body: { action: "save", name, image_url: imageUrl, style, source_photos: sourcePhotos },
+    });
+    if (error) throw new Error(error.message || "שגיאה בשמירת אווטאר");
+    if (data?.error) throw new Error(data.error);
+    return data.avatar;
+  },
+
+  remove: async (id: string) => {
+    const { data, error } = await supabase.functions.invoke("avatar-manager", {
+      body: { action: "delete", id },
+    });
+    if (error) throw new Error(error.message || "שגיאה במחיקת אווטאר");
+    if (data?.error) throw new Error(data.error);
+  },
+};
+
 // ====== D-ID Avatar Service ======
 export const didService = {
   createTalk: async (imageUrl: string, text: string, voiceId?: string): Promise<{ id: string; status: string }> => {
