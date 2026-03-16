@@ -35,6 +35,10 @@ export default function ProjectDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // Editor states
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const [videoEditorOpen, setVideoEditorOpen] = useState(false);
+  const [editingMediaUrl, setEditingMediaUrl] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
