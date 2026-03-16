@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Search, Grid3X3, List, Video, Loader2, Building2, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { projectService, type ProjectRow } from '@/services/projectService';
+import { projectService, getProjectCategory, type ProjectRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
 

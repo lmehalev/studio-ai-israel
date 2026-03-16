@@ -238,14 +238,14 @@ export const projectService = {
       order: { column: 'created_at', ascending: false },
     });
     const match = category
-      ? all.find(p => p.category === category)
+      ? all.find(p => getProjectCategory(p) === category)
       : all[0];
     if (match) return match;
     // Create new project for this brand + category
     return projectService.create({
       name: category ? `${brandName} — ${category}` : brandName,
       brand_id: brandId,
-      category: category || null,
+      content: category ? { category } : {},
     });
   },
 };
