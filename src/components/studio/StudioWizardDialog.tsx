@@ -158,10 +158,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   useEffect(() => {
     if (open) {
       avatarDbService.list().then(list => setAvailableAvatars(list)).catch(() => {});
-      try {
-        const voices = JSON.parse(localStorage.getItem('studio-voices') || '[]');
-        setAvailableVoices(voices);
-      } catch { setAvailableVoices([]); }
+      supabase.functions.invoke('voice-manager', { body: { action: 'list' } })
+        .then(({ data }) => {
+          if (data?.voices) setAvailableVoices(data.voices);
+        })
+        .catch(() => {});
     }
   }, [open]);
 
