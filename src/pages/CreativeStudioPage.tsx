@@ -193,12 +193,41 @@ export default function CreativeStudioPage() {
             ))}
           </div>
           {activeBrand && (
-            <div className="mt-2 text-xs text-muted-foreground flex gap-3 flex-wrap">
-              {activeBrand.industry && <span>📋 {activeBrand.industry}</span>}
-              {activeBrand.tone && <span>🎯 {activeBrand.tone}</span>}
-              {activeBrand.departments && activeBrand.departments.length > 0 && (
-                <span>🏢 {activeBrand.departments.join(' • ')}</span>
-              )}
+            <div className="mt-3 space-y-3">
+              <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
+                {activeBrand.industry && <span>📋 {activeBrand.industry}</span>}
+                {activeBrand.tone && <span>🎯 {activeBrand.tone}</span>}
+                {activeBrand.departments && activeBrand.departments.length > 0 && (
+                  <span>🏢 {activeBrand.departments.join(' • ')}</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">תת-פעילות פעילה</label>
+                  <select
+                    value={activeSubActivity}
+                    onChange={(e) => setActiveSubActivity(e.target.value)}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="rtl"
+                  >
+                    <option value="">ללא תת-פעילות</option>
+                    {(activeBrand.departments || []).map((dep) => (
+                      <option key={dep} value={dep}>{dep}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">הגדרה מהירה</label>
+                  <input
+                    value={activeSubActivity}
+                    onChange={(e) => setActiveSubActivity(e.target.value)}
+                    placeholder="למשל: הערכת שווי"
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    dir="rtl"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
