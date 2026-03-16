@@ -47,9 +47,10 @@ interface StudioWizardDialogProps {
   activeBrand: Brand | undefined;
   activeBrandId: string | null;
   buildPrompt: (base: string) => string;
+  initialCategory?: string;
 }
 
-export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt }: StudioWizardDialogProps) {
+export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBrandId, buildPrompt, initialCategory = '' }: StudioWizardDialogProps) {
   const [selectedAction, setSelectedAction] = useState<StudioAction | null>(null);
   const [step, setStep] = useState(0);
 
