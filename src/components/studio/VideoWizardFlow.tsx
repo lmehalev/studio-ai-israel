@@ -67,6 +67,18 @@ const DID_MAX_POLL_ATTEMPTS = 180;
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
 
+const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('not enough credits') ||
+    message.includes('you do not have enough credits') ||
+    message.includes('אין מספיק קרדיט') ||
+    message.includes('אין מספיק קרדיטים') ||
+    message.includes('נגמרו הקרדיטים') ||
+    message.includes('קרדיטים לספק הווידאו')
+  );
+};
+
 const toSceneChunks = (text: string): string[] => {
   const sentences = text
     .split(/\n+|(?<=[.!?！？。])\s+/)
