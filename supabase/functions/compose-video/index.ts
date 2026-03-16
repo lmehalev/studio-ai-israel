@@ -328,25 +328,38 @@ serve(async (req) => {
 
       console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 800));
 
-      const response = await fetch(`${SHOTSTACK_API_URL}/render`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(renderBody),
-      });
+      const envOrder = getShotstackEnvOrder(params.shotstackEnv);
+      const renderErrors: string[] = [];
 
-      if (!response.ok) {
+      for (const env of envOrder) {
+        const baseUrl = SHOTSTACK_ENDPOINTS[env];
+        const response = await fetch(`${baseUrl}/render`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(renderBody),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return new Response(
+            JSON.stringify({ renderId: data.response?.id, status: "rendering", shotstackEnv: env }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         const errText = await response.text();
-        console.error("Shotstack render error:", response.status, errText);
-        return new Response(
-          JSON.stringify({ error: `שגיאה בהרכבת הסרטון (${response.status})` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        renderErrors.push(`${env}:${response.status} ${errText}`);
+        console.error(`Shotstack render error (${env}):`, response.status, errText);
+
+        // Try next environment only for auth / scope mismatch or not found
+        if (![401, 403, 404].includes(response.status)) {
+          break;
+        }
       }
 
-      const data = await response.json();
       return new Response(
-        JSON.stringify({ renderId: data.response?.id, status: "rendering" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `שגיאה בהרכבת הסרטון: ${renderErrors.join(" | ")}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
