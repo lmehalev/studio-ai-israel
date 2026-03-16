@@ -112,14 +112,28 @@ function buildStickerClips(stickers: StickerItem[]): any[] {
 function buildLogoClip(logoUrl: string, totalDuration: number): any {
   return {
     clips: [
+      // Main logo — bottom right, persistent
       {
         asset: { type: "image", src: logoUrl },
         start: 0,
         length: totalDuration,
+        position: "bottomRight",
+        offset: { x: -0.04, y: 0.04 },
+        scale: 0.15,
+        opacity: 0.92,
+      },
+      // Small watermark text — top right
+      {
+        asset: {
+          type: "html",
+          html: `<div style="font-family:'Noto Sans Hebrew',sans-serif;direction:rtl;font-size:14px;color:rgba(255,255,255,0.75);text-shadow:0 1px 4px rgba(0,0,0,0.6);letter-spacing:0.05em;font-weight:600;"></div>`,
+          width: 300,
+          height: 30,
+        },
+        start: 0,
+        length: totalDuration,
         position: "topRight",
-        offset: { x: -0.03, y: -0.03 },
-        scale: 0.12,
-        opacity: 0.9,
+        offset: { x: -0.02, y: -0.02 },
       },
     ],
   };
