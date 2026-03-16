@@ -8,6 +8,9 @@ const corsHeaders = {
 };
 
 const MAX_REFERENCE_IMAGES = 7;
+const MIN_STRICT_REFERENCE_IMAGES = 3;
+const STRICT_IDENTITY_MODEL = "google/gemini-3-pro-image-preview";
+const FAST_IDENTITY_MODEL = "google/gemini-3.1-flash-image-preview";
 
 type GenerateAvatarRequest = {
   imageUrls?: string[];
