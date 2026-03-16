@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Loader2, Upload, Eye, Save, Download, ArrowRight, ArrowLeft,
   Subtitles, Check, X, Plus, Trash2, Scissors, Music,
   Smile, Type, Palette, Image, Sparkles, Play, Pause,
-  Film, Sticker, Crown, Layers,
+  Film, Sticker, Crown, Layers, ChevronLeft, ChevronRight,
+  Clock, PlusCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -13,102 +14,137 @@ import {
   storageService, composeService,
 } from '@/services/creativeService';
 
-// ── Subtitle style presets ──
-const subtitlePresets = [
+// ── Font presets (YouTube-style, creative) ──
+const fontPresets = [
   {
-    id: 'cinematic',
-    label: '🎬 קולנועי',
-    font: "'Noto Sans Hebrew', sans-serif",
-    fontSize: 32,
-    color: '#FFFFFF',
-    bgColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 12,
-    shadow: '0 2px 12px rgba(0,0,0,0.8)',
-    fontWeight: 700,
-    padding: '12px 28px',
-  },
-  {
-    id: 'social',
-    label: '📱 רשתות חברתיות',
+    id: 'impact',
+    label: '💥 Impact',
     font: "'Rubik', sans-serif",
-    fontSize: 28,
-    color: '#FFFFFF',
-    bgColor: 'rgba(255,180,0,0.9)',
-    borderRadius: 8,
-    shadow: '0 4px 16px rgba(255,150,0,0.5)',
-    fontWeight: 800,
-    padding: '10px 24px',
+    fontWeight: 900,
+    bgColor: 'rgba(0,0,0,0.85)',
+    borderRadius: 4,
+    shadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
+    padding: '8px 20px',
+    preview: 'כתובית בולטת',
   },
   {
-    id: 'minimal',
-    label: '✨ מינימלי',
+    id: 'glow',
+    label: '✨ זוהר',
     font: "'Heebo', sans-serif",
-    fontSize: 24,
-    color: '#FFFFFF',
+    fontWeight: 700,
     bgColor: 'transparent',
     borderRadius: 0,
-    shadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 40px rgba(0,0,0,0.4)',
-    fontWeight: 500,
+    shadow: '0 0 10px #fff, 0 0 20px #fff, 0 0 40px #FFD700, 0 0 80px #FFD700',
     padding: '8px 16px',
+    preview: 'כתובית זוהרת',
   },
   {
-    id: 'bold',
-    label: '💥 בולט',
-    font: "'Rubik', sans-serif",
-    fontSize: 36,
-    color: '#FFD700',
-    bgColor: 'rgba(0,0,0,0.85)',
-    borderRadius: 16,
-    shadow: '0 0 20px rgba(255,215,0,0.4)',
-    fontWeight: 900,
-    padding: '14px 32px',
-  },
-  {
-    id: 'karaoke',
-    label: '🎤 קריוקי',
+    id: 'boxed',
+    label: '📦 קופסה',
     font: "'Noto Sans Hebrew', sans-serif",
-    fontSize: 30,
-    color: '#00FF88',
-    bgColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 20,
-    shadow: '0 0 30px rgba(0,255,136,0.3)',
+    fontWeight: 800,
+    bgColor: 'rgba(255,200,0,0.95)',
+    borderRadius: 6,
+    shadow: 'none',
+    padding: '10px 24px',
+    preview: 'כתובית בקופסה',
+    textColor: '#000000',
+  },
+  {
+    id: 'outline',
+    label: '🔲 מתאר',
+    font: "'Rubik', sans-serif",
+    fontWeight: 800,
+    bgColor: 'transparent',
+    borderRadius: 0,
+    shadow: '3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 3px 6px rgba(0,0,0,0.5)',
+    padding: '8px 16px',
+    preview: 'כתובית עם מתאר',
+  },
+  {
+    id: 'gradient',
+    label: '🌈 גרדיאנט',
+    font: "'Heebo', sans-serif",
     fontWeight: 700,
+    bgColor: 'linear-gradient(135deg, rgba(255,0,128,0.9), rgba(255,165,0,0.9))',
+    borderRadius: 16,
+    shadow: '0 4px 20px rgba(255,0,128,0.4)',
     padding: '12px 28px',
+    preview: 'כתובית צבעונית',
+  },
+  {
+    id: 'cinema',
+    label: '🎬 קולנועי',
+    font: "'Noto Sans Hebrew', sans-serif",
+    fontWeight: 500,
+    bgColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 2,
+    shadow: '0 2px 8px rgba(0,0,0,0.9)',
+    padding: '10px 24px',
+    preview: 'כתובית קולנועית',
+  },
+  {
+    id: 'neon',
+    label: '💡 ניאון',
+    font: "'Rubik', sans-serif",
+    fontWeight: 700,
+    bgColor: 'transparent',
+    borderRadius: 0,
+    shadow: '0 0 7px #fff, 0 0 10px #fff, 0 0 21px #fff, 0 0 42px #0fa, 0 0 82px #0fa',
+    padding: '8px 16px',
+    preview: 'כתובית ניאון',
+    textColor: '#FFFFFF',
+  },
+  {
+    id: 'handwritten',
+    label: '✍️ כתב יד',
+    font: "'Heebo', sans-serif",
+    fontWeight: 400,
+    bgColor: 'rgba(255,255,200,0.9)',
+    borderRadius: 3,
+    shadow: '1px 1px 2px rgba(0,0,0,0.3)',
+    padding: '10px 20px',
+    preview: 'כתובית אישית',
+    textColor: '#333333',
   },
 ] as const;
 
-// ── Custom color options ──
+// ── Color options ──
 const colorOptions = [
-  { value: '#FFFFFF', label: 'לבן', tw: 'bg-white' },
-  { value: '#FFD700', label: 'זהב', tw: 'bg-amber-400' },
-  { value: '#00FF88', label: 'ירוק', tw: 'bg-green-400' },
-  { value: '#00BFFF', label: 'כחול', tw: 'bg-blue-400' },
-  { value: '#FF4444', label: 'אדום', tw: 'bg-red-400' },
-  { value: '#FF69B4', label: 'ורוד', tw: 'bg-pink-400' },
+  { value: '#FFFFFF', label: 'לבן' },
+  { value: '#FFD700', label: 'זהב' },
+  { value: '#00FF88', label: 'ירוק' },
+  { value: '#00BFFF', label: 'כחול' },
+  { value: '#FF4444', label: 'אדום' },
+  { value: '#FF69B4', label: 'ורוד' },
+  { value: '#000000', label: 'שחור' },
+  { value: '#FF6600', label: 'כתום' },
 ];
 
 const fontSizeOptions = [
-  { value: 20, label: 'קטן' },
-  { value: 26, label: 'רגיל' },
-  { value: 32, label: 'בינוני' },
-  { value: 38, label: 'גדול' },
-  { value: 44, label: 'ענק' },
+  { value: 20, label: 'S' },
+  { value: 26, label: 'M' },
+  { value: 32, label: 'L' },
+  { value: 38, label: 'XL' },
+  { value: 44, label: 'XXL' },
 ];
 
 const emojiOptions = ['🔥', '✨', '👆', '💡', '⭐', '🎯', '💪', '❤️', '👇', '📌', '🚀', '💰', '👏', '🎉', '💎', '🏆'];
 
 const bgMusicOptions = [
-  { id: 'none', label: 'ללא מוזיקה', prompt: '' },
-  { id: 'upbeat', label: '🎵 אנרגטי ושמח', prompt: 'upbeat energetic background music, corporate, positive' },
-  { id: 'calm', label: '🎶 רגוע ומקצועי', prompt: 'calm professional background music, soft piano, corporate' },
-  { id: 'dramatic', label: '🎼 דרמטי', prompt: 'dramatic cinematic background music, inspiring, epic' },
-  { id: 'modern', label: '🎧 מודרני', prompt: 'modern electronic background music, tech, trendy' },
+  { id: 'none', label: 'ללא מוזיקה', emoji: '🔇', prompt: '' },
+  { id: 'upbeat', label: 'אנרגטי', emoji: '🎵', prompt: 'upbeat energetic background music, corporate, positive' },
+  { id: 'calm', label: 'רגוע', emoji: '🎶', prompt: 'calm professional background music, soft piano, corporate' },
+  { id: 'dramatic', label: 'דרמטי', emoji: '🎼', prompt: 'dramatic cinematic background music, inspiring, epic' },
+  { id: 'modern', label: 'מודרני', emoji: '🎧', prompt: 'modern electronic background music, tech, trendy' },
+  { id: 'chill', label: "צ'יל", emoji: '🌊', prompt: 'chill lofi background music, relaxed, ambient' },
 ];
 
-// ── Sticker icons for overlay ──
+// ── Sticker icons ──
 const stickerOptions = [
   '👆', '👇', '👉', '👈', '⭐', '🔥', '💡', '📌', '🎯', '✅',
   '❌', '❓', '💰', '🏆', '🚀', '💎', '⚡', '🎉', '📢', '🔔',
+  '💪', '❤️', '👏', '🤩', '😎', '🤔', '💯', '🎊', '📊', '🛒',
 ];
 
 interface StickerOverlay {
@@ -125,8 +161,15 @@ interface SubtitleEditorProps {
   onBack: () => void;
 }
 
+// Step names
+const STEPS = [
+  { key: 'upload', label: 'העלאה', icon: Upload },
+  { key: 'subtitles', label: 'כתוביות', icon: Subtitles },
+  { key: 'style', label: 'עיצוב', icon: Palette },
+  { key: 'extras', label: 'תוספות', icon: Layers },
+] as const;
+
 export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
-  // Steps: 0=upload, 1=edit, 2=render/save
   const [step, setStep] = useState(0);
   const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -134,18 +177,15 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState('');
-  const [savingSrt, setSavingSrt] = useState(false);
-  const [savedSrtUrl, setSavedSrtUrl] = useState<string | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<'subtitles' | 'style' | 'music' | 'logo' | 'stickers'>('subtitles');
 
-  // Subtitle styling
-  const [selectedPreset, setSelectedPreset] = useState('cinematic');
+  // Style
+  const [selectedFont, setSelectedFont] = useState('impact');
   const [customColor, setCustomColor] = useState('#FFFFFF');
   const [customFontSize, setCustomFontSize] = useState(32);
 
@@ -156,7 +196,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // Stickers
   const [stickers, setStickers] = useState<StickerOverlay[]>([]);
 
-  // Background music
+  // Music
   const [selectedMusic, setSelectedMusic] = useState('none');
   const [musicLoading, setMusicLoading] = useState(false);
   const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
@@ -168,7 +208,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [renderProgress, setRenderProgress] = useState(0);
   const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
 
-  const currentPreset = subtitlePresets.find(p => p.id === selectedPreset) || subtitlePresets[0];
+  const currentFont = fontPresets.find(p => p.id === selectedFont) || fontPresets[0];
 
   const getAdjustedSegments = useCallback(() => {
     return subtitleSegments
@@ -183,7 +223,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // ── Segment management ──
   const updateSegment = (index: number, updates: Partial<SubtitleSegment>) => {
     setSubtitleSegments(prev => prev.map((s, i) => i === index ? { ...s, ...updates } : s));
-    setSavedSrtUrl(null);
   };
 
   const addSegment = (afterIndex: number) => {
@@ -198,12 +237,18 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       return arr;
     });
     setEditingIndex(afterIndex + 1);
-    setSavedSrtUrl(null);
+  };
+
+  const addGapBetween = (index: number, gapSeconds: number) => {
+    // Push all subsequent segments forward by gapSeconds
+    setSubtitleSegments(prev => prev.map((s, i) => {
+      if (i <= index) return s;
+      return { ...s, start: s.start + gapSeconds, end: s.end + gapSeconds };
+    }));
   };
 
   const deleteSegment = (index: number) => {
     setSubtitleSegments(prev => prev.filter((_, i) => i !== index));
-    setSavedSrtUrl(null);
   };
 
   const splitSegment = (index: number) => {
@@ -218,7 +263,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       arr.splice(index, 1, seg1, seg2);
       return arr;
     });
-    setSavedSrtUrl(null);
   };
 
   const addEmoji = (index: number, emoji: string) => {
@@ -323,12 +367,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     setRenderProgress(5);
 
     try {
-      // 1. Upload source video
       toast.info('מעלה סרטון מקור...');
       const videoUrl = await storageService.upload(videoFile);
       setRenderProgress(15);
 
-      // 2. Upload music if exists
       let audioUrl: string | undefined;
       if (musicAudioUrl) {
         toast.info('מעלה מוזיקת רקע...');
@@ -338,12 +380,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         setRenderProgress(25);
       }
 
-      // 3. Build scenes from subtitle segments for Shotstack
       const adjusted = getAdjustedSegments();
       const videoDuration = videoPreviewRef.current?.duration || 30;
 
-      // Build subtitle overlay clips
-      const scenes = adjusted.map((seg, i) => ({
+      const scenes = adjusted.map((seg) => ({
         title: '',
         duration: seg.end - seg.start,
         subtitleText: seg.text,
@@ -351,21 +391,13 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         icons: [] as string[],
       }));
 
-      // If no subtitles, make one scene for the whole video
       if (scenes.length === 0) {
-        scenes.push({
-          title: '',
-          duration: videoDuration,
-          subtitleText: '',
-          spokenText: '',
-          icons: [],
-        });
+        scenes.push({ title: '', duration: videoDuration, subtitleText: '', spokenText: '', icons: [] });
       }
 
       setRenderProgress(30);
       toast.info('שולח להרכבה...');
 
-      // 4. Send to compose-video with custom subtitle styling
       const { data, error } = await supabase.functions.invoke('compose-video', {
         body: {
           action: 'render',
@@ -375,14 +407,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           brandColors: activeBrand?.colors || [],
           audioUrl,
           subtitleStyle: {
-            font: currentPreset.font,
+            font: currentFont.font,
             fontSize: customFontSize,
-            color: customColor,
-            bgColor: currentPreset.bgColor,
-            borderRadius: currentPreset.borderRadius,
-            shadow: currentPreset.shadow,
-            fontWeight: currentPreset.fontWeight,
-            padding: currentPreset.padding,
+            color: (currentFont as any).textColor || customColor,
+            bgColor: currentFont.bgColor,
+            borderRadius: currentFont.borderRadius,
+            shadow: currentFont.shadow,
+            fontWeight: currentFont.fontWeight,
+            padding: currentFont.padding,
           },
           stickers: stickers.map(s => ({
             emoji: s.emoji,
@@ -405,9 +437,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       setRenderProgress(40);
       toast.info('מרכיב סרטון... זה עשוי לקחת כמה דקות');
 
-      // 5. Poll for status
       let attempts = 0;
-      const maxAttempts = 120; // 10 minutes
+      const maxAttempts = 120;
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000));
         attempts++;
@@ -440,24 +471,111 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
   // ── Preview subtitle CSS ──
   const getPreviewSubtitleStyle = (): React.CSSProperties => ({
-    fontFamily: currentPreset.font,
+    fontFamily: currentFont.font,
     fontSize: `${Math.min(customFontSize * 0.6, 22)}px`,
-    color: customColor,
-    backgroundColor: currentPreset.bgColor,
-    borderRadius: `${currentPreset.borderRadius}px`,
-    textShadow: currentPreset.shadow,
-    fontWeight: currentPreset.fontWeight as any,
+    color: (currentFont as any).textColor || customColor,
+    background: currentFont.bgColor,
+    borderRadius: `${currentFont.borderRadius}px`,
+    textShadow: currentFont.shadow,
+    fontWeight: currentFont.fontWeight as any,
     padding: '6px 14px',
     direction: 'rtl',
     textAlign: 'center' as const,
     maxWidth: '90%',
   });
 
+  // ── Video preview component (shared across steps) ──
+  const VideoPreview = () => (
+    videoPreviewUrl ? (
+      <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+        <video
+          ref={videoPreviewRef}
+          src={videoPreviewUrl}
+          controls
+          className="w-full max-h-[240px]"
+          onTimeUpdate={() => {
+            if (!videoPreviewRef.current) return;
+            const t = videoPreviewRef.current.currentTime;
+            const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
+            setCurrentSubtitle(active?.text || '');
+          }}
+        />
+        {showPreview && currentSubtitle && (
+          <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4">
+            <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+          </div>
+        )}
+        {logoUrl && (
+          <div className="absolute top-3 right-3 pointer-events-none">
+            <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
+          </div>
+        )}
+      </div>
+    ) : null
+  );
+
+  // ── Step indicator ──
+  const StepIndicator = () => (
+    <div className="flex items-center gap-1 mb-3">
+      {STEPS.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-1">
+          <button
+            onClick={() => { if (i === 0 || (i > 0 && videoFile)) setStep(i); }}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all',
+              step === i ? 'bg-primary text-primary-foreground' :
+              step > i ? 'bg-primary/20 text-primary' :
+              'bg-muted text-muted-foreground'
+            )}
+          >
+            {step > i ? <Check className="w-3 h-3" /> : <s.icon className="w-3 h-3" />}
+            {s.label}
+          </button>
+          {i < STEPS.length - 1 && (
+            <ChevronLeft className="w-3 h-3 text-muted-foreground/50" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── Navigation buttons ──
+  const NavButtons = ({ canNext = true }: { canNext?: boolean }) => (
+    <div className="flex gap-2 pt-3 border-t border-border/50">
+      <button
+        onClick={() => setStep(s => s - 1)}
+        className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5"
+      >
+        <ArrowRight className="w-3.5 h-3.5" /> הקודם
+      </button>
+      <div className="flex-1" />
+      {step < STEPS.length - 1 ? (
+        <button
+          onClick={() => setStep(s => s + 1)}
+          disabled={!canNext}
+          className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          הבא <ArrowLeft className="w-3.5 h-3.5" />
+        </button>
+      ) : (
+        <button
+          onClick={handleRenderVideo}
+          disabled={rendering || subtitleSegments.length === 0}
+          className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+          {rendering ? `מרכיב... ${Math.round(renderProgress)}%` : 'הרכב סרטון סופי 🎬'}
+        </button>
+      )}
+    </div>
+  );
+
   // ════════════════════════════════════════════
   // STEP 0: Upload
   // ════════════════════════════════════════════
   if (step === 0) return (
     <div className="space-y-4">
+      <StepIndicator />
       <div
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -472,7 +590,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         }}
         onClick={() => fileInputRef.current?.click()}
         className={cn(
-          'border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all',
+          'border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all',
           isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
         )}
       >
@@ -482,7 +600,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             if (f) { setVideoFile(f); setVideoPreviewUrl(URL.createObjectURL(f)); setStep(1); }
           }}
         />
-        <Upload className={cn('w-10 h-10 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
+        <Upload className={cn('w-12 h-12 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
         <p className="text-sm font-medium">גרור סרטון לכאן או לחץ לבחירה</p>
         <p className="text-xs text-muted-foreground mt-1">MP4, MOV, WebM</p>
       </div>
@@ -490,43 +608,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   );
 
   // ════════════════════════════════════════════
-  // STEP 1: Full Edit Suite
+  // STEP 1: Subtitles — edit text, timing, gaps
   // ════════════════════════════════════════════
   if (step === 1) return (
     <div className="space-y-3">
-      {/* Video preview with live subtitles */}
-      {videoPreviewUrl && (
-        <div className="rounded-xl overflow-hidden border border-border relative bg-black">
-          <video
-            ref={videoPreviewRef}
-            src={videoPreviewUrl}
-            controls
-            className="w-full max-h-[280px]"
-            onTimeUpdate={() => {
-              if (!videoPreviewRef.current) return;
-              const t = videoPreviewRef.current.currentTime;
-              const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
-              setCurrentSubtitle(active?.text || '');
-            }}
-          />
-          {/* Live subtitle overlay */}
-          {showPreview && currentSubtitle && (
-            <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4">
-              <div style={getPreviewSubtitleStyle()}>
-                {currentSubtitle}
-              </div>
-            </div>
-          )}
-          {/* Logo preview */}
-          {logoUrl && (
-            <div className="absolute top-3 right-3 pointer-events-none">
-              <img src={logoUrl} alt="logo" className="w-12 h-12 object-contain rounded-lg opacity-90" />
-            </div>
-          )}
-        </div>
-      )}
+      <StepIndicator />
+      <VideoPreview />
 
-      {/* Primary actions */}
+      {/* Transcribe + controls */}
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={handleTranscribe}
@@ -537,124 +626,148 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
         </button>
         {subtitleSegments.length > 0 && (
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className={cn('px-3 py-2 border rounded-lg text-sm flex items-center gap-2',
-              showPreview ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted')}
-          >
-            <Eye className="w-4 h-4" /> {showPreview ? 'הסתר תצוגה' : 'תצוגה חיה'}
-          </button>
+          <>
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className={cn('px-3 py-2 border rounded-lg text-sm flex items-center gap-2',
+                showPreview ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted')}
+            >
+              <Eye className="w-4 h-4" /> תצוגה חיה
+            </button>
+            <button
+              onClick={() => {
+                const srt = subtitleService.toSRT(getAdjustedSegments());
+                const blob = new Blob(['\uFEFF' + srt], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = `subtitles-${Date.now()}.srt`;
+                document.body.appendChild(link); link.click();
+                document.body.removeChild(link); URL.revokeObjectURL(url);
+                toast.success('SRT הורד!');
+              }}
+              className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> SRT
+            </button>
+          </>
         )}
       </div>
 
-      {/* Panel tabs */}
-      <div className="flex gap-1 bg-muted/50 rounded-lg p-1 overflow-x-auto">
-        {([
-          { id: 'subtitles' as const, icon: Subtitles, label: 'כתוביות' },
-          { id: 'style' as const, icon: Palette, label: 'עיצוב' },
-          { id: 'music' as const, icon: Music, label: 'מוזיקה' },
-          { id: 'logo' as const, icon: Crown, label: 'לוגו' },
-          { id: 'stickers' as const, icon: Sticker, label: 'סטיקרים' },
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePanel(tab.id)}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap',
-              activePanel === tab.id
-                ? 'bg-background text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <tab.icon className="w-3.5 h-3.5" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Panel: Subtitles ── */}
-      {activePanel === 'subtitles' && subtitleSegments.length > 0 && (
+      {/* Subtitle segments with gap controls */}
+      {subtitleSegments.length > 0 ? (
         <div className="space-y-1">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               כתוביות ({subtitleSegments.length})
             </h4>
-            <button
-              onClick={() => addSegment(subtitleSegments.length - 1)}
-              className="text-xs text-primary flex items-center gap-1 hover:underline"
-            >
-              <Plus className="w-3 h-3" /> הוסף כתובית
-            </button>
           </div>
-          <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
-            {subtitleSegments.map((seg, i) => (
-              <div
-                key={i}
-                className={cn(
-                  'bg-muted/30 rounded-lg p-2.5 border transition-all',
-                  editingIndex === i ? 'border-primary/50 bg-primary/5' : 'border-border/50'
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <input type="number" step="0.1" min="0" value={seg.start}
-                    onChange={e => updateSegment(i, { start: Number(e.target.value) })}
-                    className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
-                    title="התחלה" />
-                  <span className="text-xs text-muted-foreground">—</span>
-                  <input type="number" step="0.1" min="0" value={seg.end}
-                    onChange={e => updateSegment(i, { end: Number(e.target.value) })}
-                    className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
-                    title="סיום" />
-                  <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
-                  <div className="mr-auto flex items-center gap-0.5">
-                    <button onClick={() => seekToSegment(seg)} title="נגן"
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                      <Play className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => splitSegment(i)} title="פצל"
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                      <Scissors className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => addSegment(i)} title="הוסף"
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                      <Plus className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => deleteSegment(i)} title="מחק"
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+
+          <div className="space-y-0 max-h-[320px] overflow-y-auto pr-1">
+            {subtitleSegments.map((seg, i) => {
+              const gap = i < subtitleSegments.length - 1
+                ? subtitleSegments[i + 1].start - seg.end
+                : null;
+
+              return (
+                <div key={i}>
+                  {/* Segment card */}
+                  <div
+                    className={cn(
+                      'bg-muted/30 rounded-lg p-2.5 border transition-all',
+                      editingIndex === i ? 'border-primary/50 bg-primary/5' : 'border-border/50'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <input type="number" step="0.1" min="0" value={seg.start}
+                        onChange={e => updateSegment(i, { start: Number(e.target.value) })}
+                        className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        title="התחלה" />
+                      <span className="text-xs text-muted-foreground">—</span>
+                      <input type="number" step="0.1" min="0" value={seg.end}
+                        onChange={e => updateSegment(i, { end: Number(e.target.value) })}
+                        className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        title="סיום" />
+                      <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
+                      <div className="mr-auto flex items-center gap-0.5">
+                        <button onClick={() => seekToSegment(seg)} title="נגן"
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                          <Play className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => splitSegment(i)} title="פצל"
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                          <Scissors className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => deleteSegment(i)} title="מחק"
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      value={seg.text}
+                      onFocus={() => setEditingIndex(i)}
+                      onChange={e => updateSegment(i, { text: e.target.value })}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      dir="rtl"
+                      placeholder="טקסט כתובית..."
+                    />
+                    {editingIndex === i && (
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {emojiOptions.map(emoji => (
+                          <button key={emoji} onClick={() => addEmoji(i, emoji)}
+                            className="w-6 h-6 rounded hover:bg-muted text-sm flex items-center justify-center">
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Gap control between segments */}
+                  {gap !== null && (
+                    <div className="flex items-center justify-center gap-2 py-1 group">
+                      <div className="h-px flex-1 bg-border/30" />
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <button
+                          onClick={() => addGapBetween(i, -0.3)}
+                          className="w-5 h-5 rounded-full border border-border hover:bg-muted flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="צמצם רווח"
+                        >
+                          −
+                        </button>
+                        <span className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-medium',
+                          gap > 0.3 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        )}>
+                          ⏸ {gap.toFixed(1)}s
+                        </span>
+                        <button
+                          onClick={() => addGapBetween(i, 0.3)}
+                          className="w-5 h-5 rounded-full border border-border hover:bg-muted flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="הגדל רווח"
+                        >
+                          +
+                        </button>
+                        <button
+                          onClick={() => addSegment(i)}
+                          className="w-5 h-5 rounded-full border border-primary/50 hover:bg-primary/10 text-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="הוסף כתובית כאן"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="h-px flex-1 bg-border/30" />
+                    </div>
+                  )}
                 </div>
-                <input
-                  value={seg.text}
-                  onFocus={() => setEditingIndex(i)}
-                  onChange={e => updateSegment(i, { text: e.target.value })}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  dir="rtl"
-                  placeholder="טקסט כתובית..."
-                />
-                {editingIndex === i && (
-                  <div className="flex gap-1 mt-1.5 flex-wrap">
-                    {emojiOptions.map(emoji => (
-                      <button key={emoji} onClick={() => addEmoji(i, emoji)}
-                        className="w-6 h-6 rounded hover:bg-muted text-sm flex items-center justify-center">
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {i < subtitleSegments.length - 1 && (subtitleSegments[i + 1].start - seg.end) > 0.5 && (
-                  <div className="mt-1 text-[10px] text-muted-foreground/70 text-center">
-                    ⏸ רווח {(subtitleSegments[i + 1].start - seg.end).toFixed(1)}s
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
-          {/* Offset control */}
+
+          {/* Global offset */}
           <div className="bg-card border border-border rounded-lg p-3 mt-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-muted-foreground">סנכרון כתוביות</label>
+              <label className="text-xs font-medium text-muted-foreground">סנכרון כללי</label>
               <span className="text-xs font-medium text-primary">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s</span>
             </div>
             <input type="range" min="-3" max="3" step="0.1" value={subtitleOffset}
@@ -662,321 +775,279 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               className="w-full accent-primary" />
             <div className="flex justify-between mt-1">
               <button onClick={() => setSubtitleOffset(o => Math.max(-3, o - 0.2))}
-                className="text-[10px] text-muted-foreground hover:text-foreground">◀ מוקדם יותר</button>
+                className="text-[10px] text-muted-foreground hover:text-foreground">◀ מוקדם</button>
               <button onClick={() => setSubtitleOffset(0)}
                 className="text-[10px] text-primary hover:underline">איפוס</button>
               <button onClick={() => setSubtitleOffset(o => Math.min(3, o + 0.2))}
-                className="text-[10px] text-muted-foreground hover:text-foreground">מאוחר יותר ▶</button>
+                className="text-[10px] text-muted-foreground hover:text-foreground">מאוחר ▶</button>
             </div>
           </div>
         </div>
-      )}
-
-      {activePanel === 'subtitles' && subtitleSegments.length === 0 && (
+      ) : (
         <div className="text-center py-8 text-muted-foreground">
           <Subtitles className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">לחץ "תמלל אוטומטית" כדי להתחיל</p>
         </div>
       )}
 
-      {/* ── Panel: Style ── */}
-      {activePanel === 'style' && (
-        <div className="space-y-4">
-          {/* Presets */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">סגנון כתוביות</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {subtitlePresets.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => {
-                    setSelectedPreset(preset.id);
-                    setCustomColor(preset.color);
-                    setCustomFontSize(preset.fontSize);
-                  }}
-                  className={cn(
-                    'p-3 rounded-lg border text-right transition-all',
-                    selectedPreset === preset.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:bg-muted'
-                  )}
-                >
-                  <div className="text-sm font-medium">{preset.label}</div>
-                  <div
-                    className="mt-1.5 text-xs px-2 py-1 rounded inline-block"
-                    style={{
-                      fontFamily: preset.font,
-                      color: preset.color,
-                      backgroundColor: preset.bgColor === 'transparent' ? 'rgba(0,0,0,0.5)' : preset.bgColor,
-                      fontWeight: preset.fontWeight,
-                      textShadow: preset.shadow,
-                    }}
-                    dir="rtl"
-                  >
-                    דוגמה לכתובית
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+      <NavButtons canNext={subtitleSegments.length > 0} />
+    </div>
+  );
 
-          {/* Custom color */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">צבע טקסט</h4>
-            <div className="flex gap-2">
-              {colorOptions.map(c => (
-                <button
-                  key={c.value}
-                  onClick={() => setCustomColor(c.value)}
-                  className={cn(
-                    'w-8 h-8 rounded-full border-2 transition-all',
-                    c.tw,
-                    customColor === c.value ? 'border-primary scale-110 shadow-lg' : 'border-border/50'
-                  )}
-                  title={c.label}
-                />
-              ))}
-            </div>
-          </div>
+  // ════════════════════════════════════════════
+  // STEP 2: Style — fonts, colors, size
+  // ════════════════════════════════════════════
+  if (step === 2) return (
+    <div className="space-y-3">
+      <StepIndicator />
+      <VideoPreview />
 
-          {/* Font size */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">גודל טקסט</h4>
-            <div className="flex gap-2">
-              {fontSizeOptions.map(s => (
-                <button
-                  key={s.value}
-                  onClick={() => setCustomFontSize(s.value)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg border text-xs transition-all',
-                    customFontSize === s.value
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border hover:bg-muted'
-                  )}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Panel: Music ── */}
-      {activePanel === 'music' && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">מוזיקת רקע</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {bgMusicOptions.map(m => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setSelectedMusic(m.id);
-                  if (m.id !== 'none') generateMusic(m.id);
-                  else setMusicAudioUrl(null);
-                }}
-                className={cn(
-                  'px-3 py-2.5 rounded-lg text-sm border transition-all text-right',
-                  selectedMusic === m.id ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
-                )}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          {musicLoading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center py-4">
-              <Loader2 className="w-4 h-4 animate-spin" /> מייצר מוזיקת רקע...
-            </div>
-          )}
-          {musicAudioUrl && (
-            <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
-              <button
-                onClick={() => {
-                  if (!musicAudioRef.current) return;
-                  if (musicPlaying) musicAudioRef.current.pause();
-                  else musicAudioRef.current.play();
-                  setMusicPlaying(!musicPlaying);
-                }}
-                className="w-8 h-8 gradient-gold text-primary-foreground rounded-full flex items-center justify-center text-xs shrink-0"
-              >
-                {musicPlaying ? '⏸' : '▶'}
-              </button>
-              <audio ref={musicAudioRef} src={musicAudioUrl} onEnded={() => setMusicPlaying(false)} className="flex-1 h-8" controls />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Panel: Logo ── */}
-      {activePanel === 'logo' && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">לוגו העסק</h4>
-          {logoUrl ? (
-            <div className="flex items-center gap-4 bg-muted/30 rounded-lg p-4 border border-border/50">
-              <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-lg border border-border" />
-              <div className="flex-1 space-y-1">
-                <p className="text-sm font-medium text-foreground">הלוגו יופיע בפינה הימנית העליונה</p>
-                <button
-                  onClick={() => setLogoUrl(null)}
-                  className="text-xs text-destructive hover:underline flex items-center gap-1"
-                >
-                  <Trash2 className="w-3 h-3" /> הסר לוגו
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div
-              onClick={() => logoInputRef.current?.click()}
-              className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/40 transition-all"
-            >
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => {
-                  const f = e.target.files?.[0];
-                  if (f) handleLogoUpload(f);
-                }}
-              />
-              {logoUploading ? (
-                <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
-              ) : (
-                <>
-                  <Image className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">לחץ להעלאת לוגו</p>
-                  <p className="text-xs text-muted-foreground/70">PNG, SVG, JPG</p>
-                </>
+      {/* Font presets grid */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">סגנון כתוביות</h4>
+        <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-1">
+          {fontPresets.map(preset => (
+            <button
+              key={preset.id}
+              onClick={() => {
+                setSelectedFont(preset.id);
+                if ((preset as any).textColor) setCustomColor((preset as any).textColor);
+                else setCustomColor('#FFFFFF');
+              }}
+              className={cn(
+                'p-3 rounded-lg border text-right transition-all',
+                selectedFont === preset.id
+                  ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                  : 'border-border hover:bg-muted'
               )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Panel: Stickers ── */}
-      {activePanel === 'stickers' && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">סטיקרים ואייקונים</h4>
-          <div className="flex flex-wrap gap-2">
-            {stickerOptions.map(emoji => (
-              <button
-                key={emoji}
-                onClick={() => addSticker(emoji)}
-                className="w-10 h-10 rounded-lg border border-border hover:bg-muted hover:border-primary/40 flex items-center justify-center text-xl transition-all"
+            >
+              <div className="text-xs font-medium mb-1.5">{preset.label}</div>
+              <div
+                className="text-xs px-2 py-1 rounded inline-block"
+                style={{
+                  fontFamily: preset.font,
+                  color: (preset as any).textColor || '#FFFFFF',
+                  background: preset.bgColor === 'transparent' ? 'rgba(0,0,0,0.5)' : preset.bgColor,
+                  fontWeight: preset.fontWeight,
+                  textShadow: preset.shadow,
+                  borderRadius: `${preset.borderRadius}px`,
+                }}
+                dir="rtl"
               >
-                {emoji}
-              </button>
-            ))}
-          </div>
-          {stickers.length > 0 && (
-            <div className="space-y-2 mt-2">
-              <h5 className="text-xs font-medium text-muted-foreground">סטיקרים שנוספו ({stickers.length})</h5>
-              {stickers.map(sticker => (
-                <div key={sticker.id} className="flex items-center gap-2 bg-muted/30 rounded-lg p-2 border border-border/50">
-                  <span className="text-xl">{sticker.emoji}</span>
-                  <select
-                    value={sticker.position}
-                    onChange={e => setStickers(prev => prev.map(s =>
-                      s.id === sticker.id ? { ...s, position: e.target.value as any } : s
-                    ))}
-                    className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs"
-                  >
-                    <option value="topLeft">שמאל עליון</option>
-                    <option value="topRight">ימין עליון</option>
-                    <option value="bottomLeft">שמאל תחתון</option>
-                    <option value="bottomRight">ימין תחתון</option>
-                    <option value="center">מרכז</option>
-                  </select>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={sticker.startTime}
-                    onChange={e => setStickers(prev => prev.map(s =>
-                      s.id === sticker.id ? { ...s, startTime: Number(e.target.value) } : s
-                    ))}
-                    className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center"
-                    title="זמן התחלה"
-                  />
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    value={sticker.duration}
-                    onChange={e => setStickers(prev => prev.map(s =>
-                      s.id === sticker.id ? { ...s, duration: Number(e.target.value) } : s
-                    ))}
-                    className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center"
-                    title="משך (שניות)"
-                  />
-                  <button onClick={() => removeSticker(sticker.id)}
-                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                {preset.preview}
+              </div>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
-      {/* Bottom action bar */}
-      <div className="flex gap-2 pt-2 border-t border-border/50">
-        <button onClick={() => setStep(0)}
-          className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5">
-          <ArrowRight className="w-3.5 h-3.5" /> החלף סרטון
-        </button>
-        <div className="flex-1" />
-        {subtitleSegments.length > 0 && (
-          <>
+      {/* Color */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">צבע טקסט</h4>
+        <div className="flex gap-2 flex-wrap">
+          {colorOptions.map(c => (
+            <button
+              key={c.value}
+              onClick={() => setCustomColor(c.value)}
+              className={cn(
+                'w-8 h-8 rounded-full border-2 transition-all',
+                customColor === c.value ? 'border-primary scale-110 shadow-lg' : 'border-border/50'
+              )}
+              style={{ backgroundColor: c.value }}
+              title={c.label}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Font size */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">גודל</h4>
+        <div className="flex gap-2">
+          {fontSizeOptions.map(s => (
+            <button
+              key={s.value}
+              onClick={() => setCustomFontSize(s.value)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg border text-xs font-bold transition-all',
+                customFontSize === s.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <NavButtons />
+    </div>
+  );
+
+  // ════════════════════════════════════════════
+  // STEP 3: Extras — music, logo, stickers, render
+  // ════════════════════════════════════════════
+  if (step === 3) return (
+    <div className="space-y-3">
+      <StepIndicator />
+      <VideoPreview />
+
+      {/* Music section */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Music className="w-3.5 h-3.5" /> מוזיקת רקע
+        </h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          {bgMusicOptions.map(m => (
+            <button
+              key={m.id}
+              onClick={() => {
+                setSelectedMusic(m.id);
+                if (m.id !== 'none') generateMusic(m.id);
+                else setMusicAudioUrl(null);
+              }}
+              className={cn(
+                'px-2 py-2 rounded-lg text-xs border transition-all text-center',
+                selectedMusic === m.id ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+              )}
+            >
+              <div className="text-lg mb-0.5">{m.emoji}</div>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {musicLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center py-3">
+            <Loader2 className="w-4 h-4 animate-spin" /> מייצר מוזיקה...
+          </div>
+        )}
+        {musicAudioUrl && (
+          <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-2 border border-border/50">
             <button
               onClick={() => {
-                const srt = subtitleService.toSRT(getAdjustedSegments());
-                const blob = new Blob(['\uFEFF' + srt], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `subtitles-${Date.now()}.srt`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                toast.success('הורד!');
+                if (!musicAudioRef.current) return;
+                if (musicPlaying) musicAudioRef.current.pause();
+                else musicAudioRef.current.play();
+                setMusicPlaying(!musicPlaying);
               }}
-              className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5"
+              className="w-8 h-8 gradient-gold text-primary-foreground rounded-full flex items-center justify-center text-xs shrink-0"
             >
-              <Download className="w-3.5 h-3.5" /> SRT
+              {musicPlaying ? '⏸' : '▶'}
             </button>
-            <button
-              onClick={handleRenderVideo}
-              disabled={rendering}
-              className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
-            >
-              {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-              {rendering ? `מרכיב... ${Math.round(renderProgress)}%` : 'הרכב סרטון סופי 🎬'}
-            </button>
-          </>
+            <audio ref={musicAudioRef} src={musicAudioUrl} onEnded={() => setMusicPlaying(false)} className="flex-1 h-8" controls />
+          </div>
         )}
       </div>
+
+      {/* Logo section */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Crown className="w-3.5 h-3.5" /> לוגו
+        </h4>
+        {logoUrl ? (
+          <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
+            <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border" />
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">יופיע בפינה הימנית העליונה</p>
+              <button onClick={() => setLogoUrl(null)}
+                className="text-xs text-destructive hover:underline flex items-center gap-1 mt-1">
+                <Trash2 className="w-3 h-3" /> הסר
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onClick={() => logoInputRef.current?.click()}
+            className="border border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/40 transition-all"
+          >
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }}
+            />
+            {logoUploading ? (
+              <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary" />
+            ) : (
+              <>
+                <Image className="w-6 h-6 mx-auto mb-1 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">העלה לוגו</p>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Stickers section */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Sticker className="w-3.5 h-3.5" /> סטיקרים ואייקונים
+        </h4>
+        <div className="flex flex-wrap gap-1.5">
+          {stickerOptions.map(emoji => (
+            <button
+              key={emoji}
+              onClick={() => addSticker(emoji)}
+              className="w-9 h-9 rounded-lg border border-border hover:bg-muted hover:border-primary/40 flex items-center justify-center text-lg transition-all"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        {stickers.length > 0 && (
+          <div className="space-y-1.5 mt-1">
+            <h5 className="text-[10px] font-medium text-muted-foreground">נוספו ({stickers.length})</h5>
+            {stickers.map(sticker => (
+              <div key={sticker.id} className="flex items-center gap-2 bg-muted/30 rounded-lg p-2 border border-border/50">
+                <span className="text-lg">{sticker.emoji}</span>
+                <select
+                  value={sticker.position}
+                  onChange={e => setStickers(prev => prev.map(s =>
+                    s.id === sticker.id ? { ...s, position: e.target.value as any } : s
+                  ))}
+                  className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs"
+                >
+                  <option value="topLeft">שמאל עליון</option>
+                  <option value="topRight">ימין עליון</option>
+                  <option value="bottomLeft">שמאל תחתון</option>
+                  <option value="bottomRight">ימין תחתון</option>
+                  <option value="center">מרכז</option>
+                </select>
+                <input type="number" step="0.5" min="0" value={sticker.startTime}
+                  onChange={e => setStickers(prev => prev.map(s =>
+                    s.id === sticker.id ? { ...s, startTime: Number(e.target.value) } : s
+                  ))}
+                  className="w-12 bg-background border border-border rounded px-1 py-1 text-xs text-center" title="התחלה" />
+                <input type="number" step="0.5" min="0.5" value={sticker.duration}
+                  onChange={e => setStickers(prev => prev.map(s =>
+                    s.id === sticker.id ? { ...s, duration: Number(e.target.value) } : s
+                  ))}
+                  className="w-12 bg-background border border-border rounded px-1 py-1 text-xs text-center" title="משך" />
+                <button onClick={() => removeSticker(sticker.id)}
+                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Render action */}
+      <NavButtons />
 
       {/* Render progress */}
       {rendering && (
         <div className="bg-card border border-primary/30 rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-sm font-medium">מרכיב סרטון עם כתוביות, לוגו ומוזיקה...</span>
+            <span className="text-sm font-medium">מרכיב סרטון...</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2">
-            <div
-              className="gradient-gold h-2 rounded-full transition-all duration-500"
-              style={{ width: `${renderProgress}%` }}
-            />
+            <div className="gradient-gold h-2 rounded-full transition-all duration-500" style={{ width: `${renderProgress}%` }} />
           </div>
         </div>
       )}
 
-      {/* Rendered result */}
+      {/* Result */}
       {renderedVideoUrl && (
         <div className="bg-card border border-green-500/30 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -984,15 +1055,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             <span className="text-sm font-bold">הסרטון מוכן!</span>
           </div>
           <video src={renderedVideoUrl} controls className="w-full rounded-lg max-h-[300px]" />
-          <div className="flex gap-2">
-            <a
-              href={renderedVideoUrl}
-              download={`edited-video-${Date.now()}.mp4`}
-              className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" /> הורד סרטון
-            </a>
-          </div>
+          <a href={renderedVideoUrl} download={`edited-video-${Date.now()}.mp4`}
+            className="w-full gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> הורד סרטון
+          </a>
         </div>
       )}
     </div>
