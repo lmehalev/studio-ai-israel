@@ -41,7 +41,7 @@ interface GeneratedScript {
   duration: number;
   script: string;
   scenes: ScriptScene[];
-  style: { tone?: string; pace?: string; music?: string };
+  style: { tone?: string; pace?: string; music?: string; cinematicStyle?: string };
 }
 
 interface VideoWizardFlowProps {
