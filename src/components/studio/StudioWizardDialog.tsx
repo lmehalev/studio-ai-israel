@@ -112,6 +112,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
+  // Inline brand selector state (for result view when no brand pre-selected)
+  const [inlineBrandId, setInlineBrandId] = useState<string | null>(null);
+  const [inlineNewBrandName, setInlineNewBrandName] = useState('');
+  const brands = brandService.getAll();
+
   const handleSaveToProject = async () => {
     const brandId = activeBrandId || inlineBrandId;
     const brandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
