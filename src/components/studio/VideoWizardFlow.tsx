@@ -623,7 +623,7 @@ export function VideoWizardFlow({
           logoUrl,
           brandColors,
           audioUrl: narrationAudioUrl,
-        } as any);
+        });
 
         if (!renderResult?.renderId) throw new Error('Shotstack error');
 
