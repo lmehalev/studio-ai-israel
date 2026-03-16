@@ -99,7 +99,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   // Avatar & Voice selection
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-  interface SavedVoice { id: string; name: string; audioUrl: string; type: string; }
+  interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
   const [availableVoices, setAvailableVoices] = useState<SavedVoice[]>([]);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
