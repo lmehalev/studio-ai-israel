@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
+  avatarDbService,
   type SubtitleSegment, type Brand,
 } from '@/services/creativeService';
 import { supabase } from '@/integrations/supabase/client';
