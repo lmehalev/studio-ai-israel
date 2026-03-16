@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2, Download, Trash2, Maximize2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectService, getProjectCategory, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const tabs = [
   { id: 'overview', label: 'סקירה', icon: FileText },
