@@ -10,6 +10,7 @@ export interface ProjectRow {
   provider: string | null;
   aspect_ratio: string;
   brand_id: string | null;
+  category: string | null;
   content: Record<string, any>;
   scenes: any[];
   settings: Record<string, any>;
