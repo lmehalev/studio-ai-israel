@@ -615,6 +615,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'subtitles') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
+          {avatarVoiceBar}
           <div
             onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
