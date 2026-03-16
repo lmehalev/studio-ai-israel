@@ -61,6 +61,7 @@ export default function CreativeStudioPage() {
     const updated = brandService.add(brand);
     setBrands(updated);
     setActiveBrandId(brand.id);
+    setActiveSubActivity('');
     setNewBrand({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
     setBrandDialogOpen(false);
     toast.success(`"${brand.name}" נוסף`);
