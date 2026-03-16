@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2 } from 'lucide-react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService } from '@/services/creativeService';
@@ -210,10 +210,30 @@ export default function AvatarsManagePage() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">{new Date(avatar.created_at).toLocaleDateString('he-IL')}</p>
                 </div>
-                <button onClick={() => handleDelete(avatar.id)}
-                  className="absolute top-2 left-2 w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={async () => {
+                    try {
+                      const res = await fetch(avatar.image_url);
+                      const blob = await res.blob();
+                      const blobUrl = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = blobUrl;
+                      link.download = `${avatar.name}-avatar.${avatar.image_url.includes('.png') ? 'png' : 'jpg'}`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(blobUrl);
+                      toast.success('ההורדה החלה');
+                    } catch { window.open(avatar.image_url, '_blank'); }
+                  }}
+                    className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleDelete(avatar.id)}
+                    className="w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
