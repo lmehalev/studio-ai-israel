@@ -474,35 +474,36 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       setRenderProgress(30);
       toast.info('שולח להרכבה...');
 
-      const { data, error } = await supabase.functions.invoke('compose-video', {
-        body: {
-          action: 'render',
-          videoUrl,
-          scenes,
-          logoUrl: logoUrl || undefined,
-          brandColors: activeBrand?.colors || [],
-          audioUrl,
-          subtitleStyle: {
-            font: currentFont.font,
-            fontSize: customFontSize,
-            color: (currentFont as any).textColor || customColor,
-            bgColor: currentFont.bgColor,
-            borderRadius: currentFont.borderRadius,
-            shadow: currentFont.shadow,
-            fontWeight: currentFont.fontWeight,
-            padding: currentFont.padding,
-          },
-          stickers: stickers.map(s => ({
-            emoji: s.emoji,
-            position: s.position,
-            startTime: s.startTime,
-            duration: s.duration,
-            scale: s.scale,
-          })),
-          subtitleSegments: adjusted,
-          totalDuration: videoDuration,
+      const renderParams = {
+        videoUrl,
+        scenes,
+        logoUrl: logoUrl || undefined,
+        brandColors: activeBrand?.colors || [],
+        audioUrl,
+        subtitleStyle: {
+          font: currentFont.font,
+          fontSize: customFontSize,
+          color: (currentFont as any).textColor || customColor,
+          bgColor: currentFont.bgColor,
+          borderRadius: currentFont.borderRadius,
+          shadow: currentFont.shadow,
+          fontWeight: currentFont.fontWeight,
+          padding: currentFont.padding,
         },
-      });
+        stickers: stickers.map(s => ({
+          emoji: s.emoji,
+          position: s.position,
+          startTime: s.startTime,
+          duration: s.duration,
+          scale: s.scale,
+        })),
+        subtitleSegments: adjusted,
+        totalDuration: videoDuration,
+      };
+
+      const renderResult = await composeService.render(renderParams);
+      const renderId = renderResult.renderId;
+      const shotstackEnv = renderResult.shotstackEnv;
 
       if (error || data?.error) throw new Error(data?.error || error?.message);
 
