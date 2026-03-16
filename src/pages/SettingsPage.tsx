@@ -22,6 +22,45 @@ export default function SettingsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StoredFile | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  const toggleSelect = (name: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === files.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(files.map(f => f.name)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const names = Array.from(selectedFiles);
+      for (const fileName of names) {
+        await supabase.functions.invoke('storage-manager', {
+          body: { action: 'delete', fileName },
+        });
+      }
+      setFiles(prev => prev.filter(f => !selectedFiles.has(f.name)));
+      toast.success(`${names.length} קבצים נמחקו`);
+      setSelectedFiles(new Set());
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה במחיקה');
+    } finally {
+      setBulkDeleting(false);
+      setConfirmBulkDelete(false);
+    }
+  };
 
   const loadFiles = async () => {
     setLoadingFiles(true);
