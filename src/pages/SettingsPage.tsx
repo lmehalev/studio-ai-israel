@@ -90,6 +90,20 @@ export default function SettingsPage() {
     return '📄';
   };
 
+  const isImageFile = (name: string) => /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
+  const isVideoFile = (name: string) => /\.(mp4|webm|mov)$/i.test(name);
+
+  const getPublicUrl = (fileName: string) => {
+    const { data } = supabase.storage.from('media').getPublicUrl(`uploads/${fileName}`);
+    return data.publicUrl;
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    await handleDeleteFile(confirmDelete.name);
+    setConfirmDelete(null);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
