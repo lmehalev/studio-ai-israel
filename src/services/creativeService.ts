@@ -88,30 +88,47 @@ export const voiceService = {
     if (!safeText) throw new Error('אין טקסט לקריינות');
 
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
-      body: JSON.stringify({ text: safeText, voiceId }),
-    });
+    const controller = new AbortController();
+    const abortId = setTimeout(() => controller.abort(), 120000);
 
-    if (!response.ok) {
-      let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
-      try {
-        const data = await response.json();
-        if (data?.error) apiError = data.error;
-      } catch {
-        // ignore json parsing issues
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: safeText, voiceId }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
+        try {
+          const data = await response.json();
+          if (data?.error) apiError = data.error;
+        } catch {
+          // ignore json parsing issues
+        }
+        throw new Error(apiError);
       }
-      throw new Error(apiError);
-    }
 
-    const blob = await response.blob();
-    const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
-    return storageService.upload(file);
+      const blob = await response.blob();
+      const file = new File([blob], `narration-${Date.now()}.mp3`, { type: 'audio/mpeg' });
+      return await withTimeout(
+        storageService.upload(file),
+        120000,
+        'העלאת הקריינות לקחה יותר מדי זמן. נסה שוב.'
+      );
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('יצירת הקריינות לקחה יותר מדי זמן (timeout). ממשיך בלי קריינות מותאמת.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(abortId);
+    }
   },
 };
 
