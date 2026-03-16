@@ -752,7 +752,7 @@ export function VideoWizardFlow({
           });
           if (renderResult?.renderId) {
             for (let i = 0; i < 90; i++) {
-              const status = await composeService.checkStatus(renderResult.renderId, (renderResult as any).shotstackEnv);
+              const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
               if (status.status === 'done' && status.url) {
                 newVideoUrl = status.url;
                 break;

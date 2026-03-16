@@ -281,25 +281,36 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const extractAudioBlob = async (video: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const videoEl = document.createElement('video');
-      const canvas = document.createElement('canvas');
       videoEl.src = URL.createObjectURL(video);
-      videoEl.muted = true;
+      // IMPORTANT: Do NOT set muted=true — we need audio to flow through AudioContext
+      videoEl.volume = 0; // silence speakers but keep audio stream active
 
-      // Use AudioContext to extract audio
       videoEl.onloadedmetadata = () => {
         const audioCtx = new AudioContext();
         const source = audioCtx.createMediaElementSource(videoEl);
         const dest = audioCtx.createMediaStreamDestination();
         source.connect(dest);
+        // Don't connect to speakers — keeps it silent
+        // source.connect(audioCtx.destination); // intentionally omitted
 
-        const mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : 'audio/mp4';
+        const mediaRecorder = new MediaRecorder(dest.stream, { mimeType });
         const chunks: BlobPart[] = [];
 
         mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         mediaRecorder.onstop = () => {
           URL.revokeObjectURL(videoEl.src);
           audioCtx.close();
-          resolve(new Blob(chunks, { type: 'audio/webm' }));
+          const blob = new Blob(chunks, { type: mimeType });
+          if (blob.size < 100) {
+            reject(new Error('חילוץ האודיו נכשל — הקובץ ריק'));
+          } else {
+            resolve(blob);
+          }
         };
         mediaRecorder.onerror = () => {
           URL.revokeObjectURL(videoEl.src);
@@ -308,10 +319,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
         // Limit to first 2 minutes for transcription
         const maxDuration = Math.min(videoEl.duration, 120);
-        mediaRecorder.start();
-        videoEl.play();
+        mediaRecorder.start(1000); // collect chunks every second for reliability
+        videoEl.play().catch(() => reject(new Error('הדפדפן חסם את ניגון הווידאו')));
         setTimeout(() => {
-          mediaRecorder.stop();
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          }
           videoEl.pause();
         }, maxDuration * 1000);
       };
