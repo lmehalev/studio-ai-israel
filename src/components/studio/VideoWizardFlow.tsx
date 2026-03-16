@@ -631,7 +631,7 @@ export function VideoWizardFlow({
         setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
 
         for (let i = 0; i < composeMaxAttempts; i++) {
-          const status = await composeService.checkStatus(renderResult.renderId, (renderResult as any).shotstackEnv);
+          const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
           if (status.status === 'done' && status.url) {
             const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
             setResultVideoUrl(status.url);
@@ -678,9 +678,12 @@ export function VideoWizardFlow({
     setProgressStage('משפר את הסרטון לפי הבקשה שלך...');
 
     try {
-      const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
+      const workingScenes = generatedScript?.scenes?.length
+        ? generatedScript.scenes
+        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle);
+      const fullScript = workingScenes.map(s => s.spokenText).join(' ');
       const narrationText = toNarrationText(fullScript);
-      const totalScenes = generatedScript?.scenes.length || 1;
+      const totalScenes = workingScenes.length;
 
       // Generate narration for improved video too
       let narrationAudioUrl: string | undefined;
@@ -708,7 +711,7 @@ export function VideoWizardFlow({
       const sceneVideoUrls: string[] = [];
 
       for (let i = 0; i < totalScenes; i++) {
-        const scene = generatedScript!.scenes[i];
+        const scene = workingScenes[i];
         setProgressStage(`משפר סצנה ${i + 1} מתוך ${totalScenes}...`);
         const improveContext = [
           improvePrompt,
@@ -738,21 +741,21 @@ export function VideoWizardFlow({
       let newVideoUrl = sceneVideoUrls[0] || resultVideoUrl || '';
 
       // Composite with narration + subtitles + logo
-      if (generatedScript && sceneVideoUrls.length > 0) {
+      if (sceneVideoUrls.length > 0) {
         const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
         setProgressStage('מרכיב כתוביות, קריינות ולוגו...');
         try {
           const renderResult = await composeService.render({
             videoUrl: sceneVideoUrls[0],
             videoUrls: sceneVideoUrls,
-            scenes: generatedScript.scenes.slice(0, sceneVideoUrls.length),
+            scenes: workingScenes.slice(0, sceneVideoUrls.length),
             logoUrl,
             brandColors: activeBrand?.colors || [],
             audioUrl: narrationAudioUrl,
           });
           if (renderResult?.renderId) {
             for (let i = 0; i < 90; i++) {
-              const status = await composeService.checkStatus(renderResult.renderId, (renderResult as any).shotstackEnv);
+              const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
               if (status.status === 'done' && status.url) {
                 newVideoUrl = status.url;
                 break;
