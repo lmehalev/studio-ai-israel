@@ -125,6 +125,13 @@ function buildLogoClip(logoUrl: string, totalDuration: number): any {
   };
 }
 
+function getShotstackEnvOrder(preferredEnv?: unknown): ShotstackEnv[] {
+  const normalized = typeof preferredEnv === "string" ? preferredEnv.toLowerCase() : "";
+  if (normalized === "stage") return ["stage", "production"];
+  if (normalized === "production") return ["production", "stage"];
+  return ["production", "stage"];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
