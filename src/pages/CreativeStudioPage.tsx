@@ -161,7 +161,7 @@ export default function CreativeStudioPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setActiveBrandId(null)}
+              onClick={() => { setActiveBrandId(null); setActiveSubActivity(''); }}
               className={cn(
                 'px-3 py-2 rounded-lg border text-xs font-medium transition-all',
                 !activeBrandId ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30'
