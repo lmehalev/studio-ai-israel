@@ -466,21 +466,28 @@ export function VideoWizardFlow({
 
     try {
       const fullScript = generatedScript?.scenes.map(s => s.spokenText).join(' ') || '';
+      const narrationText = toNarrationText(fullScript);
       const totalScenes = generatedScript?.scenes.length || 1;
 
       // Generate narration for improved video too
       let narrationAudioUrl: string | undefined;
-      if (fullScript) {
+      if (narrationText) {
         setProgressStage('מייצר קריינות בעברית...');
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
-            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, fullScript);
+            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, narrationText);
             narrationAudioUrl = cloneResult.audioUrl;
           } else {
-            narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+            narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           }
-        } catch { /* continue without narration */ }
+        } catch {
+          try {
+            narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
+          } catch {
+            // continue without narration
+          }
+        }
       }
 
       setProgressStage('מייצר סצנות משופרות...');
