@@ -377,11 +377,29 @@ export function VideoWizardFlow({
       const sceneResults: Array<{ url: string; scene: ScriptScene } | null> = Array(totalScenes).fill(null);
       const failedSceneIndexes: number[] = [];
 
-      // === Stage 1: ALWAYS generate Hebrew narration ===
-      setProgressStage('מייצר קריינות בעברית...');
+      let forceDidOnlyMode = false;
+      if (avatarImage) {
+        try {
+          const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
+          const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
+          const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
+
+          if (!runwayCanGenerate && didCanGenerate) {
+            forceDidOnlyMode = true;
+            toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול אווטאר כדי לסיים את הסרטון.');
+          }
+        } catch {
+          // If credit check fails, continue with normal flow.
+        }
+      }
+
+      const shouldGenerateNarration = !forceDidOnlyMode;
+
+      // === Stage 1: generate narration (skip in forced D-ID mode) ===
+      setProgressStage(shouldGenerateNarration ? 'מייצר קריינות בעברית...' : 'מכין מסלול אווטאר חלופי...');
       setRunwayProgress(5);
 
-      if (selectedVoice?.audio_url && narrationText) {
+      if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
@@ -401,7 +419,7 @@ export function VideoWizardFlow({
         }
       }
 
-      if (!narrationAudioUrl && narrationText) {
+      if (shouldGenerateNarration && !narrationAudioUrl && narrationText) {
         try {
           narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           toast.success('קריינות AI בעברית מוכנה!');
@@ -417,6 +435,28 @@ export function VideoWizardFlow({
       const updateSceneProgress = (sceneIdx: number, progress: number) => {
         setRunwayProgress(15 + sceneIdx * progressPerScene + (progress / 100) * progressPerScene);
       };
+
+      const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
+      const createDidSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
+        if (!normalizedAvatarUrl) {
+          throw new Error('אין אווטאר זמין למסלול חלופי');
+        }
+
+        const talkResult = await didService.createTalk(
+          normalizedAvatarUrl,
+          audioUrl ? undefined : sceneText,
+          undefined,
+          audioUrl
+        );
+
+        if (!talkResult?.id) throw new Error('D-ID error');
+
+        return waitForDidResult(talkResult.id, (p) => {
+          updateSceneProgress(sceneIdx, p);
+        });
+      };
+
+      let runwayBlocked = forceDidOnlyMode;
 
       for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
         const scene = workingScenes[sceneIdx];
