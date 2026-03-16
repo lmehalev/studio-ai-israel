@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 import {
   Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle,
   Clock, GitBranch, Loader2, Download, Maximize2, Wand2, Image as ImageIcon,
-  Calendar, Monitor, User, Tag, Building2, FolderOpen, Plus, Eye
+  Calendar, Monitor, User, Tag, Building2, FolderOpen, Plus, Eye, Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectService, getProjectCategory, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
+import { ImageEditor } from '@/components/editors/ImageEditor';
+import { VideoEditor } from '@/components/editors/VideoEditor';
 
 const tabs = [
   { id: 'overview', label: 'סקירה', icon: FileText },
