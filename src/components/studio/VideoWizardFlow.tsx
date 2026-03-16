@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
   ImageIcon, Video, Volume2, Check, X, Edit3, RefreshCw,
-  FileText, Sparkles, Plus
+  FileText, Sparkles, Plus, Globe, Link2, Loader2 as Loader2Icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
