@@ -339,9 +339,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'התוצאה', desc: 'התמונה שנוצרה' },
       ],
       video_ai: [
-        { title: 'סוג הסרטון', desc: 'איך תרצה ליצור?' },
-        { title: 'תאר את הסרטון', desc: 'מה יקרה בסרטון?' },
-        { title: 'הסרטון מוכן', desc: 'הסרטון שנוצר' },
+        { title: 'יצירת סרטון מקצועי', desc: 'תאר, בחר אווטארים וקולות, אשר תסריט ותייצר' },
       ],
       subtitles: [
         { title: 'העלה סרטון', desc: 'בחר סרטון לתמלול' },
