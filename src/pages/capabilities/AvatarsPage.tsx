@@ -1,37 +1,59 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserCircle, Plus, Trash2, X, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
-import { avatarGenService } from '@/services/creativeService';
+import { avatarGenService, avatarDbService } from '@/services/creativeService';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
+
+const MAX_PHOTOS = 7;
 
 interface SavedAvatar {
   id: string;
   name: string;
-  imageUrl: string;
+  image_url: string;
   style: string;
-  sourcePhotos: string[];
-  createdAt: string;
+  source_photos: string[];
+  created_at: string;
 }
 
-const STORAGE_KEY = 'studio-avatars';
-
-function getAvatars(): SavedAvatar[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-function saveAvatars(avatars: SavedAvatar[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(avatars));
-}
+const STYLE_OPTIONS = [
+  { value: 'professional headshot', label: 'פורטרט מקצועי', desc: 'תמונת פנים נקייה ומקצועית לשימוש בוידאו' },
+  { value: 'cinematic portrait with dramatic lighting', label: 'סינמטי דרמטי', desc: 'תאורה דרמטית וקולנועית' },
+  { value: 'friendly casual portrait, warm tones', label: 'ידידותי וחם', desc: 'סגנון לא פורמלי עם גוונים חמים' },
+  { value: 'corporate business photo, clean background', label: 'תאגידי עסקי', desc: 'רקע נקי, מראה מקצועי' },
+  { value: 'cartoon pixar style 3d animated character', label: '🎬 דמות פיקסאר / 3D', desc: 'דמות תלת-ממדית בסגנון אנימציה' },
+  { value: 'disney hand-drawn classic animation style', label: '🏰 דיסני קלאסי', desc: 'ציור יד בסגנון דיסני קלאסי' },
+  { value: 'anime manga japanese animation style', label: '🎌 אנימה / מנגה', desc: 'סגנון אנימציה יפנית' },
+  { value: 'comic book graphic novel superhero style', label: '💥 קומיקס / גרפיק נובל', desc: 'סגנון קומיקס מערבי' },
+  { value: 'watercolor artistic painting portrait', label: '🎨 ציור בצבעי מים', desc: 'ציור אמנותי באקוורל' },
+  { value: 'pop art andy warhol bold colors', label: '🟡 פופ ארט', desc: 'צבעים נועזים בסגנון וורהול' },
+];
 
 export default function AvatarsManagePage() {
-  const [avatars, setAvatars] = useState<SavedAvatar[]>(getAvatars());
+  const [avatars, setAvatars] = useState<SavedAvatar[]>([]);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [style, setStyle] = useState('professional headshot');
   const [generating, setGenerating] = useState(false);
+
+  // Load avatars from DB
+  useEffect(() => {
+    loadAvatars();
+  }, []);
+
+  const loadAvatars = async () => {
+    try {
+      const list = await avatarDbService.list();
+      setAvatars(list);
+    } catch (e) {
+      console.error('Failed to load avatars:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) { toast.error('יש להזין שם לאווטאר'); return; }
@@ -40,31 +62,28 @@ export default function AvatarsManagePage() {
     try {
       const result = await avatarGenService.generate(photos, style);
       if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
-      const newAvatar: SavedAvatar = {
-        id: crypto.randomUUID(),
-        name,
-        imageUrl: result.imageUrl,
-        style,
-        sourcePhotos: photos,
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [...avatars, newAvatar];
-      setAvatars(updated);
-      saveAvatars(updated);
+      
+      // Save to DB
+      const saved = await avatarDbService.save(name, result.imageUrl, style, photos);
+      setAvatars(prev => [saved, ...prev]);
       setCreating(false);
       setName('');
       setPhotos([]);
-      toast.success('האווטאר נוצר בהצלחה!');
+      setStyle('professional headshot');
+      toast.success('האווטאר נוצר ונשמר בהצלחה!');
     } catch (e: any) { toast.error(e.message); }
     finally { setGenerating(false); }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = avatars.filter(a => a.id !== id);
-    setAvatars(updated);
-    saveAvatars(updated);
-    toast.success('האווטאר הוסר');
+  const handleDelete = async (id: string) => {
+    try {
+      await avatarDbService.remove(id);
+      setAvatars(prev => prev.filter(a => a.id !== id));
+      toast.success('האווטאר הוסר');
+    } catch (e: any) { toast.error(e.message); }
   };
+
+  const selectedStyleObj = STYLE_OPTIONS.find(s => s.value === style);
 
   return (
     <AppLayout>
@@ -104,16 +123,25 @@ export default function AvatarsManagePage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">סגנון</label>
-              <select value={style} onChange={e => setStyle(e.target.value)}
-                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                <option value="professional headshot">פורטרט מקצועי</option>
-                <option value="cinematic portrait with dramatic lighting">סינמטי דרמטי</option>
-                <option value="friendly casual portrait, warm tones">ידידותי וחם</option>
-                <option value="corporate business photo, clean background">תאגידי עסקי</option>
-              </select>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                {STYLE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStyle(opt.value)}
+                    className={`text-right p-2.5 rounded-lg border text-xs transition-all ${
+                      style === opt.value
+                        ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                        : 'border-border bg-muted/30 hover:bg-muted/60'
+                    }`}
+                  >
+                    <div className="font-semibold mb-0.5">{opt.label}</div>
+                    <div className="text-muted-foreground text-[10px] leading-tight">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">תמונות רפרנס ({photos.length}/5)</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">תמונות רפרנס ({photos.length}/{MAX_PHOTOS})</label>
               {photos.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {photos.map((url, i) => (
@@ -127,11 +155,20 @@ export default function AvatarsManagePage() {
                   ))}
                 </div>
               )}
-              {photos.length < 5 && (
-                <FileUploadZone accept="image/*" label="העלה תמונה" hint="JPG, PNG — עד 5 תמונות"
-                  onUploaded={url => { if (url && photos.length < 5) setPhotos(prev => [...prev, url]); }} />
+              {photos.length < MAX_PHOTOS && (
+                <FileUploadZone accept="image/*" label="העלה תמונה" hint={`JPG, PNG — עד ${MAX_PHOTOS} תמונות`}
+                  onUploaded={url => { if (url && photos.length < MAX_PHOTOS) setPhotos(prev => [...prev, url]); }} />
               )}
             </div>
+            {selectedStyleObj && (
+              <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{selectedStyleObj.label}</span> — {selectedStyleObj.desc}
+                {selectedStyleObj.value.includes('cartoon') || selectedStyleObj.value.includes('disney') || selectedStyleObj.value.includes('anime') || selectedStyleObj.value.includes('comic') || selectedStyleObj.value.includes('watercolor') || selectedStyleObj.value.includes('pop art')
+                  ? <span className="block mt-1 text-primary">✨ סגנון אמנותי — המערכת תיצור דמות מצוירת על בסיס התמונות שלך</span>
+                  : <span className="block mt-1">📷 סגנון ריאליסטי — מתאים לאווטארים מדברים בסטודיו</span>
+                }
+              </div>
+            )}
             <button onClick={handleCreate} disabled={generating}
               className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-4 h-4" />}
@@ -141,7 +178,12 @@ export default function AvatarsManagePage() {
         )}
 
         {/* Avatars grid */}
-        {avatars.length === 0 && !creating ? (
+        {loading ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin opacity-30" />
+            <p className="text-sm">טוען אווטארים...</p>
+          </div>
+        ) : avatars.length === 0 && !creating ? (
           <div className="text-center py-16 text-muted-foreground">
             <UserCircle className="w-16 h-16 mx-auto mb-4 opacity-30" />
             <p className="text-lg font-medium">אין אווטארים עדיין</p>
@@ -152,11 +194,14 @@ export default function AvatarsManagePage() {
             {avatars.map(avatar => (
               <div key={avatar.id} className="bg-card border border-border rounded-xl overflow-hidden group relative">
                 <div className="aspect-square">
-                  <img src={avatar.imageUrl} alt={avatar.name} className="w-full h-full object-cover" />
+                  <img src={avatar.image_url} alt={avatar.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="p-3">
                   <p className="font-semibold text-sm">{avatar.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{new Date(avatar.createdAt).toLocaleDateString('he-IL')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {STYLE_OPTIONS.find(s => s.value === avatar.style)?.label || avatar.style}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{new Date(avatar.created_at).toLocaleDateString('he-IL')}</p>
                 </div>
                 <button onClick={() => handleDelete(avatar.id)}
                   className="absolute top-2 left-2 w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
