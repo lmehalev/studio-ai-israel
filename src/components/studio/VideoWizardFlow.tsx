@@ -274,25 +274,30 @@ export function VideoWizardFlow({
   };
 
   const waitForDidResult = async (talkId: string, onProgress: (p: number) => void): Promise<string> => {
-    for (let attempts = 1; attempts <= 90; attempts++) {
+    for (let attempts = 1; attempts <= DID_MAX_POLL_ATTEMPTS; attempts++) {
       const status = await didService.checkStatus(talkId);
       if (status.status === 'done' && status.resultUrl) return status.resultUrl;
       if (status.status === 'error') throw new Error('שגיאה ביצירת סרטון אווטאר');
-      onProgress(Math.min(95, attempts * 2));
-      await sleep(5000);
+      onProgress(Math.min(95, attempts * 1.2));
+      await sleep(RUNWAY_STATUS_POLL_MS);
     }
-    throw new Error('תם הזמן ליצירת הסרטון');
+    throw new Error('תם הזמן להמתנה לתוצאת אווטאר');
   };
 
   const waitForRunwayResult = async (taskId: string, onProgress: (p: number) => void): Promise<string> => {
-    for (let attempts = 1; attempts <= 120; attempts++) {
+    for (let attempts = 1; attempts <= RUNWAY_MAX_POLL_ATTEMPTS; attempts++) {
       const status = await runwayService.checkStatus(taskId);
-      onProgress(Math.max(5, Math.min(95, status.progress * 100)));
+      const rawProgress = typeof status.progress === 'number' ? status.progress : 0;
+      const normalizedProgress = rawProgress <= 1 ? rawProgress * 100 : rawProgress;
+      onProgress(Math.max(5, Math.min(95, normalizedProgress)));
+
       if (status.status === 'SUCCEEDED' && status.resultUrl) return status.resultUrl;
       if (status.status === 'FAILED') throw new Error(status.failureReason || 'שגיאה ביצירת סרטון');
-      await sleep(5000);
+
+      await sleep(RUNWAY_STATUS_POLL_MS);
     }
-    throw new Error('תם הזמן ליצירת הסרטון');
+
+    throw new Error('תם הזמן להמתנה לסצנה מ-Runway');
   };
 
   // Build prompt for a specific scene — maximize detail for Runway AI
