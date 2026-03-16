@@ -444,7 +444,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(''); }}
+      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(initialCategory || ''); setCustomCategory(''); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
