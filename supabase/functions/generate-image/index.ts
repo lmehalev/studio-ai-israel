@@ -27,6 +27,18 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const mediaUrls = [
+      ...(action === "edit" && imageUrl ? [imageUrl] : []),
+      ...(Array.isArray(referenceImages) ? referenceImages : []),
+    ].filter(Boolean) as string[];
+
+    if (mediaUrls.some((url) => blockedMediaHosts.test(url))) {
+      return new Response(
+        JSON.stringify({ error: "הקישור שהוזן הוא עמוד אתר (למשל YouTube) ולא קובץ תמונה ישיר. הדבק קישור ישיר ל‑JPG/PNG/WebP." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const messages: any[] = [];
 
     const hebrewTextGuidelines = `CRITICAL RULES FOR HEBREW TEXT IN IMAGES:
