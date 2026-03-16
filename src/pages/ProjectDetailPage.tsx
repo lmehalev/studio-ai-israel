@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Edit, Copy, RefreshCw, Archive, Video, FileText, Layers, PlayCircle, Clock, GitBranch, Loader2, Download, Trash2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { projectService, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
+import { projectService, getProjectCategory, type ProjectRow, type ProjectOutputRow, type TimelineRow, type VersionRow } from '@/services/projectService';
 
 const tabs = [
   { id: 'overview', label: 'סקירה', icon: FileText },
@@ -57,7 +57,10 @@ export default function ProjectDetailPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-rubik font-bold flex items-center gap-3">{project.name} <StatusBadge status={project.status} /></h1>
-            <p className="text-muted-foreground text-sm mt-1">{project.avatar_name || '—'} • {project.video_type} • {project.aspect_ratio} • גרסה {project.current_version}</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {project.avatar_name || '—'} • {project.video_type} • {project.aspect_ratio} • גרסה {project.current_version}
+              {getProjectCategory(project) && <span className="text-primary"> • {getProjectCategory(project)}</span>}
+            </p>
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {tags.map(t => <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">{t}</span>)}

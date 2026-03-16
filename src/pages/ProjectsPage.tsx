@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Search, Grid3X3, List, Video, Loader2, Building2, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { projectService, type ProjectRow } from '@/services/projectService';
+import { projectService, getProjectCategory, type ProjectRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
 
@@ -14,6 +14,7 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,10 +32,12 @@ export default function ProjectsPage() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (brandFilter && p.brand_id !== brandFilter) return false;
     if (typeFilter && p.video_type !== typeFilter) return false;
+    if (categoryFilter && getProjectCategory(p) !== categoryFilter) return false;
     return true;
   });
 
   const videoTypes = [...new Set(projects.map(p => p.video_type))];
+  const categories = [...new Set(projects.map(p => getProjectCategory(p)).filter(Boolean))] as string[];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
   return (
@@ -76,6 +79,13 @@ export default function ProjectsPage() {
               {videoTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
+          {categories.length > 0 && (
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="">כל הקטגוריות</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           <div className="flex border border-border rounded-lg overflow-hidden">
             <button onClick={() => setView('grid')} className={cn('p-2', view === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card')}><Grid3X3 className="w-4 h-4" /></button>
             <button onClick={() => setView('list')} className={cn('p-2', view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-card')}><List className="w-4 h-4" /></button>
@@ -93,6 +103,7 @@ export default function ProjectsPage() {
               <thead><tr className="border-b border-border bg-muted/30">
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">קטגוריה</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
@@ -108,6 +119,13 @@ export default function ProjectsPage() {
                         {brand ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
                             <Building2 className="w-3 h-3" /> {brand.name}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {getProjectCategory(p) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
+                            <Tag className="w-3 h-3" /> {getProjectCategory(p)}
                           </span>
                         ) : '—'}
                       </td>
@@ -135,6 +153,11 @@ export default function ProjectsPage() {
                     {brand && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
                         <Building2 className="w-3 h-3" /> {brand.name}
+                      </span>
+                    )}
+                    {getProjectCategory(p) && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
+                        <Tag className="w-3 h-3" /> {getProjectCategory(p)}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{p.video_type} • {p.aspect_ratio}</span>

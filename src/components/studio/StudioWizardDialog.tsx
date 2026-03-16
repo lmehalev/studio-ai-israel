@@ -104,10 +104,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  const brandDepartments = activeBrand?.departments || [];
 
   const handleSaveToProject = async () => {
     if (!activeBrandId || !activeBrand) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
+      return;
+    }
+    if (brandDepartments.length > 0 && !selectedCategory) {
+      toast.error('יש לבחור קטגוריה לפני השמירה');
       return;
     }
     const url = result?.imageUrl || result?.videoUrl;
@@ -115,16 +122,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     setSavingOutput(true);
     try {
-      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name);
+      const cat = selectedCategory || undefined;
+      const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
-        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}`,
+        name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
         description: prompt || undefined,
         video_url: isVideo ? url : null,
         thumbnail_url: !isVideo ? url : null,
         prompt: prompt || null,
       });
-      toast.success(`נשמר בפרויקט "${activeBrand.name}"!`);
+      toast.success(`נשמר בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"!`);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
@@ -164,6 +172,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setSelectedAvatarId(null);
         setSelectedVoiceId(null);
         setShowAvatarVoicePanel(false);
+        setSelectedCategory('');
       }, 300);
     }
   }, [open]);
@@ -369,6 +378,27 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     </div>
   );
 
+  // ============ CATEGORY SELECTOR ============
+  const renderCategorySelector = () => {
+    if (brandDepartments.length === 0) return null;
+    return (
+      <div className="space-y-1.5">
+        <label className="block text-xs font-medium text-muted-foreground">קטגוריה / תת-פרויקט</label>
+        <select
+          value={selectedCategory}
+          onChange={e => setSelectedCategory(e.target.value)}
+          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          dir="rtl"
+        >
+          <option value="">בחר קטגוריה...</option>
+          {brandDepartments.map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
   // ============ RESULT VIEW ============
   const renderResultView = () => (
     <div className="space-y-4">
@@ -382,6 +412,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
+      {renderCategorySelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
@@ -392,7 +423,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {savingOutput ? 'שומר...' : 'שמור'}
         </button>
       </div>
-      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
+      <button onClick={() => { setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setSelectedCategory(''); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
@@ -418,6 +449,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[250px] object-contain" />
         </div>
       )}
+      {renderCategorySelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
