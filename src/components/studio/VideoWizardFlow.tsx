@@ -303,23 +303,29 @@ export function VideoWizardFlow({
       setProgressStage('מייצר קריינות בעברית...');
       setRunwayProgress(5);
 
-      if (selectedVoice?.audio_url) {
+      if (selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
             selectedVoice.audio_url,
-            fullScript
+            narrationText
           );
           narrationAudioUrl = cloneResult.audioUrl;
           toast.success('הקריינות בקול שלך מוכנה!');
         } catch (cloneErr: any) {
-          console.warn('Voice clone failed, falling back to AI TTS:', cloneErr?.message);
-          toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
+          const msg = cloneErr?.message || '';
+          console.warn('Voice clone failed, falling back to AI TTS:', msg);
+          if (msg.includes('קובץ הקול לא נמצא')) {
+            toast.error('קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
+            setSelectedVoiceIds(prev => prev.filter(id => id !== selectedVoice.id));
+          } else {
+            toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
+          }
         }
       }
 
-      if (!narrationAudioUrl) {
+      if (!narrationAudioUrl && narrationText) {
         try {
-          narrationAudioUrl = await voiceService.generateAndUpload(fullScript);
+          narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           toast.success('קריינות AI בעברית מוכנה!');
         } catch (ttsErr: any) {
           console.warn('TTS failed:', ttsErr?.message);
