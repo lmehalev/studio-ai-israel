@@ -176,7 +176,7 @@ ${chosenStyle}
 3. **סצנת סיום (CTA)**: קריאה לפעולה ברורה עם שם המותג
 
 בהתבסס על בקשת המשתמש, צור תסריט מלא לסרטון AI קולנועי.
-${avatarContext}${voiceContext}${imageContext}${brandInfo}
+${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
 
 החזר JSON בפורמט הבא בלבד (ללא טקסט נוסף):
 {
