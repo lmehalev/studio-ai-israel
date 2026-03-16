@@ -259,6 +259,7 @@ export default function CreativeStudioPage() {
           activeBrand={activeBrand}
           activeBrandId={activeBrandId}
           buildPrompt={buildPrompt}
+          initialCategory={activeSubActivity}
         />
       </div>
     </AppLayout>
