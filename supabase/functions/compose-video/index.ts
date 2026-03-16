@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const SHOTSTACK_ENDPOINTS = {
   production: "https://api.shotstack.io/edit/v1",
-  stage: "https://api.shotstack.io/stage/edit/v1",
+  stage: "https://api.shotstack.io/edit/stage",
 } as const;
 
 type ShotstackEnv = keyof typeof SHOTSTACK_ENDPOINTS;
