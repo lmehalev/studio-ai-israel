@@ -203,7 +203,7 @@ export const composeService = {
     logoUrl?: string;
     brandColors?: string[];
     audioUrl?: string;
-  }): Promise<{ renderId: string; status: string }> => {
+  }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage' }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
     });
@@ -212,9 +212,12 @@ export const composeService = {
     return data;
   },
 
-  checkStatus: async (renderId: string): Promise<{ status: string; url: string | null; progress: number }> => {
+  checkStatus: async (
+    renderId: string,
+    shotstackEnv?: 'production' | 'stage'
+  ): Promise<{ status: string; url: string | null; progress: number }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
-      body: { action: "check_status", renderId },
+      body: { action: "check_status", renderId, shotstackEnv },
     });
     if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
     if (data?.error) throw new Error(data.error);
