@@ -143,9 +143,25 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}
 
     let parsed;
     try {
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
-      parsed = JSON.parse(jsonMatch[1].trim());
-    } catch {
+      // Try extracting JSON from markdown code blocks first
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1].trim());
+      } else {
+        // Try parsing the raw content — might have leading/trailing text
+        const braceMatch = content.match(/\{[\s\S]*\}/);
+        if (braceMatch) {
+          parsed = JSON.parse(braceMatch[0]);
+        } else {
+          parsed = JSON.parse(content.trim());
+        }
+      }
+      // Ensure scenes array exists
+      if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
+        parsed.scenes = [];
+      }
+    } catch (parseErr) {
+      console.error("JSON parse error:", parseErr, "Content preview:", content?.slice(0, 300));
       parsed = { script: content, scenes: [], title: "תסריט", duration: 60, style: {} };
     }
 
