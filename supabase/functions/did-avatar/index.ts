@@ -62,8 +62,8 @@ serve(async (req) => {
         const errText = await response.text();
         console.error("D-ID create error:", response.status, errText);
         return new Response(
-          JSON.stringify({ error: `שגיאה ביצירת אווטאר: ${response.status}` }),
-          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: `שגיאה ביצירת אווטאר מדבר (${response.status}). נסה שוב מאוחר יותר.` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
