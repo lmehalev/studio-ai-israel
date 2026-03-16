@@ -88,6 +88,10 @@ export function VideoWizardFlow({
   const [runwayProgress, setRunwayProgress] = useState(0);
   const [progressStage, setProgressStage] = useState('');
 
+  // Improve / refine
+  const [improvePrompt, setImprovePrompt] = useState('');
+  const [isImproving, setIsImproving] = useState(false);
+
   // Save
   const [savingOutput, setSavingOutput] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory || '');
@@ -151,14 +155,12 @@ export function VideoWizardFlow({
       return storageService.upload(file);
     };
 
-    // data URL avatar -> upload as real public image URL
     if (avatarUrl.startsWith('data:image/')) {
       const res = await fetch(avatarUrl);
       const blob = await res.blob();
       return ensureUpload(blob, true);
     }
 
-    // D-ID validates URL suffix (jpg/jpeg/png). If suffix is missing, re-upload as jpg.
     if (!/\.(png|jpe?g)(\?|$)/i.test(avatarUrl)) {
       const res = await fetch(avatarUrl);
       const blob = await res.blob();
@@ -188,6 +190,32 @@ export function VideoWizardFlow({
       await sleep(5000);
     }
     throw new Error('תם הזמן ליצירת הסרטון');
+  };
+
+  // Build the best possible prompt for Runway from the script
+  const buildRunwayPromptFromScript = (): string => {
+    if (!generatedScript) return prompt;
+    
+    // Use the first scene's visual description as the primary prompt (since Runway generates one clip)
+    const mainScene = generatedScript.scenes[0];
+    if (!mainScene) return generatedScript.script || prompt;
+
+    const parts: string[] = [];
+    
+    // Visual description is most important
+    if (mainScene.visualDescription) parts.push(mainScene.visualDescription);
+    if (mainScene.cameraDirection) parts.push(`Camera: ${mainScene.cameraDirection}`);
+    if (mainScene.environment) parts.push(mainScene.environment);
+    if (mainScene.characters) parts.push(mainScene.characters);
+    
+    // Add style context
+    const style = generatedScript.style;
+    if (style?.cinematicStyle) parts.push(`Style: ${style.cinematicStyle}`);
+    
+    // Add brand context
+    if (activeBrand?.name) parts.push(`Brand: ${activeBrand.name}`);
+    
+    return toRunwayPrompt(parts.join('. '));
   };
 
   // ===== Step 3: Generate video (full pipeline) =====
@@ -249,18 +277,13 @@ export function VideoWizardFlow({
           setProgressStage('מעביר ל-RunwayML...');
           toast.info('מעביר אוטומטית ל-RunwayML...');
 
-          const promptText = generatedScript.scenes
-            .map(s => `${s.visualDescription}. ${s.subtitleText}`)
-            .join('. ');
-
-          const fallbackScenePrompt = promptText || generatedScript.script || prompt;
-          const runwayPrompt = toRunwayPrompt(buildPrompt(fallbackScenePrompt));
+          const runwayPrompt = buildRunwayPromptFromScript();
 
           const taskData = await runwayService.imageToVideo(
             normalizedAvatarUrl,
             runwayPrompt,
             undefined,
-            generatedScript.duration >= 90 ? 10 : 5,
+            10, // Always use max duration
           );
 
           baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
@@ -271,30 +294,13 @@ export function VideoWizardFlow({
         // No avatar → cinematic text-to-video via Runway
         setProgressStage('מייצר סרטון AI קולנועי...');
         
-        // Build a rich cinematic prompt from all scene descriptions
-        const cinematicPrompt = generatedScript.scenes
-          .map((s, i) => {
-            const parts: string[] = [];
-            if (s.visualDescription) parts.push(s.visualDescription);
-            if (s.cameraDirection) parts.push(`Camera: ${s.cameraDirection}`);
-            if (s.environment) parts.push(`Setting: ${s.environment}`);
-            if (s.characters) parts.push(`Characters: ${s.characters}`);
-            if (s.videoStyle) parts.push(`Style: ${s.videoStyle}`);
-            return `Scene ${i + 1}: ${parts.join('. ')}`;
-          })
-          .join(' | ');
-
-        const styleInfo = generatedScript.style 
-          ? `Overall style: ${generatedScript.style.cinematicStyle || generatedScript.style.tone || 'cinematic'}. Pace: ${generatedScript.style.pace || 'medium'}. Music mood: ${generatedScript.style.music || 'cinematic score'}.`
-          : '';
-
-        const basePrompt = cinematicPrompt || generatedScript.script || prompt;
-        const fullPrompt = toRunwayPrompt(buildPrompt(`${basePrompt}. ${styleInfo}`));
+        const runwayPrompt = buildRunwayPromptFromScript();
+        console.log('Runway prompt:', runwayPrompt);
 
         const taskData = await runwayService.textToVideo(
-          fullPrompt,
+          runwayPrompt,
           undefined,
-          generatedScript.duration >= 90 ? 10 : 5,
+          10, // Always use max duration
         );
 
         baseVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => {
@@ -302,11 +308,12 @@ export function VideoWizardFlow({
         });
       }
 
-      // === Stage 3: Composite with Shotstack ===
+      // === Stage 3: Composite with Shotstack (add subtitles, logo, icons) ===
       if (baseVideoUrl) {
-        setProgressStage('מרכיב סרטון מקצועי — רקע, כתוביות, אייקונים ולוגו...');
+        setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
         setRunwayProgress(70);
 
+        // First uploaded image is treated as logo
         const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
         const brandColors = activeBrand?.colors || [];
 
@@ -321,15 +328,14 @@ export function VideoWizardFlow({
 
           if (!renderResult?.renderId) throw new Error('Shotstack error');
 
-          // Poll Shotstack
-          setProgressStage('מעבד וידאו סופי...');
+          setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
           for (let i = 0; i < 90; i++) {
             const status = await composeService.checkStatus(renderResult.renderId);
             if (status.status === 'done' && status.url) {
               setResultVideoUrl(status.url);
               setStep(4);
               setProgressStage('');
-              toast.success('🎬 הסרטון המקצועי מוכן!');
+              toast.success('🎬 הסרטון המקצועי מוכן עם כתוביות ולוגו!');
               return;
             }
             if (status.status === 'failed') throw new Error('Shotstack render failed');
@@ -338,12 +344,11 @@ export function VideoWizardFlow({
           }
           throw new Error('תם הזמן להרכבת הסרטון');
         } catch (composeErr: any) {
-          // Fallback: use base video without compositing
           console.warn('Shotstack compositing failed, using base video:', composeErr?.message);
+          toast.info('ההרכבה לא הצליחה — הסרטון מוגש ללא כתוביות/לוגו. ניתן לשפר אותו.');
           setResultVideoUrl(baseVideoUrl);
           setStep(4);
           setProgressStage('');
-          toast.success('הסרטון מוכן!');
         }
       }
     } catch (e: any) {
@@ -352,6 +357,78 @@ export function VideoWizardFlow({
       setProgressStage('');
     } finally {
       setLoading(false);
+      setRunwayPolling(false);
+    }
+  };
+
+  // ===== Improve/Refine existing video =====
+  const handleImproveVideo = async () => {
+    if (!improvePrompt.trim()) { toast.error('תאר מה לשפר בסרטון'); return; }
+    setIsImproving(true);
+    setStep(3);
+    setRunwayProgress(0);
+    setProgressStage('משפר את הסרטון לפי הבקשה שלך...');
+
+    try {
+      // Use the improve prompt + original context to generate a better prompt
+      const improveContext = [
+        improvePrompt,
+        generatedScript?.scenes[0]?.visualDescription || '',
+        activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+      ].filter(Boolean).join('. ');
+
+      const runwayPrompt = toRunwayPrompt(improveContext);
+
+      // If we have an avatar image, use image-to-video; otherwise text-to-video
+      const avatarImage = selectedAvatars[0]?.image_url;
+      let newVideoUrl: string;
+
+      if (avatarImage) {
+        const normalizedUrl = await normalizeAvatarForVideo(avatarImage);
+        const taskData = await runwayService.imageToVideo(normalizedUrl, runwayPrompt, undefined, 10);
+        newVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(p));
+      } else {
+        const taskData = await runwayService.textToVideo(runwayPrompt, undefined, 10);
+        newVideoUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(p));
+      }
+
+      // Try compositing again
+      if (generatedScript) {
+        const logoUrl = uploadedImages[0] || activeBrand?.logo || undefined;
+        try {
+          const renderResult = await composeService.render({
+            videoUrl: newVideoUrl,
+            scenes: generatedScript.scenes,
+            logoUrl,
+            brandColors: activeBrand?.colors || [],
+          });
+          if (renderResult?.renderId) {
+            for (let i = 0; i < 60; i++) {
+              const status = await composeService.checkStatus(renderResult.renderId);
+              if (status.status === 'done' && status.url) {
+                newVideoUrl = status.url;
+                break;
+              }
+              if (status.status === 'failed') break;
+              await sleep(3000);
+            }
+          }
+        } catch {
+          // Use video without compositing
+        }
+      }
+
+      setResultVideoUrl(newVideoUrl);
+      setStep(4);
+      setProgressStage('');
+      setImprovePrompt('');
+      toast.success('🎬 הסרטון המשופר מוכן!');
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בשיפור הסרטון');
+      setStep(4);
+      setProgressStage('');
+    } finally {
+      setIsImproving(false);
       setRunwayPolling(false);
     }
   };
@@ -410,7 +487,7 @@ export function VideoWizardFlow({
     { title: 'אשר את התסריט', desc: 'בדוק ועדכן את התסריט שנוצר' },
     { title: 'הגדרות סופיות', desc: 'הוסף תמונות ולוגו, ובדוק הכל לפני ייצור' },
     { title: 'מייצר סרטון...', desc: 'אנא המתן, הסרטון בהכנה' },
-    { title: 'הסרטון מוכן!', desc: 'צפה, הורד או שמור' },
+    { title: 'הסרטון מוכן!', desc: 'צפה, הורד, שפר או שמור' },
   ];
 
   const totalSteps = 5;
@@ -455,6 +532,12 @@ export function VideoWizardFlow({
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
             )}
+          </div>
+
+          {/* Info about duration */}
+          <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+            <span>הסרטון יהיה <strong className="text-foreground">10 שניות</strong> של תוכן AI קולנועי. המערכת תוסיף כתוביות, לוגו ואייקונים אוטומטית.</span>
           </div>
 
           {/* Avatars multi-select */}
@@ -522,11 +605,15 @@ export function VideoWizardFlow({
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <ImageIcon className="w-3.5 h-3.5" /> תמונות / לוגו ({uploadedImages.length}/{MAX_IMAGES})
             </p>
+            <p className="text-[10px] text-muted-foreground">התמונה הראשונה תשמש כלוגו על הסרטון</p>
             {uploadedImages.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {uploadedImages.map((url, i) => (
                   <div key={i} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-border">
                     <img src={url} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && (
+                      <span className="absolute top-0.5 left-0.5 text-[8px] bg-primary text-primary-foreground px-1 rounded">לוגו</span>
+                    )}
                     <button onClick={() => setUploadedImages(prev => prev.filter((_, idx) => idx !== i))}
                       className="absolute top-0.5 right-0.5 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <X className="w-2.5 h-2.5" />
@@ -536,7 +623,7 @@ export function VideoWizardFlow({
               </div>
             )}
             {uploadedImages.length < MAX_IMAGES && (
-              <FileUploadZone accept="image/*" multiple label="העלה לוגו / תמונות" hint="JPG, PNG"
+              <FileUploadZone accept="image/*" multiple label="העלה לוגו / תמונות" hint="JPG, PNG — התמונה הראשונה = לוגו"
                 onUploaded={url => { if (url) setUploadedImages(prev => [...prev, url]); }}
                 onMultipleUploaded={urls => setUploadedImages(prev => [...prev, ...urls].slice(0, MAX_IMAGES))}
               />
@@ -612,11 +699,11 @@ export function VideoWizardFlow({
                         rows={2} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl" />
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground">🎬 תיאור חזותי קולנועי</label>
+                      <label className="text-[10px] text-muted-foreground">🎬 תיאור חזותי — זה מה שמנוע הווידאו רואה!</label>
                       <textarea value={scene.visualDescription} onChange={e => updateSceneText(idx, 'visualDescription', e.target.value)}
                         onKeyDown={e => e.stopPropagation()}
                         rows={3} className="w-full bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs resize-none" dir="rtl"
-                        placeholder="תאר את הסצנה כמו במאי קולנוע — סביבה, דמויות, תאורה, אווירה..." />
+                        placeholder="תאר בדיוק מה רואים על המסך — דמויות, מוצרים, סביבה, תאורה, צבעים..." />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -703,8 +790,9 @@ export function VideoWizardFlow({
             {uploadedImages.length > 0 && (
               <div className="flex gap-2 pt-1">
                 {uploadedImages.map((url, i) => (
-                  <div key={i} className="w-10 h-10 rounded-lg overflow-hidden border border-border">
+                  <div key={i} className="w-10 h-10 rounded-lg overflow-hidden border border-border relative">
                     <img src={url} alt="" className="w-full h-full object-cover" />
+                    {i === 0 && <span className="absolute top-0 left-0 text-[6px] bg-primary text-primary-foreground px-0.5 rounded-br">לוגו</span>}
                   </div>
                 ))}
               </div>
@@ -753,8 +841,8 @@ export function VideoWizardFlow({
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             {[
               { label: 'שכפול קול', done: runwayProgress > 25 },
-              { label: 'אווטאר מדבר', done: runwayProgress > 65 },
-              { label: 'הרכבה מקצועית', done: runwayProgress > 95 },
+              { label: 'יצירת וידאו', done: runwayProgress > 65 },
+              { label: 'כתוביות ולוגו', done: runwayProgress > 95 },
             ].map(s => (
               <span key={s.label} className={cn(
                 'text-[10px] px-2 py-0.5 rounded-full border',
@@ -771,7 +859,30 @@ export function VideoWizardFlow({
       {step === 4 && resultVideoUrl && (
         <div className="space-y-4">
           <div className="rounded-xl overflow-hidden border border-border bg-muted/30">
-            <video src={resultVideoUrl} controls className="w-full max-h-[300px]" />
+            <video src={resultVideoUrl} controls loop className="w-full max-h-[300px]" />
+          </div>
+
+          {/* Improve section */}
+          <div className="bg-card border border-primary/20 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold flex items-center gap-1.5">
+              <Wand2 className="w-3.5 h-3.5 text-primary" /> שפר את הסרטון
+            </p>
+            <p className="text-[10px] text-muted-foreground">תאר מה לשנות — למשל: "יותר צבעוני", "הוסף תנועה", "שים דגש על המוצרים"</p>
+            <div className="flex gap-2">
+              <input
+                value={improvePrompt}
+                onChange={e => setImprovePrompt(e.target.value)}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleImproveVideo(); }}
+                placeholder="מה לשפר..."
+                dir="rtl"
+                className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <button onClick={handleImproveVideo} disabled={isImproving || !improvePrompt.trim()}
+                className="px-4 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5">
+                {isImproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                שפר
+              </button>
+            </div>
           </div>
 
           {activeBrand && (
@@ -804,7 +915,7 @@ export function VideoWizardFlow({
 
           <button onClick={() => { setStep(1); setResultVideoUrl(null); }}
             className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
-            <Edit3 className="w-3.5 h-3.5" /> ערוך ותייצר מחדש
+            <Edit3 className="w-3.5 h-3.5" /> ערוך תסריט ותייצר מחדש
           </button>
           <button onClick={() => { setStep(0); setResultVideoUrl(null); setGeneratedScript(null); setPrompt(''); }}
             className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-1">
