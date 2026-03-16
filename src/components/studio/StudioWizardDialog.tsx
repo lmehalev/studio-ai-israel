@@ -28,7 +28,7 @@ const actionOptions: { id: StudioAction; label: string; icon: typeof ImageIcon; 
   { id: 'image', label: 'צור תמונה', icon: ImageIcon, desc: 'יצירת תמונה שיווקית מתיאור טקסט' },
   { id: 'video_ai', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט' },
   { id: 'subtitles', label: 'כתוביות לסרטון', icon: Subtitles, desc: 'תמלול אוטומטי + עריכת כתוביות' },
-  { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'שים קישור לתמונה או סרטון וערוך' },
+  { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך' },
 ];
 
 const subtitleFontOptions = [
@@ -657,12 +657,23 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
     if (selectedAction === 'import_edit') {
       if (wizardStep === 0) return (
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה או סרטון שראית ותרצה לערוך</p>
+          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube (נחלץ את התמונה הממוזערת)</p>
           <UrlImportInput onSubmit={url => {
-            // Block non-direct-media URLs (YouTube, social media pages, etc.)
-            const blocked = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com)/i;
+            // Extract YouTube thumbnail
+            const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+            if (ytMatch) {
+              const videoId = ytMatch[1];
+              const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+              setImportUrl(thumbnailUrl);
+              setImportType('image');
+              toast.success('תמונת YouTube חולצה בהצלחה!');
+              setStep(step + 1);
+              return;
+            }
+            // Block other social media pages
+            const blocked = /^https?:\/\/(www\.)?(facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com)/i;
             if (blocked.test(url)) {
-              toast.error('יש להדביק קישור ישיר לתמונה או סרטון — לא קישור לאתר (YouTube, פייסבוק וכו\')');
+              toast.error('יש להדביק קישור ישיר לתמונה או סרטון — לא קישור לאתר');
               return;
             }
             setImportUrl(url);
@@ -675,7 +686,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               setImportType('image');
             }
             setStep(step + 1);
-          }} placeholder="הדבק קישור ישיר לתמונה או סרטון..." />
+          }} placeholder="הדבק קישור לתמונה, סרטון, או YouTube..." />
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /> או העלה קובץ <span className="h-px flex-1 bg-border" /></div>
           <FileUploadZone accept="image/*,video/*" label="העלה תמונה או סרטון" hint="JPG, PNG, MP4, WebP"
             onUploaded={url => {
