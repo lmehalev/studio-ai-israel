@@ -53,6 +53,35 @@ export default function ProjectDetailPage() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
   const formatDateTime = (d: string) => new Date(d).toLocaleString('he-IL');
 
+  const handleSaveProjectMeta = async () => {
+    if (!project) return;
+    const nextName = editName.trim();
+    if (!nextName) {
+      toast.error('יש להזין שם פרויקט');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const nextCategory = editCategory.trim();
+      const updated = await projectService.update(project.id, {
+        name: nextName,
+        content: {
+          ...(project.content || {}),
+          category: nextCategory || null,
+          sub_activity: nextCategory || null,
+        },
+      });
+      setProject(updated);
+      toast.success('פרטי הפרויקט עודכנו');
+      setEditOpen(false);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בעדכון הפרויקט');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   if (loading) return <AppLayout><div className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></div></AppLayout>;
   if (!project) return <AppLayout><div className="text-center py-20"><p className="text-muted-foreground">הפרויקט לא נמצא</p></div></AppLayout>;
 
