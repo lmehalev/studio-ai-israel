@@ -438,7 +438,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
-      {(brandDepartments.length > 0 || customCategory || selectedCategory) && renderCategorySelector()}
+      {activeBrand && renderCategorySelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
