@@ -370,10 +370,24 @@ export function VideoWizardFlow({
             }
           } else {
             // Cinematic scene via Runway
-            const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-              setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
-            });
+            try {
+              const taskData = await runwayService.textToVideo(scenePrompt, undefined, 10);
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            } catch {
+              // Retry with simplified fallback prompt
+              const fallbackPrompt = toRunwayPrompt([
+                scene.title,
+                scene.spokenText,
+                activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
+              ].filter(Boolean).join('. '));
+
+              const fallbackTask = await runwayService.textToVideo(fallbackPrompt, undefined, 10);
+              clipUrl = await waitForRunwayResult(fallbackTask.taskId, (p) => {
+                setRunwayProgress(15 + sceneIdx * progressPerScene + (p / 100) * progressPerScene);
+              });
+            }
           }
 
           sceneVideoUrls.push(clipUrl);
