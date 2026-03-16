@@ -219,7 +219,7 @@ export const projectService = {
   },
 
   async addOutput(projectId: string, output: Partial<ProjectOutputRow>): Promise<ProjectOutputRow> {
-    return insert<ProjectOutputRow>('project_outputs', {
+    const created = await insert<ProjectOutputRow>('project_outputs', {
       project_id: projectId,
       name: output.name || 'תוצר חדש',
       description: output.description || null,
@@ -229,6 +229,12 @@ export const projectService = {
       prompt: output.prompt || null,
       provider: output.provider || null,
     });
+    // Increment output_count on the project
+    try {
+      const proj = await query<ProjectRow>('projects', { filter: { id: projectId }, single: true });
+      await update('projects', projectId, { output_count: (proj.output_count || 0) + 1 });
+    } catch { /* non-critical */ }
+    return created;
   },
 
   async findOrCreateByBrand(brandId: string, brandName: string, category?: string): Promise<ProjectRow> {

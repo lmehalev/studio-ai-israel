@@ -12,7 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
-  avatarDbService,
+  avatarDbService, storageService,
   type SubtitleSegment, type Brand,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -122,14 +122,24 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     setSavingOutput(true);
     try {
+      // Upload base64 data URLs to storage first
+      let finalUrl = url;
+      if (url.startsWith('data:')) {
+        toast.info('מעלה קובץ לאחסון...');
+        const blob = await fetch(url).then(r => r.blob());
+        const ext = url.includes('png') ? 'png' : 'jpg';
+        const file = new File([blob], `output-${Date.now()}.${ext}`, { type: blob.type });
+        finalUrl = await storageService.upload(file);
+      }
+
       const cat = selectedCategory || undefined;
       const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
       const isVideo = !!result?.videoUrl;
       await projectService.addOutput(project.id, {
         name: `${selectedAction === 'image' ? 'תמונה' : selectedAction === 'video_ai' ? 'סרטון' : 'תוצר'} — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
         description: prompt || undefined,
-        video_url: isVideo ? url : null,
-        thumbnail_url: !isVideo ? url : null,
+        video_url: isVideo ? finalUrl : null,
+        thumbnail_url: !isVideo ? finalUrl : null,
         prompt: prompt || null,
       });
       toast.success(`נשמר בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"!`);
