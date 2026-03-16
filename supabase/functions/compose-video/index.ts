@@ -43,13 +43,13 @@ function buildSubtitleClips(
   style: SubtitleStyle
 ): any[] {
   const font = style.font || "'Noto Sans Hebrew', sans-serif";
-  const fontSize = style.fontSize || 28;
+  const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
-  const bgColor = style.bgColor || "rgba(0,0,0,0.7)";
-  const borderRadius = style.borderRadius ?? 12;
-  const shadow = style.shadow || "0 2px 12px rgba(0,0,0,0.8)";
-  const fontWeight = style.fontWeight || 700;
-  const padding = style.padding || "12px 28px";
+  const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
+  const borderRadius = style.borderRadius ?? 16;
+  const shadow = style.shadow || "0 2px 16px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)";
+  const fontWeight = style.fontWeight || 800;
+  const padding = style.padding || "14px 32px";
 
   return segments
     .filter((seg) => seg.text && seg.text.trim())
@@ -62,25 +62,27 @@ function buildSubtitleClips(
           text-align: center;
           padding: ${padding};
           background: ${bgColor};
+          backdrop-filter: blur(8px);
           border-radius: ${borderRadius}px;
           color: ${color};
           font-size: ${fontSize}px;
           font-weight: ${fontWeight};
-          line-height: 1.6;
+          line-height: 1.5;
           text-shadow: ${shadow};
-          letter-spacing: 0.02em;
+          letter-spacing: 0.03em;
           white-space: pre-wrap;
           word-wrap: break-word;
+          border: 1px solid rgba(255,255,255,0.1);
         ">${seg.text}</div>`,
         width: 900,
-        height: 150,
+        height: 160,
       },
       start: seg.start,
       length: Math.max(0.5, seg.end - seg.start),
       position: "bottom",
-      offset: { y: 0.06 },
+      offset: { y: 0.08 },
       transition: {
-        in: "fade",
+        in: "slideUp",
         out: "fade",
       },
     }));
@@ -112,14 +114,28 @@ function buildStickerClips(stickers: StickerItem[]): any[] {
 function buildLogoClip(logoUrl: string, totalDuration: number): any {
   return {
     clips: [
+      // Main logo — bottom right, persistent
       {
         asset: { type: "image", src: logoUrl },
         start: 0,
         length: totalDuration,
+        position: "bottomRight",
+        offset: { x: -0.04, y: 0.04 },
+        scale: 0.15,
+        opacity: 0.92,
+      },
+      // Small watermark text — top right
+      {
+        asset: {
+          type: "html",
+          html: `<div style="font-family:'Noto Sans Hebrew',sans-serif;direction:rtl;font-size:14px;color:rgba(255,255,255,0.75);text-shadow:0 1px 4px rgba(0,0,0,0.6);letter-spacing:0.05em;font-weight:600;"></div>`,
+          width: 300,
+          height: 30,
+        },
+        start: 0,
+        length: totalDuration,
         position: "topRight",
-        offset: { x: -0.03, y: -0.03 },
-        scale: 0.12,
-        opacity: 0.9,
+        offset: { x: -0.02, y: -0.02 },
       },
     ],
   };
@@ -283,7 +299,8 @@ serve(async (req) => {
           asset: { type: "video", src: clipUrls[i] },
           start: videoStart,
           length: clipUrls.length === 1 ? totalDuration : sceneDur,
-          transition: i > 0 ? { in: "fade" } : undefined,
+          transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
+          effect: clipUrls.length > 1 ? "zoomIn" : undefined,
         });
         videoStart += sceneDur;
       }

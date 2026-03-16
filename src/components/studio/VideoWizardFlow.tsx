@@ -319,22 +319,22 @@ export function VideoWizardFlow({
     // Style directive first — sets the visual tone
     const styleLabel = scene.videoStyle || videoStyle || 'cinematic';
     const styleDirectives: Record<string, string> = {
-      cinematic: 'Photorealistic cinematic film, professional lighting, shallow depth of field',
-      disney: '3D Disney Pixar style animation, vibrant colors, expressive characters, magical lighting',
-      anime: 'High quality anime style, detailed linework, dramatic lighting, dynamic composition',
-      cartoon: 'Colorful cartoon illustration style, bold outlines, exaggerated expressions, playful',
-      documentary: 'Documentary style, natural lighting, handheld camera feel, authentic and raw',
-      commercial: 'High-end TV commercial, polished studio lighting, pristine product shots',
+      cinematic: 'Photorealistic cinematic film shot on RED camera, professional Hollywood lighting, shallow depth of field, 8K quality, anamorphic lens flares',
+      disney: 'High-quality 3D Pixar DreamWorks animation style, detailed character rendering with subsurface scattering on skin, volumetric lighting with visible light rays, rich saturated color palette, expressive cartoon characters with big emotional eyes, hyper-detailed environment textures, global illumination, cinematic camera angles',
+      anime: 'Premium anime style inspired by Makoto Shinkai and Studio Ghibli, detailed linework, dramatic volumetric lighting with god rays, dynamic composition with speed lines, vivid sky gradients',
+      cartoon: 'Colorful stylized cartoon illustration, bold outlines, exaggerated expressions, playful composition, vibrant flat colors with subtle shading',
+      documentary: 'Documentary style, natural ambient lighting, handheld camera feel with slight motion, authentic raw footage look, bokeh background',
+      commercial: 'Ultra high-end TV commercial, perfect studio lighting, pristine product photography, smooth dolly camera movement, flawless color grading',
     };
     parts.push(styleDirectives[styleLabel] || styleDirectives.cinematic);
     
-    // Camera direction — how the shot is framed
+    // Camera direction — how the shot is framed  
     if (scene.cameraDirection) parts.push(scene.cameraDirection);
     
     // Main visual — the core of what the AI sees
     if (scene.visualDescription) parts.push(scene.visualDescription);
     
-    // Characters — who is in the frame
+    // Characters — who is in the frame (critical for consistency)
     if (scene.characters) parts.push(scene.characters);
     
     // Environment — where it happens
@@ -342,6 +342,11 @@ export function VideoWizardFlow({
     
     // Background action — dynamic life in the background
     if (scene.backgroundAction) parts.push(scene.backgroundAction);
+    
+    // Quality boosters for animation styles
+    if (styleLabel === 'disney') {
+      parts.push('Octane render quality, ray tracing, ambient occlusion, motion blur on fast movements, particle effects (dust, sparkles, light motes floating in air)');
+    }
     
     // Brand context
     if (activeBrand?.name) parts.push(`Brand: ${activeBrand.name}`);
