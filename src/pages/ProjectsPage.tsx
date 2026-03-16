@@ -155,9 +155,9 @@ export default function ProjectsPage() {
                         <Building2 className="w-3 h-3" /> {brand.name}
                       </span>
                     )}
-                    {p.category && (
+                    {getProjectCategory(p) && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                        <Tag className="w-3 h-3" /> {p.category}
+                        <Tag className="w-3 h-3" /> {getProjectCategory(p)}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{p.video_type} • {p.aspect_ratio}</span>
