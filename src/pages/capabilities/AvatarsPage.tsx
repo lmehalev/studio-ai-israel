@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2 } from 'lucide-react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService } from '@/services/creativeService';
