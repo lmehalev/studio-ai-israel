@@ -212,4 +212,28 @@ export const projectService = {
       order: { column: 'version', ascending: false },
     });
   },
+
+  async addOutput(projectId: string, output: Partial<ProjectOutputRow>): Promise<ProjectOutputRow> {
+    return insert<ProjectOutputRow>('project_outputs', {
+      project_id: projectId,
+      name: output.name || 'תוצר חדש',
+      description: output.description || null,
+      status: 'הושלם',
+      video_url: output.video_url || null,
+      thumbnail_url: output.thumbnail_url || null,
+      prompt: output.prompt || null,
+      provider: output.provider || null,
+    });
+  },
+
+  async findOrCreateByBrand(brandId: string, brandName: string): Promise<ProjectRow> {
+    // Try to find existing project for this brand
+    const existing = await query<ProjectRow[]>('projects', {
+      filter: { brand_id: brandId },
+      order: { column: 'created_at', ascending: false },
+    });
+    if (existing.length > 0) return existing[0];
+    // Create new project for this brand
+    return projectService.create({ name: brandName, brand_id: brandId });
+  },
 };
