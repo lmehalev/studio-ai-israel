@@ -149,6 +149,26 @@ export function VideoWizardFlow({
     if (!prompt.trim()) { toast.error('יש להזין תיאור לסרטון'); return; }
     setLoading(true);
     try {
+      // Build website context for the script generator
+      let websiteContext: string | undefined;
+      if (websiteData) {
+        const parts: string[] = [];
+        if (websiteData.metadata?.title) parts.push(`כותרת האתר: ${websiteData.metadata.title}`);
+        if (websiteData.metadata?.description) parts.push(`תיאור האתר: ${websiteData.metadata.description}`);
+        if (websiteData.branding?.colors) {
+          const colorList = Object.entries(websiteData.branding.colors).map(([k, v]) => `${k}: ${v}`).join(', ');
+          parts.push(`צבעי המותג מהאתר: ${colorList}`);
+        }
+        if (websiteData.branding?.fonts?.length) {
+          parts.push(`פונטים באתר: ${websiteData.branding.fonts.map(f => f.family).join(', ')}`);
+        }
+        // Include first 800 chars of markdown as content summary
+        if (websiteData.markdown) {
+          parts.push(`תוכן האתר (תקציר):\n${websiteData.markdown.slice(0, 800)}`);
+        }
+        websiteContext = parts.join('\n');
+      }
+
       const { data, error } = await supabase.functions.invoke('generate-script', {
         body: {
           prompt: buildPrompt(prompt),
@@ -157,6 +177,9 @@ export function VideoWizardFlow({
           brandContext: activeBrand ? `${activeBrand.name} — ${activeBrand.industry || ''} — טון: ${activeBrand.tone || ''}` : undefined,
           hasImages: uploadedImages.length > 0,
           videoStyle,
+          websiteUrl: websiteUrl.trim() || undefined,
+          websiteContext,
+          hasScreenshot: !!websiteData?.screenshot,
         },
       });
       if (error) throw new Error(error.message || 'שגיאה ביצירת תסריט');
