@@ -129,9 +129,106 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
         setVideoPreviewUrl(null);
         setSubtitleSegments([]);
         setSavedSrtUrl(null);
+        setSelectedAvatarId(null);
+        setSelectedVoiceId(null);
+        setShowAvatarVoicePanel(false);
       }, 300);
     }
   }, [open]);
+
+  const selectedAvatar = availableAvatars.find(a => a.id === selectedAvatarId);
+  const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
+
+  // ============ AVATAR & VOICE SELECTOR ============
+  const renderAvatarVoiceSelector = () => {
+    if (availableAvatars.length === 0 && availableVoices.length === 0) return null;
+    return (
+      <div className="border border-border rounded-xl overflow-hidden mb-4">
+        <button
+          onClick={() => setShowAvatarVoicePanel(!showAvatarVoicePanel)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <ChevronDown className={cn('w-4 h-4 transition-transform', showAvatarVoicePanel && 'rotate-180')} />
+            <span>אווטאר וקול</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedAvatar && (
+              <span className="flex items-center gap-1.5 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                <img src={selectedAvatar.image_url} alt="" className="w-4 h-4 rounded-full object-cover" />
+                {selectedAvatar.name}
+              </span>
+            )}
+            {selectedVoice && (
+              <span className="flex items-center gap-1.5 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                <Volume2 className="w-3 h-3" />
+                {selectedVoice.name}
+              </span>
+            )}
+          </div>
+        </button>
+        {showAvatarVoicePanel && (
+          <div className="px-3 pb-3 space-y-3 border-t border-border pt-3">
+            {availableAvatars.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <UserCircle className="w-3.5 h-3.5" /> בחר אווטאר
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  <button
+                    onClick={() => setSelectedAvatarId(null)}
+                    className={cn('flex-shrink-0 w-14 h-14 rounded-lg border-2 flex items-center justify-center transition-all text-xs text-muted-foreground',
+                      !selectedAvatarId ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30')}
+                  >
+                    ללא
+                  </button>
+                  {availableAvatars.map(avatar => (
+                    <button
+                      key={avatar.id}
+                      onClick={() => setSelectedAvatarId(avatar.id === selectedAvatarId ? null : avatar.id)}
+                      className={cn('flex-shrink-0 w-14 h-14 rounded-lg border-2 overflow-hidden transition-all',
+                        selectedAvatarId === avatar.id ? 'border-primary shadow-gold' : 'border-border hover:border-primary/30')}
+                      title={avatar.name}
+                    >
+                      <img src={avatar.image_url} alt={avatar.name} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+                {selectedAvatar && <p className="text-xs text-primary mt-1">{selectedAvatar.name}</p>}
+              </div>
+            )}
+            {availableVoices.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5" /> בחר קול
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedVoiceId(null)}
+                    className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all',
+                      !selectedVoiceId ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/30 text-muted-foreground')}
+                  >
+                    ברירת מחדל
+                  </button>
+                  {availableVoices.map(voice => (
+                    <button
+                      key={voice.id}
+                      onClick={() => setSelectedVoiceId(voice.id === selectedVoiceId ? null : voice.id)}
+                      className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-1.5',
+                        selectedVoiceId === voice.id ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/30 text-muted-foreground')}
+                    >
+                      <Volume2 className="w-3 h-3" />
+                      {voice.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const getAdjustedSegments = useCallback(() => {
     return subtitleSegments
