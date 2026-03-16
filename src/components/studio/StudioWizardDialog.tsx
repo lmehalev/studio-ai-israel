@@ -568,10 +568,31 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, buildPromp
               <span className="text-sm font-medium">טקסט → וידאו</span>
             </button>
           </div>
+          {selectedAvatar && !runwayImageUrl && runwayMode === 'image_to_video' && (
+            <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+              <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
+              <div>
+                <span>אווטאר "{selectedAvatar.name}" זמין כתמונת מקור</span>
+                <button onClick={() => setRunwayImageUrl(selectedAvatar.image_url)} className="block text-primary font-semibold underline mt-0.5">השתמש באווטאר</button>
+              </div>
+            </div>
+          )}
           {runwayMode === 'image_to_video' && (
             <div className="space-y-3">
-              <FileUploadZone accept="image/*" label="העלה תמונה" hint="JPG, PNG, WebP" onUploaded={url => setRunwayImageUrl(url)} />
-              <UrlImportInput onSubmit={url => setRunwayImageUrl(url)} placeholder="הדבק קישור לתמונה..." />
+              {runwayImageUrl && (
+                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-primary/40">
+                  <img src={runwayImageUrl} alt="מקור" className="w-full h-full object-cover" />
+                  <button onClick={() => setRunwayImageUrl('')} className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              {!runwayImageUrl && (
+                <>
+                  <FileUploadZone accept="image/*" label="העלה תמונה" hint="JPG, PNG, WebP" onUploaded={url => setRunwayImageUrl(url)} />
+                  <UrlImportInput onSubmit={url => setRunwayImageUrl(url)} placeholder="הדבק קישור לתמונה..." />
+                </>
+              )}
             </div>
           )}
           <button onClick={() => setStep(step + 1)}
