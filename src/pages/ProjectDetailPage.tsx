@@ -435,6 +435,26 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Editors */}
+      <ImageEditor
+        open={imageEditorOpen}
+        onClose={() => setImageEditorOpen(false)}
+        imageUrl={editingMediaUrl}
+        onSave={(url) => {
+          toast.success('התמונה נשמרה בהצלחה!');
+          setImageEditorOpen(false);
+        }}
+      />
+      <VideoEditor
+        open={videoEditorOpen}
+        onClose={() => setVideoEditorOpen(false)}
+        videoUrl={editingMediaUrl}
+        onSave={(data) => {
+          toast.success('העריכה נשמרה!');
+          setVideoEditorOpen(false);
+        }}
+      />
     </AppLayout>
   );
 }
