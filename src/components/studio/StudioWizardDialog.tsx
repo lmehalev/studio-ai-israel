@@ -449,6 +449,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[250px] object-contain" />
         </div>
       )}
+      {renderCategorySelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> הורד
