@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
-import { avatarGenService, avatarDbService, imageService } from '@/services/creativeService';
+import { avatarGenService, avatarDbService, imageService, storageService } from '@/services/creativeService';
 import { supabase } from '@/integrations/supabase/client';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
@@ -139,7 +139,17 @@ export default function AvatarsManagePage() {
     if (!previewUrl) return;
     setSaving(true);
     try {
-      const saved = await avatarDbService.save(name, previewUrl, style, mergedReferencePreview);
+      let finalImageUrl = previewUrl;
+
+      // Ensure avatar is saved as a public image URL (not data URL)
+      if (finalImageUrl.startsWith('data:image/')) {
+        const res = await fetch(finalImageUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `avatar-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        finalImageUrl = await storageService.upload(file);
+      }
+
+      const saved = await avatarDbService.save(name, finalImageUrl, style, mergedReferencePreview);
       setAvatars((prev) => [saved, ...prev]);
       resetForm();
       toast.success('האווטאר נשמר בהצלחה!');

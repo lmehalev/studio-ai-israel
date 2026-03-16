@@ -28,9 +28,10 @@ serve(async (req) => {
     if (action === "create_talk") {
       const { imageUrl, text, voiceId, language } = params;
 
-      // D-ID has limits on text length — truncate if needed
-      const trimmedText = (text || '').slice(0, 500);
-      if (!trimmedText.trim()) {
+      // Allow longer scripts for 3-4 minute videos while staying within provider limits
+      const normalizedText = typeof text === "string" ? text.trim() : "";
+      const safeText = normalizedText.length > 4200 ? `${normalizedText.slice(0, 4200)}...` : normalizedText;
+      if (!safeText) {
         return new Response(
           JSON.stringify({ error: "טקסט ריק — אין מה לייצר" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -41,7 +42,7 @@ serve(async (req) => {
         source_url: imageUrl,
         script: {
           type: "text",
-          input: trimmedText,
+          input: safeText,
           provider: {
             type: "microsoft",
             voice_id: "he-IL-AvriNeural",
@@ -53,7 +54,7 @@ serve(async (req) => {
         },
       };
 
-      // If ElevenLabs voice is provided (longer IDs)
+      // If ElevenLabs voice is provided (long IDs)
       if (voiceId && voiceId.length > 15) {
         body.script.provider = {
           type: "elevenlabs",

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
@@ -133,63 +133,53 @@ export function VideoWizardFlow({
     }
   };
 
-  // ===== Polling helper =====
-  const pollDidStatus = (talkId: string) => {
-    setRunwayPolling(true);
-    setRunwayProgress(0);
-    let attempts = 0;
-    const poll = async () => {
-      try {
-        const status = await didService.checkStatus(talkId);
-        if (status.status === 'done' && status.resultUrl) {
-          setResultVideoUrl(status.resultUrl);
-          setRunwayPolling(false);
-          setStep(4);
-          toast.success('הסרטון מוכן!');
-          return;
-        }
-        if (status.status === 'error') {
-          setRunwayPolling(false);
-          setStep(2);
-          toast.error('שגיאה ביצירת הסרטון. נסה שוב.');
-          return;
-        }
-        attempts++;
-        setRunwayProgress(Math.min(95, attempts * 5));
-        if (attempts < 60) setTimeout(poll, 5000);
-        else { setRunwayPolling(false); setStep(2); toast.error('תם הזמן'); }
-      } catch { setRunwayPolling(false); setStep(2); toast.error('שגיאה בבדיקת סטטוס'); }
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const normalizeAvatarForVideo = async (avatarUrl: string): Promise<string> => {
+    const ensureUpload = async (blob: Blob, forceJpg = false) => {
+      const fileType = forceJpg ? 'image/jpeg' : (blob.type || 'image/png');
+      const ext = fileType.includes('jpeg') ? 'jpg' : 'png';
+      const file = new File([blob], `avatar-source-${Date.now()}.${ext}`, { type: fileType });
+      return storageService.upload(file);
     };
-    poll();
+
+    // data URL avatar -> upload as real public image URL
+    if (avatarUrl.startsWith('data:image/')) {
+      const res = await fetch(avatarUrl);
+      const blob = await res.blob();
+      return ensureUpload(blob, true);
+    }
+
+    // D-ID validates URL suffix (jpg/jpeg/png). If suffix is missing, re-upload as jpg.
+    if (!/\.(png|jpe?g)(\?|$)/i.test(avatarUrl)) {
+      const res = await fetch(avatarUrl);
+      const blob = await res.blob();
+      return ensureUpload(blob, true);
+    }
+
+    return avatarUrl;
   };
 
-  const pollRunwayStatus = (taskId: string) => {
-    setRunwayPolling(true);
-    setRunwayProgress(0);
-    let attempts = 0;
-    const poll = async () => {
-      try {
-        const status = await runwayService.checkStatus(taskId);
-        setRunwayProgress(status.progress * 100);
-        if (status.status === 'SUCCEEDED' && status.resultUrl) {
-          setResultVideoUrl(status.resultUrl);
-          setRunwayPolling(false);
-          setStep(4);
-          toast.success('הסרטון מוכן!');
-          return;
-        }
-        if (status.status === 'FAILED') {
-          setRunwayPolling(false);
-          setStep(2);
-          toast.error(status.failureReason || 'שגיאה');
-          return;
-        }
-        attempts++;
-        if (attempts < 120) setTimeout(poll, 5000);
-        else { setRunwayPolling(false); setStep(2); toast.error('תם הזמן'); }
-      } catch { setRunwayPolling(false); setStep(2); toast.error('שגיאה'); }
-    };
-    poll();
+  const waitForDidResult = async (talkId: string, onProgress: (p: number) => void): Promise<string> => {
+    for (let attempts = 1; attempts <= 90; attempts++) {
+      const status = await didService.checkStatus(talkId);
+      if (status.status === 'done' && status.resultUrl) return status.resultUrl;
+      if (status.status === 'error') throw new Error('שגיאה ביצירת סרטון אווטאר');
+      onProgress(Math.min(95, attempts * 2));
+      await sleep(5000);
+    }
+    throw new Error('תם הזמן ליצירת הסרטון');
+  };
+
+  const waitForRunwayResult = async (taskId: string, onProgress: (p: number) => void): Promise<string> => {
+    for (let attempts = 1; attempts <= 120; attempts++) {
+      const status = await runwayService.checkStatus(taskId);
+      onProgress(Math.max(5, Math.min(95, status.progress * 100)));
+      if (status.status === 'SUCCEEDED' && status.resultUrl) return status.resultUrl;
+      if (status.status === 'FAILED') throw new Error(status.failureReason || 'שגיאה ביצירת סרטון');
+      await sleep(5000);
+    }
+    throw new Error('תם הזמן ליצירת הסרטון');
   };
 
   // ===== Step 3: Generate video =====
@@ -197,63 +187,72 @@ export function VideoWizardFlow({
     if (!generatedScript) return;
     setLoading(true);
     setStep(3);
+    setRunwayPolling(true);
+    setRunwayProgress(0);
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
-      // D-ID has a text limit — use only the first scene or max ~500 chars
       const fullScript = generatedScript.scenes.map(s => s.spokenText).join(' ');
-      const trimmedScript = fullScript.length > 500 ? fullScript.slice(0, 497) + '...' : fullScript;
+      const safeScript = fullScript.length > 4200 ? `${fullScript.slice(0, 4200)}...` : fullScript;
 
       if (avatarImage) {
-        // Try D-ID for talking avatar
+        const normalizedAvatarUrl = await normalizeAvatarForVideo(avatarImage);
         const selectedVoice = selectedVoices[0];
         const voiceId = selectedVoice?.type === 'elevenlabs' ? selectedVoice.id : undefined;
 
         try {
-          const talkResult = await didService.createTalk(avatarImage, trimmedScript, voiceId);
-          
-          // Check if D-ID returned an error in the response
-          if (!talkResult.id) {
-            throw new Error('D-ID לא החזיר מזהה תקין');
-          }
-          
-          toast.success('הסרטון בהכנה (D-ID)...');
-          pollDidStatus(talkResult.id);
-        } catch (didErr: any) {
-          // D-ID failed — fallback to RunwayML with avatar image
-          console.warn('D-ID failed, falling back to RunwayML:', didErr.message);
-          toast.info('D-ID לא זמין, עובר ל-RunwayML...');
+          const talkResult = await didService.createTalk(normalizedAvatarUrl, safeScript, voiceId);
+          if (!talkResult?.id) throw new Error('D-ID לא החזיר מזהה משימה');
 
-          try {
-            const promptText = generatedScript.scenes
-              .map(s => `${s.visualDescription}. ${s.subtitleText}`)
-              .join('. ');
-            const taskData = await runwayService.imageToVideo(
-              avatarImage,
-              buildPrompt(promptText)
-            );
-            toast.success('הסרטון בהכנה (RunwayML)...');
-            pollRunwayStatus(taskData.taskId);
-          } catch (runwayErr: any) {
-            toast.error(runwayErr.message || 'שגיאה ביצירת סרטון');
-            setStep(2);
-          }
+          toast.success('הסרטון בהכנה...');
+          const resultUrl = await waitForDidResult(talkResult.id, setRunwayProgress);
+          setResultVideoUrl(resultUrl);
+          setStep(4);
+          toast.success('הסרטון מוכן!');
+        } catch (didErr: any) {
+          // Fallback: image-to-video keeps avatar visual context even if D-ID fails
+          console.warn('D-ID failed, switching to Runway image-to-video:', didErr?.message);
+          toast.info('מעביר אוטומטית ל-RunwayML...');
+
+          const promptText = generatedScript.scenes
+            .map(s => `${s.visualDescription}. ${s.subtitleText}`)
+            .join('. ');
+
+          const taskData = await runwayService.imageToVideo(
+            normalizedAvatarUrl,
+            buildPrompt(promptText),
+            undefined,
+            generatedScript.duration >= 90 ? 10 : 5,
+          );
+
+          const resultUrl = await waitForRunwayResult(taskData.taskId, setRunwayProgress);
+          setResultVideoUrl(resultUrl);
+          setStep(4);
+          toast.success('הסרטון מוכן!');
         }
       } else {
-        // No avatar — text-to-video via RunwayML
         const promptText = generatedScript.scenes
           .map(s => `${s.visualDescription}. ${s.subtitleText}`)
           .join('. ');
 
-        const taskData = await runwayService.textToVideo(buildPrompt(promptText));
+        const taskData = await runwayService.textToVideo(
+          buildPrompt(promptText),
+          undefined,
+          generatedScript.duration >= 90 ? 10 : 5,
+        );
+
         toast.success('הסרטון בהכנה...');
-        pollRunwayStatus(taskData.taskId);
+        const resultUrl = await waitForRunwayResult(taskData.taskId, setRunwayProgress);
+        setResultVideoUrl(resultUrl);
+        setStep(4);
+        toast.success('הסרטון מוכן!');
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה ביצירת סרטון');
       setStep(2);
     } finally {
       setLoading(false);
+      setRunwayPolling(false);
     }
   };
 
