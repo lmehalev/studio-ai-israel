@@ -70,7 +70,7 @@ export const avatarGenService = {
   generate: async (
     imageUrls: string[],
     style?: string,
-    options?: { baseAvatarUrl?: string; strictIdentity?: boolean }
+    options?: { baseAvatarUrl?: string; strictIdentity?: boolean; expression?: string }
   ): Promise<{ imageUrl: string | null; text: string }> => {
     const { data, error } = await supabase.functions.invoke("generate-avatar", {
       body: { imageUrls, style, ...options },
