@@ -1196,7 +1196,7 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
                 setHighlightProgress(100);
                 setHighlightStage('');
                 setStep(step + 2); // Jump to result
-                toast.success('הסרטון הקצר מוכן! 🎬');
+                toast.success(highlightOutputType === 'podcast_edit' ? 'הפודקאסט הערוך מוכן! 🎙️' : 'הסרטון מוכן! 🎬');
               } catch (e: any) {
                 toast.error(e.message || 'שגיאה ביצירת הסרטון');
                 setStep(step - 1); // Go back to prompt
