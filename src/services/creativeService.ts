@@ -442,7 +442,7 @@ export const websiteScraperService = {
   },
 };
 
-// ====== Krea AI Image Service ======
+// ====== Krea AI Service (Images + Videos + Upscale) ======
 export const kreaService = {
   /** Generate image using Krea AI (Flux, Nano Banana Pro, Seedream 4, ChatGPT Image) */
   generate: async (prompt: string, options?: {
@@ -464,6 +464,30 @@ export const kreaService = {
     if (error) throw new Error(error.message || 'שגיאה ביצירת תמונה ב-Krea');
     if (data?.error) throw new Error(data.error);
     return { imageUrl: data.imageUrl, jobId: data.jobId };
+  },
+
+  /** Generate video using Krea AI (Veo 3, Kling 2.5, Hailuo, Wan 2.5) */
+  generateVideo: async (prompt: string, options?: {
+    model?: 'veo-3' | 'veo-3.1' | 'kling-2.5' | 'hailuo-2.3' | 'wan-2.5';
+    width?: number;
+    height?: number;
+    duration?: number;
+    imageUrl?: string;
+  }): Promise<{ videoUrl: string; jobId: string }> => {
+    const { data, error } = await supabase.functions.invoke('krea-image', {
+      body: {
+        action: 'generate_video',
+        prompt,
+        model: options?.model || 'kling-2.5',
+        width: options?.width || 1280,
+        height: options?.height || 720,
+        duration: options?.duration || 5,
+        imageUrl: options?.imageUrl,
+      },
+    });
+    if (error) throw new Error(error.message || 'שגיאה ביצירת וידאו ב-Krea');
+    if (data?.error) throw new Error(data.error);
+    return { videoUrl: data.videoUrl, jobId: data.jobId };
   },
 
   /** Upscale image using Krea AI (Topaz-powered, up to 22K) */
@@ -491,5 +515,98 @@ export const kreaService = {
     });
     if (error) throw new Error(error.message || 'שגיאה בבדיקת סטטוס');
     return data;
+  },
+};
+
+// ====== ElevenLabs Sound Effects Service ======
+export const soundEffectService = {
+  /** Generate AI sound effect from text description */
+  generate: async (text: string, durationSeconds?: number): Promise<string> => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-music`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ action: 'sound_effect', text, duration_seconds: durationSeconds }),
+    });
+    if (!response.ok) throw new Error('שגיאה ביצירת אפקט סאונד');
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  },
+
+  /** Isolate vocals from background noise */
+  isolate: async (audioBase64: string): Promise<string> => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-music`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ action: 'isolate', audioBase64 }),
+    });
+    if (!response.ok) throw new Error('שגיאה בבידוד קול');
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  },
+
+  /** List all ElevenLabs voices */
+  listVoices: async () => {
+    const { data, error } = await supabase.functions.invoke('elevenlabs-music', {
+      body: { action: 'list_voices' },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בטעינת קולות');
+    return data?.voices || [];
+  },
+};
+
+// ====== HeyGen Extended Service ======
+export const heygenExtendedService = {
+  /** Create video from own photo (Talking Photo) */
+  createPhotoAvatarVideo: async (
+    photoUrl: string,
+    script: string,
+    voiceId?: string,
+    audioUrl?: string,
+    aspectRatio?: string
+  ): Promise<{ videoId: string; status: string }> => {
+    const { data, error } = await supabase.functions.invoke('heygen-video', {
+      body: { action: 'create_photo_avatar_video', photoUrl, script, voiceId, audioUrl, aspectRatio },
+    });
+    if (error) throw new Error(error.message || 'שגיאה ביצירת תמונה מדברת');
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  /** List HeyGen templates */
+  listTemplates: async () => {
+    const { data, error } = await supabase.functions.invoke('heygen-video', {
+      body: { action: 'list_templates' },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בטעינת תבניות');
+    return data?.templates || [];
+  },
+
+  /** Create video from template */
+  createFromTemplate: async (templateId: string, variables?: Record<string, any>) => {
+    const { data, error } = await supabase.functions.invoke('heygen-video', {
+      body: { action: 'create_from_template', templateId, variables },
+    });
+    if (error) throw new Error(error.message || 'שגיאה ביצירה מתבנית');
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
+  /** Get remaining quota */
+  getQuota: async () => {
+    const { data, error } = await supabase.functions.invoke('heygen-video', {
+      body: { action: 'get_quota' },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בבדיקת מכסה');
+    return data?.quota || {};
   },
 };
