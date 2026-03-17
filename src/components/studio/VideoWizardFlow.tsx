@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
-  runwayService, didService, storageService, voiceCloneService, composeService,
+  runwayService, heygenService, storageService, voiceCloneService, composeService,
   voiceService, websiteScraperService, type Brand, type WebsiteScrapeResult,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -62,7 +62,7 @@ const NARRATION_MAX_CHARS = 4500;
 const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
-const DID_MAX_POLL_ATTEMPTS = 180;
+const HEYGEN_MAX_POLL_ATTEMPTS = 180;
 
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
@@ -285,11 +285,11 @@ export function VideoWizardFlow({
     return avatarUrl;
   };
 
-  const waitForDidResult = async (talkId: string, onProgress: (p: number) => void): Promise<string> => {
-    for (let attempts = 1; attempts <= DID_MAX_POLL_ATTEMPTS; attempts++) {
-      const status = await didService.checkStatus(talkId);
-      if (status.status === 'done' && status.resultUrl) return status.resultUrl;
-      if (status.status === 'error') throw new Error('שגיאה ביצירת סרטון אווטאר');
+  const waitForHeygenResult = async (videoId: string, onProgress: (p: number) => void): Promise<string> => {
+    for (let attempts = 1; attempts <= HEYGEN_MAX_POLL_ATTEMPTS; attempts++) {
+      const status = await heygenService.checkStatus(videoId);
+      if (status.status === 'done' && status.videoUrl) return status.videoUrl;
+      if (status.status === 'error' || status.status === 'failed') throw new Error('שגיאה ביצירת סרטון אווטאר');
       onProgress(Math.min(95, attempts * 1.2));
       await sleep(RUNWAY_STATUS_POLL_MS);
     }
@@ -386,7 +386,7 @@ export function VideoWizardFlow({
       try {
         const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
         const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
-        const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
+        const didCanGenerate = creditsData?.heygen ? creditsData.heygen.canGenerate !== false : true;
 
         if (!runwayCanGenerate) {
           if (avatarImage && didCanGenerate) {
@@ -446,21 +446,17 @@ export function VideoWizardFlow({
       };
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
-      const createDidSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        if (!normalizedAvatarUrl) {
-          throw new Error('אין אווטאר זמין למסלול חלופי');
-        }
-
-        const talkResult = await didService.createTalk(
-          normalizedAvatarUrl,
-          audioUrl ? undefined : sceneText,
-          undefined,
-          audioUrl
+      const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
+        const result = await heygenService.createVideo(
+          sceneText,
+          undefined, // avatarId - use default or selected
+          undefined, // voiceId
+          audioUrl,
         );
 
-        if (!talkResult?.id) throw new Error('D-ID error');
+        if (!result?.videoId) throw new Error('HeyGen error');
 
-        return waitForDidResult(talkResult.id, (p) => {
+        return waitForHeygenResult(result.videoId, (p) => {
           updateSceneProgress(sceneIdx, p);
         });
       };
@@ -479,11 +475,11 @@ export function VideoWizardFlow({
           let clipUrl: string;
 
           if (runwayBlocked && normalizedAvatarUrl) {
-            clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+            clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
           } else if (normalizedAvatarUrl && sceneIdx === 0) {
-            // First scene with avatar → try D-ID first
+            // First scene with avatar → try HeyGen first
             try {
-              clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
+              clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {
               // Fallback to Runway image-to-video
               try {
@@ -548,7 +544,7 @@ export function VideoWizardFlow({
               runwayBlocked = true;
               toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
               try {
-                const didFallbackUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+                const didFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
                 sceneResults[sceneIdx] = {
                   url: didFallbackUrl,
                   scene: { ...scene, duration: sceneDuration },

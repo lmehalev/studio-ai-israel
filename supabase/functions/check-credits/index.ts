@@ -124,32 +124,40 @@ async function checkElevenLabs(apiKey: string): Promise<ServiceCredits> {
   }
 }
 
-async function checkDID(apiKey: string): Promise<ServiceCredits> {
+async function checkHeyGen(apiKey: string): Promise<ServiceCredits> {
   try {
-    const res = await fetch("https://api.d-id.com/credits", {
-      headers: { Authorization: `Basic ${apiKey}` },
+    const res = await fetch("https://api.heygen.com/v2/avatars", {
+      headers: { "X-Api-Key": apiKey },
     });
 
-    if (!res.ok) {
+    if (res.ok) {
+      return {
+        service: "heygen",
+        used: 0,
+        limit: -1,
+        unit: "קרדיטים",
+        plan: "API מחובר",
+        canGenerate: true,
+        dashboardUrl: "https://app.heygen.com/settings",
+      };
+    }
+
+    if (res.status === 401 || res.status === 403) {
       const message = await parseErrorBody(res);
       throw new Error(`HTTP ${res.status}: ${message}`);
     }
 
-    const data = await res.json();
-    const remaining = data.remaining || 0;
-    const total = data.total || 20;
-
     return {
-      service: "did",
-      used: total - remaining,
-      limit: total,
+      service: "heygen",
+      used: 0,
+      limit: -1,
       unit: "קרדיטים",
-      plan: remaining > 0 ? "active" : "exhausted",
-      canGenerate: remaining > 0,
-      dashboardUrl: "https://studio.d-id.com/account",
+      plan: "API מחובר",
+      canGenerate: true,
+      dashboardUrl: "https://app.heygen.com/settings",
     };
   } catch (error) {
-    return toErrorResult("did", "קרדיטים", "https://studio.d-id.com/account", error);
+    return toErrorResult("heygen", "קרדיטים", "https://app.heygen.com/settings", error);
   }
 }
 
@@ -261,7 +269,7 @@ serve(async (req) => {
     const results: ServiceCredits[] = [];
 
     const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
-    const didKey = Deno.env.get("DID_API_KEY");
+    const heygenKey = Deno.env.get("HEYGEN_API_KEY");
     const runwayKey = Deno.env.get("RUNWAY_API_KEY");
     const shotstackKey = Deno.env.get("SHOTSTACK_API_KEY");
     const cloudinaryName = Deno.env.get("CLOUDINARY_CLOUD_NAME");
@@ -271,7 +279,7 @@ serve(async (req) => {
     const promises: Promise<ServiceCredits>[] = [];
 
     if (elevenLabsKey) promises.push(checkElevenLabs(elevenLabsKey));
-    if (didKey) promises.push(checkDID(didKey));
+    if (heygenKey) promises.push(checkHeyGen(heygenKey));
     if (runwayKey) promises.push(checkRunway(runwayKey));
     if (shotstackKey) promises.push(checkShotstack(shotstackKey));
     if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
