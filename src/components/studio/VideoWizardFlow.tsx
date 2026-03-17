@@ -764,7 +764,10 @@ export function VideoWizardFlow({
                 };
                 toast.success(`סצנה ${sceneNum} הושלמה במסלול HeyGen`);
                 continue;
-              } catch {
+              } catch (heygenErr: any) {
+                if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
+                  heygenFallbackEnabled = false;
+                }
                 // Continue to Krea fallback
               }
             }
