@@ -632,24 +632,35 @@ export function VideoWizardFlow({
       // Generate a scene image via AI, then animate it with Krea image-to-video
       const createAIImageToVideoClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
         updateSceneProgress(sceneIdx, 5);
+        // Enhanced prompt for cinematic still image
+        const imagePrompt = `Ultra high quality cinematic still frame, 8K resolution, professional photography. ${scenePrompt}. Photorealistic, dramatic lighting, shallow depth of field, movie-quality composition. NO text, NO watermarks, NO UI elements.`;
+        
         // Step 1: Generate a still image via Lovable AI (Gemini image)
         const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
-          body: { prompt: scenePrompt },
+          body: { prompt: imagePrompt },
         });
         if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
         updateSceneProgress(sceneIdx, 40);
 
-        // Step 2: Animate the image with Krea image-to-video
-        const kreaResult = await kreaService.generateVideo(scenePrompt, {
-          model: 'kling-2.5',
-          width: 1280,
-          height: 720,
-          duration: Math.max(5, Math.min(10, sceneDuration)),
-          imageUrl: imgData.imageUrl,
-        });
+        // Step 2: Try Krea image-to-video, if it fails just return the image URL
+        // (Shotstack can still use a still image as a video clip)
+        try {
+          const kreaResult = await kreaService.generateVideo(scenePrompt, {
+            model: 'kling-2.5',
+            width: 1280,
+            height: 720,
+            duration: Math.max(5, Math.min(10, sceneDuration)),
+            imageUrl: imgData.imageUrl,
+          });
+          updateSceneProgress(sceneIdx, 100);
+          if (kreaResult?.videoUrl) return kreaResult.videoUrl;
+        } catch (kreaAnimErr) {
+          console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
+        }
+        
+        // Fallback: use the still image directly — Shotstack handles images as video clips
         updateSceneProgress(sceneIdx, 100);
-        if (!kreaResult?.videoUrl) throw new Error('Krea image-to-video failed');
-        return kreaResult.videoUrl;
+        return imgData.imageUrl;
       };
 
       const createKreaSceneClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
