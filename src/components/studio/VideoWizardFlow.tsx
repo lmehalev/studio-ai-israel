@@ -588,34 +588,34 @@ export function VideoWizardFlow({
 
       // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
       const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        // If we have a user avatar image, use talking_photo approach (much more reliable)
-        if (normalizedAvatarUrl) {
+        const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
           const result = await heygenExtendedService.createPhotoAvatarVideo(
-            normalizedAvatarUrl,
+            photoUrl,
             sceneText,
             undefined,
-            audioUrl,
+            includeAudio ? audioUrl : undefined,
           );
           if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
           return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        };
+
+        const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
+          const { data: imgData } = await supabase.functions.invoke('generate-image', {
+            body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
+          });
+          return imgData?.imageUrl as string | undefined;
+        })());
+
+        if (!primaryPhotoUrl) {
+          throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
         }
 
-        // No avatar image — try generating an AI image to use as talking photo
-        const { data: imgData } = await supabase.functions.invoke('generate-image', {
-          body: { prompt: `Professional presenter headshot, studio lighting, looking at camera, neutral background` },
-        });
-        if (imgData?.imageUrl) {
-          const result = await heygenExtendedService.createPhotoAvatarVideo(
-            imgData.imageUrl,
-            sceneText,
-            undefined,
-            audioUrl,
-          );
-          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        try {
+          return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
+        } catch (firstErr) {
+          if (!audioUrl) throw firstErr;
+          return createFromPhoto(primaryPhotoUrl, false);
         }
-
-        throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
       };
 
       // Generate a scene image via AI, then animate it with Krea image-to-video
