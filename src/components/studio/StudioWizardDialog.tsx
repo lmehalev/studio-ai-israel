@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
-  avatarDbService, storageService,
+  avatarDbService, storageService, composeService, soundEffectService,
   type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -26,13 +26,14 @@ import {
 import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
-export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
+export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
 
 const actionOptions: { id: StudioAction; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'צור תמונה', icon: ImageIcon, desc: 'יצירת תמונה שיווקית מתיאור טקסט' },
   { id: 'video_ai', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט' },
   { id: 'subtitles', label: 'כתוביות לסרטון', icon: Subtitles, desc: 'תמלול אוטומטי + עריכת כתוביות' },
   { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך' },
+  { id: 'highlight', label: 'סרטון קצר מתוכן ארוך', icon: Scissors, desc: 'העלה סרטונים ותמונות — קבל סרטון ויראלי 30-60 שניות' },
 ];
 
 const subtitleFontOptions = [
@@ -98,7 +99,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [subtitleOffset, setSubtitleOffset] = useState(0.3);
   const [subtitleFontClass, setSubtitleFontClass] = useState<string>('font-heebo');
 
-  // Avatar & Voice selection
+  // Highlight (long → short viral video)
+  const [highlightFiles, setHighlightFiles] = useState<string[]>([]);
+  const [highlightProgress, setHighlightProgress] = useState(0);
+  const [highlightStage, setHighlightStage] = useState('');
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
   interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
@@ -274,6 +278,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setCustomCategory('');
         setSessionRestoreOffered(false);
         setHasPendingSession(false);
+        setHighlightFiles([]);
+        setHighlightProgress(0);
+        setHighlightStage('');
       }, 300);
     }
   }, [open]);
@@ -427,6 +434,12 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'מה לשנות?', desc: 'תאר את השינויים שתרצה' },
         { title: 'התוצאה', desc: 'התוצאה הערוכה' },
       ],
+      highlight: [
+        { title: 'העלה תוכן', desc: 'העלה סרטונים ותמונות מהתוכן שלך' },
+        { title: 'מה הסרטון?', desc: 'תאר את הסרטון הקצר שתרצה לקבל' },
+        { title: 'יוצר סרטון ויראלי...', desc: 'מעבד, חותך ומרכיב את הסרטון' },
+        { title: 'התוצאה', desc: 'הסרטון הקצר שלך מוכן' },
+      ],
     };
 
     const steps = stepsMap[selectedAction];
@@ -437,7 +450,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 1, subtitles: 1, import_edit: 3,
+      image: 2, video_ai: 1, subtitles: 1, import_edit: 3, highlight: 4,
     };
     return counts[selectedAction] + 1;
   };
@@ -931,6 +944,214 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         );
       }
       if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
+    }
+
+    // ====== HIGHLIGHT (Long → Short Viral) ======
+    if (selectedAction === 'highlight') {
+      if (wizardStep === 0) return (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">העלה סרטונים ו/או תמונות — המערכת תייצר ממנו סרטון קצר, קולע וויראלי (30-60 שניות)</p>
+          <FileUploadZone
+            accept="video/*,image/*"
+            multiple
+            label="העלה סרטונים ותמונות"
+            hint="MP4, MOV, JPG, PNG — עד 20 קבצים, ללא הגבלת אורך"
+            onUploaded={url => { if (url) setHighlightFiles(prev => [...prev, url]); }}
+            onMultipleUploaded={urls => setHighlightFiles(prev => [...prev, ...urls])}
+          />
+          {highlightFiles.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">{highlightFiles.length} קבצים הועלו</p>
+              <div className="flex flex-wrap gap-2">
+                {highlightFiles.map((url, i) => (
+                  <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border">
+                    {url.match(/\.(mp4|mov|webm)/i) ? (
+                      <video src={url} className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                    )}
+                    <button onClick={() => setHighlightFiles(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              if (highlightFiles.length === 0) { toast.error('יש להעלות לפחות קובץ אחד'); return; }
+              setStep(step + 1);
+            }}
+            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+          >
+            המשך <ArrowRight className="w-4 h-4 rotate-180" />
+          </button>
+        </div>
+      );
+
+      if (wizardStep === 1) return (
+        <div className="space-y-4">
+          {renderAvatarVoiceSelector()}
+          {renderPromptInput({ placeholder: 'תאר בדיוק מה אתה רוצה שייצא מהסרטון הקצר...\n\nלמשל: "סרטון של 45 שניות שמציג את המוצרים הכי נמכרים, עם מוזיקה אנרגטית ו-Hook חזק בהתחלה"', rows: 5 })}
+          <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground">💡 טיפים לתוצאה הכי טובה:</p>
+            <p>• ציין את אורך הסרטון הרצוי (30-60 שניות)</p>
+            <p>• תאר את האווירה / סגנון (אנרגטי, רגוע, מקצועי)</p>
+            <p>• ציין אם אתה רוצה Hook בהתחלה ו-CTA בסוף</p>
+            <p>• המערכת תוסיף מוזיקה ויראלית מבוססת טרנדים אוטומטית</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (!prompt.trim()) { toast.error('יש לתאר את הסרטון הרצוי'); return; }
+              setStep(step + 1);
+              setLoading(true);
+              setHighlightProgress(0);
+              setHighlightStage('מנתח תוכן...');
+              try {
+                // Step 1: Analyze content with AI to create a script
+                setHighlightProgress(10);
+                setHighlightStage('מייצר תסריט ויראלי...');
+
+                const trendData = await supabase.from('saved_trends').select('*').limit(5);
+                const trendKnowledge = trendData.data?.map(t => `${t.title}: ${t.tip}`).join('\n') || '';
+
+                const { data: scriptData } = await supabase.functions.invoke('generate-script', {
+                  body: {
+                    prompt: `צור תסריט לסרטון קצר (30-60 שניות) מתוכן קיים.
+הנחיות המשתמש: ${prompt}
+${trendKnowledge ? `\nטרנדים חזקים כיום:\n${trendKnowledge}` : ''}
+${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.industry || 'כללי'}` : ''}
+
+הפק תסריט עם 3-6 סצנות, כולל Hook חזק בפתיחה ו-CTA בסיום. הסרטון צריך להיות ויראלי, קולע ודינמי.
+כל סצנה צריכה להיות קצרה (5-10 שניות) ולכלול: תיאור ויזואלי, טקסט על המסך (אם יש), ונרטיב/קריינות.`,
+                    type: 'cinematic',
+                  },
+                });
+
+                setHighlightProgress(30);
+                setHighlightStage('מכין קריינות...');
+
+                // Step 2: Generate narration
+                const narrationText = scriptData?.script?.scenes?.map((s: any) => s.narration || s.description || '').filter(Boolean).join('. ') || prompt;
+                let audioUrl = '';
+                try {
+                  const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
+                  if (selectedVoice?.audio_url) {
+                    const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', {
+                      body: { audioUrl: selectedVoice.audio_url, scriptText: narrationText.slice(0, 4500) },
+                    });
+                    audioUrl = cloneData?.audioUrl || '';
+                  } else {
+                    audioUrl = await voiceService.generateAndUpload(narrationText.slice(0, 4500));
+                  }
+                } catch { /* continue without narration */ }
+
+                setHighlightProgress(50);
+                setHighlightStage('מייצר סרטון...');
+
+                // Step 3: Use the uploaded files as base clips and compose
+                const videoFiles = highlightFiles.filter(f => f.match(/\.(mp4|mov|webm)/i));
+                const imageFiles = highlightFiles.filter(f => !f.match(/\.(mp4|mov|webm)/i));
+
+                // Use first video or generate from images
+                let baseVideoUrl = videoFiles[0] || '';
+                if (!baseVideoUrl && imageFiles.length > 0) {
+                  // Generate video from first image
+                  const { data: rvData } = await supabase.functions.invoke('runway-video', {
+                    body: { action: 'image_to_video', promptImage: imageFiles[0], promptText: prompt.slice(0, 500), duration: 10 },
+                  });
+                  if (rvData?.taskId) {
+                    // Poll for result
+                    for (let i = 0; i < 60; i++) {
+                      await new Promise(r => setTimeout(r, 5000));
+                      setHighlightProgress(50 + Math.min(20, i));
+                      const { data: status } = await supabase.functions.invoke('runway-video', {
+                        body: { action: 'check_status', taskId: rvData.taskId },
+                      });
+                      if (status?.status === 'SUCCEEDED' && status?.resultUrl) {
+                        baseVideoUrl = status.resultUrl;
+                        break;
+                      }
+                      if (status?.status === 'FAILED') break;
+                    }
+                  }
+                }
+
+                setHighlightProgress(75);
+                setHighlightStage('מרכיב סרטון סופי עם מוזיקה...');
+
+                // Step 4: Compose final video with Shotstack
+                const scenes = videoFiles.length > 1
+                  ? videoFiles.map((url, i) => ({ src: url, length: Math.min(10, 60 / videoFiles.length), fit: 'cover' as const }))
+                  : baseVideoUrl ? [{ src: baseVideoUrl, length: 10, fit: 'cover' as const }] : [];
+
+                if (scenes.length > 0) {
+                  const composeResult = await composeService.render({
+                    videoUrl: scenes[0]?.src || baseVideoUrl,
+                    scenes,
+                    audioUrl: audioUrl || undefined,
+                  });
+
+                  if (composeResult?.renderId) {
+                    setHighlightProgress(85);
+                    setHighlightStage('ממתין לרינדור...');
+                    // Poll Shotstack
+                    for (let i = 0; i < 60; i++) {
+                      await new Promise(r => setTimeout(r, 5000));
+                      setHighlightProgress(85 + Math.min(10, i));
+                      const statusResult = await composeService.checkStatus(composeResult.renderId);
+                      if (statusResult?.status === 'done' && statusResult?.url) {
+                        setResult({ videoUrl: statusResult.url });
+                        break;
+                      }
+                      if (statusResult?.status === 'failed') throw new Error('הרינדור נכשל');
+                    }
+                  }
+                }
+
+                // Fallback: use first video if composition failed
+                if (!result?.videoUrl && baseVideoUrl) {
+                  setResult({ videoUrl: baseVideoUrl });
+                }
+
+                setHighlightProgress(100);
+                setHighlightStage('');
+                setStep(step + 2); // Jump to result
+                toast.success('הסרטון הקצר מוכן! 🎬');
+              } catch (e: any) {
+                toast.error(e.message || 'שגיאה ביצירת הסרטון');
+                setStep(step - 1); // Go back to prompt
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+            {loading ? 'מעבד...' : 'צור סרטון ויראלי'}
+          </button>
+        </div>
+      );
+
+      if (wizardStep === 2 && loading) return (
+        <div className="space-y-6 py-8 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Scissors className="w-8 h-8 text-primary animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">{highlightStage || 'מעבד...'}</p>
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden max-w-xs mx-auto">
+              <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${highlightProgress}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">{highlightProgress}%</p>
+          </div>
+        </div>
+      );
+
+      if ((wizardStep === 3 || wizardStep === 2) && result?.videoUrl) return renderResultView();
     }
 
     return null;
