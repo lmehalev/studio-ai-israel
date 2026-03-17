@@ -593,7 +593,7 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (runwayBlocked && heygenFallbackEnabled && stockHeygenAvatarId) {
+          if (runwayBlocked && heygenFallbackEnabled) {
             try {
               clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {
