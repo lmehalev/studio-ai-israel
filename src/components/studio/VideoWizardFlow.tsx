@@ -510,36 +510,36 @@ export function VideoWizardFlow({
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
 
-      // Fetch a valid HeyGen stock avatar ID if we don't have one
-      let stockHeygenAvatarId: string | null = null;
-      try {
-        const avatarList = await heygenService.listAvatars();
-        if (Array.isArray(avatarList) && avatarList.length > 0) {
-          // Pick the first available avatar
-          const first = avatarList[0];
-          stockHeygenAvatarId = first?.avatar_id || first?.id || null;
-          console.log('Stock HeyGen avatar found:', stockHeygenAvatarId);
-        }
-      } catch {
-        console.warn('Could not list HeyGen avatars, will skip HeyGen fallback');
-      }
-
+      // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
       const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        const avatarId = stockHeygenAvatarId;
-        if (!avatarId) throw new Error('אין אווטאר HeyGen זמין');
+        // If we have a user avatar image, use talking_photo approach (much more reliable)
+        if (normalizedAvatarUrl) {
+          const result = await heygenExtendedService.createPhotoAvatarVideo(
+            normalizedAvatarUrl,
+            sceneText,
+            undefined,
+            audioUrl,
+          );
+          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        }
 
-        const result = await heygenService.createVideo(
-          sceneText,
-          avatarId,
-          undefined, // voiceId — will use default Hebrew
-          audioUrl,
-        );
-
-        if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-
-        return waitForHeygenResult(result.videoId, (p) => {
-          updateSceneProgress(sceneIdx, p);
+        // No avatar image — try generating an AI image to use as talking photo
+        const { data: imgData } = await supabase.functions.invoke('generate-image', {
+          body: { prompt: `Professional presenter headshot, studio lighting, looking at camera, neutral background` },
         });
+        if (imgData?.imageUrl) {
+          const result = await heygenExtendedService.createPhotoAvatarVideo(
+            imgData.imageUrl,
+            sceneText,
+            undefined,
+            audioUrl,
+          );
+          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        }
+
+        throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
       };
 
       // Generate a scene image via AI, then animate it with Krea image-to-video
