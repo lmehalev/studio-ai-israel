@@ -441,3 +441,55 @@ export const websiteScraperService = {
     };
   },
 };
+
+// ====== Krea AI Image Service ======
+export const kreaService = {
+  /** Generate image using Krea AI (Flux, Nano Banana Pro, Seedream 4, ChatGPT Image) */
+  generate: async (prompt: string, options?: {
+    model?: 'flux' | 'nano-banana-pro' | 'seedream-4' | 'chatgpt-image';
+    width?: number;
+    height?: number;
+    imageUrls?: string[];
+  }): Promise<{ imageUrl: string; jobId: string }> => {
+    const { data, error } = await supabase.functions.invoke('krea-image', {
+      body: {
+        action: 'generate',
+        prompt,
+        model: options?.model || 'flux',
+        width: options?.width || 1024,
+        height: options?.height || 1024,
+        imageUrls: options?.imageUrls,
+      },
+    });
+    if (error) throw new Error(error.message || 'שגיאה ביצירת תמונה ב-Krea');
+    if (data?.error) throw new Error(data.error);
+    return { imageUrl: data.imageUrl, jobId: data.jobId };
+  },
+
+  /** Upscale image using Krea AI (Topaz-powered, up to 22K) */
+  upscale: async (imageUrl: string, options?: {
+    mode?: 'standard' | 'bloom' | 'generative';
+    scaleFactor?: number;
+  }): Promise<{ imageUrl: string; jobId: string }> => {
+    const { data, error } = await supabase.functions.invoke('krea-image', {
+      body: {
+        action: 'upscale',
+        imageUrl,
+        mode: options?.mode || 'standard',
+        scaleFactor: options?.scaleFactor || 2,
+      },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בשיפור רזולוציה');
+    if (data?.error) throw new Error(data.error);
+    return { imageUrl: data.imageUrl, jobId: data.jobId };
+  },
+
+  /** Check job status */
+  checkStatus: async (jobId: string) => {
+    const { data, error } = await supabase.functions.invoke('krea-image', {
+      body: { action: 'check_status', jobId },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בבדיקת סטטוס');
+    return data;
+  },
+};
