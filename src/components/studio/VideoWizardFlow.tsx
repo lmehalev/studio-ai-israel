@@ -671,8 +671,11 @@ export function VideoWizardFlow({
           if (runwayBlocked && heygenFallbackEnabled) {
             try {
               clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
-            } catch {
-              heygenFallbackEnabled = false;
+            } catch (heygenErr: any) {
+              if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
+                heygenFallbackEnabled = false;
+              }
+
               if (kreaFallbackEnabled) {
                 clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
               } else {
