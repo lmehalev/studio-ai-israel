@@ -182,6 +182,12 @@ export default function TrendsPage() {
                           <p className="text-xs text-foreground">{trend.tip}</p>
                         </div>
                       )}
+                      {trend.visual_style && (
+                        <div className="flex items-start gap-1.5 bg-primary/5 rounded-lg p-2 mt-1">
+                          <Palette className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">סגנון ויזואלי:</span> {trend.visual_style}</p>
+                        </div>
+                      )}
                     </div>
                     {trend.url && trend.url !== '#' && (
                       <a href={trend.url} target="_blank" rel="noopener noreferrer">
