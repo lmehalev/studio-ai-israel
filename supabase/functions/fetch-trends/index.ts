@@ -99,6 +99,22 @@ Return ONLY valid JSON, no extra text:
       parsed = { trends: [], summary: content, raw: true };
     }
 
+    // Replace fake URLs with citation URLs where possible
+    if (parsed.trends && citations.length > 0) {
+      parsed.trends = parsed.trends.map((trend: any, idx: number) => {
+        // If URL looks fake or is missing, use citation
+        const url = trend.url || '';
+        const isFake = !url || url === '#' || url.includes('example.com') || 
+          (url.includes('tiktok.com') && url.includes('1234')) ||
+          (url.includes('instagram.com') && url.match(/\/[A-Za-z0-9]{3,5}\/?$/)) ||
+          (url.includes('youtube.com') && url.includes('abc123'));
+        if (isFake && citations[idx]) {
+          trend.url = citations[idx];
+        }
+        return trend;
+      });
+    }
+
     console.log('Trends fetched successfully, count:', parsed.trends?.length || 0);
 
     return new Response(
