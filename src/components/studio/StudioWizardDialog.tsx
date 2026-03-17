@@ -282,6 +282,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightFiles([]);
         setHighlightProgress(0);
         setHighlightStage('');
+        setHighlightOutputType('viral_short');
       }, 300);
     }
   }, [open]);
