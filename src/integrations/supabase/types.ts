@@ -236,6 +236,48 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_trends: {
+        Row: {
+          category: string
+          description: string
+          fetched_at: string
+          id: string
+          platform: string
+          summary: string
+          tip: string
+          title: string
+          url: string
+          views: string
+          visual_style: string
+        }
+        Insert: {
+          category: string
+          description?: string
+          fetched_at?: string
+          id?: string
+          platform?: string
+          summary?: string
+          tip?: string
+          title: string
+          url?: string
+          views?: string
+          visual_style?: string
+        }
+        Update: {
+          category?: string
+          description?: string
+          fetched_at?: string
+          id?: string
+          platform?: string
+          summary?: string
+          tip?: string
+          title?: string
+          url?: string
+          views?: string
+          visual_style?: string
+        }
+        Relationships: []
+      }
       voices: {
         Row: {
           audio_url: string
