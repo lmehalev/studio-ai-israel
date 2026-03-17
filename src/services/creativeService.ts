@@ -230,35 +230,53 @@ export const composeService = {
   },
 };
 
-// ====== D-ID Avatar Service ======
-export const didService = {
-  createTalk: async (imageUrl: string, text?: string, voiceId?: string, audioUrl?: string): Promise<{ id: string; status: string }> => {
-    const { data, error } = await supabase.functions.invoke("did-avatar", {
-      body: { action: "create_talk", imageUrl, text, voiceId, audioUrl },
+// ====== HeyGen Avatar Service ======
+export const heygenService = {
+  createVideo: async (
+    script: string,
+    avatarId?: string,
+    voiceId?: string,
+    audioUrl?: string,
+    aspectRatio?: string
+  ): Promise<{ videoId: string; status: string }> => {
+    const { data, error } = await supabase.functions.invoke("heygen-video", {
+      body: { action: "create_video", script, avatarId, voiceId, audioUrl, aspectRatio },
     });
-    if (error) throw new Error(error.message || "שגיאה ביצירת אווטאר מדבר");
+    if (error) throw new Error(error.message || "שגיאה ביצירת סרטון אווטאר");
     if (data?.error) throw new Error(data.error);
     return data;
   },
 
-  checkStatus: async (talkId: string): Promise<{ status: string; resultUrl: string | null; thumbnailUrl: string | null }> => {
-    const { data, error } = await supabase.functions.invoke("did-avatar", {
-      body: { action: "check_status", talkId },
+  checkStatus: async (videoId: string): Promise<{ status: string; videoUrl: string | null; thumbnailUrl: string | null; progress: number }> => {
+    const { data, error } = await supabase.functions.invoke("heygen-video", {
+      body: { action: "check_status", videoId },
     });
     if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
     if (data?.error) throw new Error(data.error);
     return data;
   },
 
-  listPresenters: async () => {
-    const { data, error } = await supabase.functions.invoke("did-avatar", {
-      body: { action: "list_presenters" },
+  listAvatars: async () => {
+    const { data, error } = await supabase.functions.invoke("heygen-video", {
+      body: { action: "list_avatars" },
     });
-    if (error) throw new Error(error.message || "שגיאה בטעינת דמויות");
+    if (error) throw new Error(error.message || "שגיאה בטעינת אווטארים");
     if (data?.error) throw new Error(data.error);
-    return data.actors || [];
+    return data.avatars || [];
+  },
+
+  listVoices: async () => {
+    const { data, error } = await supabase.functions.invoke("heygen-video", {
+      body: { action: "list_voices" },
+    });
+    if (error) throw new Error(error.message || "שגיאה בטעינת קולות");
+    if (data?.error) throw new Error(data.error);
+    return data.voices || [];
   },
 };
+
+// ====== D-ID Avatar Service (legacy, kept for backward compat) ======
+export const didService = heygenService as any;
 
 // ====== Transcription / Subtitles Service ======
 export interface SubtitleSegment {
