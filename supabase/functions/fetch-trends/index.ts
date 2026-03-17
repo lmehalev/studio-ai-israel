@@ -21,17 +21,23 @@ Deno.serve(async (req) => {
 
     const industryText = industry || 'שיווק דיגיטלי';
 
-    const prompt = `מצא לי את 5-8 הסרטונים והתכנים הויראליים ביותר מהשבוע האחרון בישראל בתחום "${industryText}".
+    const prompt = `Find the 5-8 most viral videos and content from the past week in Israel in the field of "${industryText}".
 
-עבור כל פריט תן לי:
-1. כותרת (title)
-2. תיאור קצר (description) - מה הסרטון/תוכן מראה ולמה הוא הצליח
-3. פלטפורמה (platform) - TikTok, Instagram, YouTube, Facebook, LinkedIn וכו'
-4. קישור (url) - הקישור המקורי לתוכן
-5. מספר צפיות/אינטראקציות משוער (views) - מספר בלבד
-6. טיפ (tip) - מה אפשר ללמוד מהתוכן הזה ליצירת תוכן דומה
+CRITICAL RULES:
+- ONLY include content with REAL, VERIFIED URLs that actually exist. Do NOT invent or guess URLs.
+- Every URL must come from your search sources/citations. If you cannot find a real URL, use the citation URL where you found the information.
+- Prefer direct links to the actual content (TikTok, Instagram, YouTube posts). If unavailable, link to the article/source discussing it.
 
-החזר את התשובה בפורמט JSON בלבד, ללא טקסט נוסף, במבנה:
+For each item provide:
+1. title - in Hebrew
+2. description - in Hebrew, what the content shows and why it succeeded  
+3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn etc.
+4. url - the REAL original link (must be from your sources)
+5. views - estimated views/interactions as a string
+6. tip - in Hebrew, what can be learned for creating similar content, specifically tips for generating images and videos that match this trend style
+7. visual_style - in Hebrew, describe the visual style, colors, composition, camera angles, editing style that made this content successful
+
+Return ONLY valid JSON, no extra text:
 {
   "trends": [
     {
@@ -40,10 +46,11 @@ Deno.serve(async (req) => {
       "platform": "...",
       "url": "...",
       "views": "...",
-      "tip": "..."
+      "tip": "...",
+      "visual_style": "..."
     }
   ],
-  "summary": "סיכום קצר של הטרנדים העיקריים השבוע"
+  "summary": "סיכום קצר בעברית של הטרנדים והסגנון הויזואלי השולט השבוע"
 }`;
 
     console.log('Fetching trends for industry:', industryText);
