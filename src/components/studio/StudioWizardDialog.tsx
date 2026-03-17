@@ -99,10 +99,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [subtitleOffset, setSubtitleOffset] = useState(0.3);
   const [subtitleFontClass, setSubtitleFontClass] = useState<string>('font-heebo');
 
-  // Highlight (long → short viral video)
+  // Highlight (long → short/long edited video)
   const [highlightFiles, setHighlightFiles] = useState<string[]>([]);
   const [highlightProgress, setHighlightProgress] = useState(0);
   const [highlightStage, setHighlightStage] = useState('');
+  const [highlightOutputType, setHighlightOutputType] = useState<string>('viral_short');
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
   interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
@@ -281,6 +282,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightFiles([]);
         setHighlightProgress(0);
         setHighlightStage('');
+        setHighlightOutputType('viral_short');
       }, 300);
     }
   }, [open]);
@@ -436,9 +438,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       ],
       highlight: [
         { title: 'העלה תוכן', desc: 'העלה סרטונים ותמונות מהתוכן שלך' },
-        { title: 'מה הסרטון?', desc: 'תאר את הסרטון הקצר שתרצה לקבל' },
-        { title: 'יוצר סרטון ויראלי...', desc: 'מעבד, חותך ומרכיב את הסרטון' },
-        { title: 'התוצאה', desc: 'הסרטון הקצר שלך מוכן' },
+        { title: 'הגדר את הפלט', desc: 'בחר סוג סרטון ותאר מה אתה רוצה' },
+        { title: 'מעבד...', desc: 'חותך, מרכיב ומעצב את התוצר' },
+        { title: 'התוצאה', desc: 'התוצר שלך מוכן' },
       ],
     };
 
@@ -991,44 +993,120 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         </div>
       );
 
-      if (wizardStep === 1) return (
-        <div className="space-y-4">
-          {renderAvatarVoiceSelector()}
-          {renderPromptInput({ placeholder: 'תאר בדיוק מה אתה רוצה שייצא מהסרטון הקצר...\n\nלמשל: "סרטון של 45 שניות שמציג את המוצרים הכי נמכרים, עם מוזיקה אנרגטית ו-Hook חזק בהתחלה"', rows: 5 })}
-          <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">💡 טיפים לתוצאה הכי טובה:</p>
-            <p>• ציין את אורך הסרטון הרצוי (30-60 שניות)</p>
-            <p>• תאר את האווירה / סגנון (אנרגטי, רגוע, מקצועי)</p>
-            <p>• ציין אם אתה רוצה Hook בהתחלה ו-CTA בסוף</p>
-            <p>• המערכת תוסיף מוזיקה ויראלית מבוססת טרנדים אוטומטית</p>
-          </div>
-          <button
-            onClick={async () => {
-              if (!prompt.trim()) { toast.error('יש לתאר את הסרטון הרצוי'); return; }
-              setStep(step + 1);
-              setLoading(true);
-              setHighlightProgress(0);
-              setHighlightStage('מנתח תוכן...');
-              try {
-                // Step 1: Analyze content with AI to create a script
-                setHighlightProgress(10);
-                setHighlightStage('מייצר תסריט ויראלי...');
+      if (wizardStep === 1) {
+        const outputTypes = [
+          { id: 'viral_short', label: 'סרטון ויראלי קצר', desc: '30-60 שניות, Hook + CTA, מוזיקה טרנדית', icon: '🔥' },
+          { id: 'highlight_reel', label: 'Highlight Reel', desc: '1-3 דקות, הרגעים הכי טובים מהתוכן', icon: '⭐' },
+          { id: 'podcast_edit', label: 'עריכת פודקאסט', desc: 'ניקוי, חיתוך שקטים, תוצאה מקצועית לשעה+', icon: '🎙️' },
+          { id: 'trailer', label: 'טריילר / פרומו', desc: '15-45 שניות, קצב מהיר, מותאם לרשתות', icon: '🎬' },
+          { id: 'tutorial_cut', label: 'סרטון הדרכה ערוך', desc: 'חיתוך חכם, כותרות, מבנה ברור', icon: '📚' },
+          { id: 'custom', label: 'מותאם אישית', desc: 'תגדיר בדיוק מה אתה צריך', icon: '✨' },
+        ];
 
-                const trendData = await supabase.from('saved_trends').select('*').limit(5);
-                const trendKnowledge = trendData.data?.map(t => `${t.title}: ${t.tip}`).join('\n') || '';
+        return (
+          <div className="space-y-4">
+            {renderAvatarVoiceSelector()}
 
-                const { data: scriptData } = await supabase.functions.invoke('generate-script', {
-                  body: {
-                    prompt: `צור תסריט לסרטון קצר (30-60 שניות) מתוכן קיים.
+            {/* Output type selector */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">בחר סוג פלט</p>
+              <div className="grid grid-cols-2 gap-2">
+                {outputTypes.map(type => (
+                  <button
+                    key={type.id}
+                    onClick={() => setHighlightOutputType(type.id)}
+                    className={cn(
+                      'text-right p-3 rounded-lg border transition-all text-xs',
+                      highlightOutputType === type.id
+                        ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                        : 'border-border hover:border-primary/30 bg-card'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span>{type.icon}</span>
+                      <span className="font-semibold">{type.label}</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">{type.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Prompt with voice dictation */}
+            {renderPromptInput({ placeholder: highlightOutputType === 'podcast_edit'
+              ? 'תאר איך אתה רוצה שהפודקאסט ייראה...\n\nלמשל: "פודקאסט של שעה, תנקה שקטים, תוסיף אינטרו ואאוטרו מקצועיים, כתוביות בעברית"'
+              : highlightOutputType === 'custom'
+              ? 'תאר בדיוק מה אתה צריך — אורך, סגנון, מבנה, הכל...'
+              : 'תאר מה אתה רוצה שייצא מהתוכן שלך...\n\nלמשל: "סרטון אנרגטי עם Hook חזק, מוזיקה טרנדית, ו-CTA בסוף"',
+              rows: 4 })}
+
+            {/* Tips per output type */}
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">💡 טיפים:</p>
+              {highlightOutputType === 'viral_short' && <>
+                <p>• אורך: 30-60 שניות, Hook ב-3 השניות הראשונות</p>
+                <p>• מוזיקה ויראלית תתווסף אוטומטית מהטרנדים</p>
+                <p>• CTA בסוף — מה אתה רוצה שהצופה יעשה?</p>
+              </>}
+              {highlightOutputType === 'highlight_reel' && <>
+                <p>• המערכת תבחר את הרגעים הכי מעניינים</p>
+                <p>• ציין אם יש רגעים ספציפיים שחשוב לכלול</p>
+                <p>• מעברים חלקים בין קטעים</p>
+              </>}
+              {highlightOutputType === 'podcast_edit' && <>
+                <p>• ניקוי שקטים ארוכים אוטומטי</p>
+                <p>• ציין אם צריך אינטרו/אאוטרו</p>
+                <p>• כתוביות בעברית יתווספו אוטומטית</p>
+                <p>• מתאים לפודקאסטים של 30 דקות עד שעה+</p>
+              </>}
+              {highlightOutputType === 'trailer' && <>
+                <p>• 15-45 שניות בקצב מהיר</p>
+                <p>• טקסטים דינמיים על המסך</p>
+                <p>• מותאם לרשתות חברתיות</p>
+              </>}
+              {highlightOutputType === 'tutorial_cut' && <>
+                <p>• חיתוך חכם — מסיר חלקים לא רלוונטיים</p>
+                <p>• כותרות וחלוקה לפרקים</p>
+                <p>• מבנה ברור וקל לעקוב</p>
+              </>}
+              {highlightOutputType === 'custom' && <>
+                <p>• תאר בדיוק את האורך, הסגנון והמבנה</p>
+                <p>• המערכת תתאים את העיבוד לפי הבקשה שלך</p>
+              </>}
+            </div>
+
+            <button
+              onClick={async () => {
+                if (!prompt.trim()) { toast.error('יש לתאר את הסרטון הרצוי'); return; }
+                setStep(step + 1);
+                setLoading(true);
+                setHighlightProgress(0);
+                setHighlightStage('מנתח תוכן...');
+                try {
+                  setHighlightProgress(10);
+                  setHighlightStage('מייצר תסריט...');
+
+                  const trendData = await supabase.from('saved_trends').select('*').limit(5);
+                  const trendKnowledge = trendData.data?.map(t => `${t.title}: ${t.tip}`).join('\n') || '';
+
+                  const outputLabel = outputTypes.find(t => t.id === highlightOutputType)?.label || 'סרטון';
+                  const { data: scriptData } = await supabase.functions.invoke('generate-script', {
+                    body: {
+                      prompt: `צור תסריט ל${outputLabel} מתוכן קיים.
+סוג פלט: ${highlightOutputType}
 הנחיות המשתמש: ${prompt}
 ${trendKnowledge ? `\nטרנדים חזקים כיום:\n${trendKnowledge}` : ''}
 ${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.industry || 'כללי'}` : ''}
 
-הפק תסריט עם 3-6 סצנות, כולל Hook חזק בפתיחה ו-CTA בסיום. הסרטון צריך להיות ויראלי, קולע ודינמי.
-כל סצנה צריכה להיות קצרה (5-10 שניות) ולכלול: תיאור ויזואלי, טקסט על המסך (אם יש), ונרטיב/קריינות.`,
-                    type: 'cinematic',
-                  },
-                });
+${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-10 שניות כל אחת), Hook חזק בפתיחה ו-CTA בסיום.' :
+  highlightOutputType === 'podcast_edit' ? 'ארגן את התוכן לפרקים ברורים עם אינטרו ואאוטרו מקצועיים.' :
+  highlightOutputType === 'highlight_reel' ? 'בחר 6-12 רגעים מרכזיים מהתוכן, כל אחד 10-15 שניות, עם מעברים חלקים.' :
+  highlightOutputType === 'trailer' ? 'הפק 4-8 קטעים קצרצרים (2-5 שניות) בקצב מהיר עם טקסטים דינמיים.' :
+  highlightOutputType === 'tutorial_cut' ? 'חלק את התוכן לפרקים עם כותרות ברורות ומבנה לוגי.' :
+  'התאם את התסריט בדיוק לפי הנחיות המשתמש.'}`,
+                      type: 'cinematic',
+                    },
+                  });
 
                 setHighlightProgress(30);
                 setHighlightStage('מכין קריינות...');
@@ -1119,7 +1197,7 @@ ${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.in
                 setHighlightProgress(100);
                 setHighlightStage('');
                 setStep(step + 2); // Jump to result
-                toast.success('הסרטון הקצר מוכן! 🎬');
+                toast.success(highlightOutputType === 'podcast_edit' ? 'הפודקאסט הערוך מוכן! 🎙️' : 'הסרטון מוכן! 🎬');
               } catch (e: any) {
                 toast.error(e.message || 'שגיאה ביצירת הסרטון');
                 setStep(step - 1); // Go back to prompt
@@ -1131,10 +1209,11 @@ ${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.in
             className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-            {loading ? 'מעבד...' : 'צור סרטון ויראלי'}
+            {loading ? 'מעבד...' : highlightOutputType === 'podcast_edit' ? 'ערוך פודקאסט' : 'צור סרטון'}
           </button>
         </div>
-      );
+        );
+      }
 
       if (wizardStep === 2 && loading) return (
         <div className="space-y-6 py-8 text-center">
