@@ -122,76 +122,112 @@ export default function ProjectsPage() {
             <p className="text-sm text-muted-foreground mt-2">טוען פרויקטים...</p>
           </div>
         ) : view === 'list' ? (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <table className="w-full">
-              <thead><tr className="border-b border-border bg-muted/30">
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground w-12"></th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פעילות</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תוצרים</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">פעולות</th>
-              </tr></thead>
-              <tbody>
-                {filtered.map(p => {
-                  const brand = brands.find(b => b.id === p.brand_id);
-                  const thumb = getProjectThumbnail(p.id);
-                  const outputCount = outputsByProject[p.id]?.length || p.output_count;
-                  return (
-                    <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => navigate(`/projects/${p.id}`)}>
-                      <td className="px-3 py-2">
-                        <div className="w-10 h-10 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
-                          {thumb ? (
-                            <img src={thumb} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium hover:text-primary text-right">{p.name}</p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {brand ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
-                            <Building2 className="w-3 h-3" /> {brand.name}
+          <>
+            {/* Desktop table */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden hidden md:block">
+              <table className="w-full">
+                <thead><tr className="border-b border-border bg-muted/30">
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground w-12"></th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פעילות</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סוג</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תוצרים</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">פעולות</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.map(p => {
+                    const brand = brands.find(b => b.id === p.brand_id);
+                    const thumb = getProjectThumbnail(p.id);
+                    const outputCount = outputsByProject[p.id]?.length || p.output_count;
+                    return (
+                      <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => navigate(`/projects/${p.id}`)}>
+                        <td className="px-3 py-2">
+                          <div className="w-10 h-10 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
+                            {thumb ? (
+                              <img src={thumb} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium hover:text-primary text-right">{p.name}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {brand ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                              <Building2 className="w-3 h-3" /> {brand.name}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {getProjectSubActivity(p) ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
+                              <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{p.video_type}</td>
+                        <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <span className={cn("text-sm font-medium", outputCount > 0 ? "text-primary" : "text-muted-foreground")}>
+                            {outputCount}
                           </span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {getProjectSubActivity(p) ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                            <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{p.video_type}</td>
-                      <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <span className={cn("text-sm font-medium", outputCount > 0 ? "text-primary" : "text-muted-foreground")}>
-                          {outputCount}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <div className="flex gap-1">
-                          <button onClick={() => navigate(`/projects/${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
-                            <FolderOpen className="w-3 h-3" /> פתח
-                          </button>
-                          <button onClick={() => navigate(`/creative-studio?projectId=${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
-                            <Wand2 className="w-3 h-3" /> סטודיו
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <div className="flex gap-1">
+                            <button onClick={() => navigate(`/projects/${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                              <FolderOpen className="w-3 h-3" /> פתח
+                            </button>
+                            <button onClick={() => navigate(`/creative-studio?projectId=${p.id}`)} className="px-2 py-1 border border-border rounded-md text-xs hover:bg-muted inline-flex items-center gap-1">
+                              <Wand2 className="w-3 h-3" /> סטודיו
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile card list */}
+            <div className="space-y-2 md:hidden">
+              {filtered.map(p => {
+                const brand = brands.find(b => b.id === p.brand_id);
+                const thumb = getProjectThumbnail(p.id);
+                const outputCount = outputsByProject[p.id]?.length || p.output_count;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 active:bg-muted/30 cursor-pointer"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {thumb ? (
+                        <img src={thumb} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <StatusBadge status={p.status} />
+                        {brand && (
+                          <span className="text-[10px] text-primary">{brand.name}</span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground">{formatDate(p.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(p => {

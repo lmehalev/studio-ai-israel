@@ -276,21 +276,21 @@ export default function CreativeStudioPage() {
         </div>
 
         {/* Big CTA */}
-        <div className="flex flex-col items-center justify-center py-12 space-y-6">
-          <div className="w-20 h-20 rounded-3xl gradient-gold flex items-center justify-center shadow-gold">
-            <Sparkles className="w-10 h-10 text-primary-foreground" />
+        <div className="flex flex-col items-center justify-center py-8 md:py-12 space-y-4 md:space-y-6">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-3xl gradient-gold flex items-center justify-center shadow-gold">
+            <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-primary-foreground" />
           </div>
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl font-rubik font-bold">מה תרצה ליצור היום?</h2>
-            <p className="text-muted-foreground text-sm max-w-md">
+          <div className="text-center space-y-2 px-2">
+            <h2 className="text-xl md:text-2xl font-rubik font-bold">מה תרצה ליצור היום?</h2>
+            <p className="text-muted-foreground text-xs md:text-sm max-w-md">
               לחץ על הכפתור ואנחה אותך צעד אחר צעד — תמונות, סרטונים, אווטארים, דיבוב, תסריטים וכתוביות
             </p>
           </div>
           <button
             onClick={() => setWizardOpen(true)}
-            className="gradient-gold text-primary-foreground px-10 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 shadow-gold hover:scale-[1.03] transition-transform"
+            className="gradient-gold text-primary-foreground px-8 md:px-10 py-3 md:py-4 rounded-xl md:rounded-2xl font-bold text-base md:text-lg flex items-center gap-3 shadow-gold hover:scale-[1.03] transition-transform w-full sm:w-auto justify-center"
           >
-            <Wand2 className="w-6 h-6" />
+            <Wand2 className="w-5 h-5 md:w-6 md:h-6" />
             בוא נתחיל
           </button>
         </div>

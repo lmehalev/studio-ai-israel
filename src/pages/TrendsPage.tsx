@@ -201,7 +201,7 @@ export default function TrendsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6" dir="rtl">
+      <div className="max-w-5xl mx-auto space-y-4 md:space-y-6" dir="rtl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
