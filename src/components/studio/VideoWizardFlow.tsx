@@ -62,7 +62,7 @@ const NARRATION_MAX_CHARS = 4500;
 const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
-const DID_MAX_POLL_ATTEMPTS = 180;
+const HEYGEN_MAX_POLL_ATTEMPTS = 180;
 
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
