@@ -75,42 +75,44 @@ export default function ProjectsPage() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
+          <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש פרויקט..."
               className="w-full bg-card border border-border rounded-lg pr-10 pl-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
           </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
-            <option value="">כל הסטטוסים</option>
-            <option value="טיוטה">טיוטה</option><option value="בעיבוד">בעיבוד</option>
-            <option value="הושלם">הושלם</option><option value="ממתין">ממתין</option>
-          </select>
-          {brands.length > 0 && (
-            <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
-              className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
-              <option value="">כל החברות</option>
-              {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
+              <option value="">כל הסטטוסים</option>
+              <option value="טיוטה">טיוטה</option><option value="בעיבוד">בעיבוד</option>
+              <option value="הושלם">הושלם</option><option value="ממתין">ממתין</option>
             </select>
-          )}
-          {videoTypes.length > 1 && (
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-              className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
-              <option value="">כל הסוגים</option>
-              {videoTypes.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          )}
-          {categories.length > 0 && (
-            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-              className="bg-card border border-border rounded-lg px-3 py-2 text-sm">
-              <option value="">כל הקטגוריות</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          )}
-          <div className="flex border border-border rounded-lg overflow-hidden">
-            <button onClick={() => setView('grid')} className={cn('p-2', view === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card')}><Grid3X3 className="w-4 h-4" /></button>
-            <button onClick={() => setView('list')} className={cn('p-2', view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-card')}><List className="w-4 h-4" /></button>
+            {brands.length > 0 && (
+              <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
+                className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
+                <option value="">כל החברות</option>
+                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            )}
+            {videoTypes.length > 1 && (
+              <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+                className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
+                <option value="">כל הסוגים</option>
+                {videoTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+            {categories.length > 0 && (
+              <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+                className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
+                <option value="">כל הקטגוריות</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <div className="flex border border-border rounded-lg overflow-hidden">
+              <button onClick={() => setView('grid')} className={cn('p-2', view === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card')}><Grid3X3 className="w-4 h-4" /></button>
+              <button onClick={() => setView('list')} className={cn('p-2', view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-card')}><List className="w-4 h-4" /></button>
+            </div>
           </div>
         </div>
 
