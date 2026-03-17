@@ -159,41 +159,41 @@ const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptS
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
   buildPrompt, initialCategory, brandDepartments,
-  onBack, onClose,
+  onBack, onClose, restoredSession, onSessionChange,
 }: VideoWizardFlowProps) {
   // Step: 0=prompt, 1=script review, 2=media+settings, 3=generating, 4=result
-  const [step, setStep] = useState(0);
-  const [prompt, setPrompt] = useState('');
+  const [step, setStep] = useState(restoredSession?.step ?? 0);
+  const [prompt, setPrompt] = useState(restoredSession?.prompt ?? '');
   const [loading, setLoading] = useState(false);
 
   // Multi-select avatars & voices
-  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
-  const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>([]);
-  const [useAiVoice, setUseAiVoice] = useState(false);
-  const [videoStyle, setVideoStyle] = useState<string>('cinematic');
+  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>(restoredSession?.selectedAvatarIds ?? []);
+  const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>(restoredSession?.selectedVoiceIds ?? []);
+  const [useAiVoice, setUseAiVoice] = useState(restoredSession?.useAiVoice ?? false);
+  const [videoStyle, setVideoStyle] = useState<string>(restoredSession?.videoStyle ?? 'cinematic');
 
   // Script
-  const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(null);
+  const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(restoredSession?.generatedScript ?? null);
   const [editingSceneIdx, setEditingSceneIdx] = useState<number | null>(null);
 
   // Media
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>(restoredSession?.uploadedImages ?? []);
   const MAX_IMAGES = 7;
 
   // Result
-  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
+  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(restoredSession?.resultVideoUrl ?? null);
   const [runwayPolling, setRunwayPolling] = useState(false);
   const [runwayProgress, setRunwayProgress] = useState(0);
   const [progressStage, setProgressStage] = useState('');
 
   // Improve / refine
-  const [improvePrompt, setImprovePrompt] = useState('');
+  const [improvePrompt, setImprovePrompt] = useState(restoredSession?.improvePrompt ?? '');
   const [isImproving, setIsImproving] = useState(false);
 
   // Save
   const [savingOutput, setSavingOutput] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || '');
-  const [customCategory, setCustomCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(restoredSession?.selectedCategory ?? initialCategory ?? '');
+  const [customCategory, setCustomCategory] = useState(restoredSession?.customCategory ?? '');
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
   // Speech
@@ -203,9 +203,24 @@ export function VideoWizardFlow({
   });
 
   // Website scraping
-  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState(restoredSession?.websiteUrl ?? '');
   const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
   const [scrapingWebsite, setScrapingWebsite] = useState(false);
+
+  // Emit session changes to parent for persistence
+  useEffect(() => {
+    if (!onSessionChange) return;
+    // Don't save while generating (step 3) — transient state
+    if (step === 3 || loading) return;
+    const session: VideoWizardSession = {
+      step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
+      generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
+      websiteUrl, improvePrompt,
+    };
+    onSessionChange(session);
+  }, [step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
+      generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
+      websiteUrl, improvePrompt, loading]);
 
   const handleScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
