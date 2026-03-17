@@ -788,32 +788,23 @@ export function VideoWizardFlow({
         }
       }
 
-      // Retry failed scenes once more with a short safe prompt
-      if (!runwayBlocked && failedSceneIndexes.length > 0) {
-        setProgressStage('מנסה שוב את הסצנות שנכשלו...');
+      // Retry failed scenes with simplified prompt using universal fallback
+      if (failedSceneIndexes.length > 0) {
+        setProgressStage('מנסה שוב את הסצנות שנכשלו עם פרומפט מפושט...');
         for (const sceneIdx of failedSceneIndexes) {
           if (sceneResults[sceneIdx]) continue;
           const scene = workingScenes[sceneIdx];
-          const retryPrompt = toRunwayPrompt([
-            scene.title,
-            scene.spokenText,
-            'simple cinematic realistic video scene',
-          ].filter(Boolean).join('. '));
+          const simplePrompt = toRunwayPrompt(`Cinematic professional video scene. ${scene.spokenText || scene.title}`);
 
           try {
-            const retryTask = await runwayService.textToVideo(retryPrompt, undefined, 10);
-            const retryUrl = await waitForRunwayResult(retryTask.taskId, (p) => updateSceneProgress(sceneIdx, p));
+            const retryUrl = await generateSceneWithFallbacks(scene, sceneIdx, 10, simplePrompt);
             sceneResults[sceneIdx] = {
               url: retryUrl,
               scene: { ...scene, duration: 10 },
             };
             toast.success(`סצנה ${sceneIdx + 1} הושלמה בניסיון נוסף`);
           } catch (retryErr: any) {
-            const retryMsg = retryErr?.message || 'שגיאה לא ידועה';
-            if (isRunwayCreditsErrorMessage(retryMsg) && !normalizedAvatarUrl) {
-              throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים.');
-            }
-            sceneErrors.push(`סצנה ${sceneIdx + 1} (ניסיון נוסף): ${retryMsg}`);
+            sceneErrors.push(`סצנה ${sceneIdx + 1} (ניסיון נוסף): ${retryErr?.message || 'שגיאה'}`);
           }
         }
       }
