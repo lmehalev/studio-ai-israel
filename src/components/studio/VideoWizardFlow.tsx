@@ -148,6 +148,11 @@ const isHeygenUnavailableErrorMessage = (value: unknown): boolean => {
   );
 };
 
+const hasTimeoutErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return message.includes('timeout') || message.includes('timed out') || message.includes('לקחה יותר מדי זמן');
+};
+
 const toSceneChunks = (text: string): string[] => {
   const sentences = text
     .split(/\n+|(?<=[.!?！？。])\s+/)
