@@ -455,37 +455,50 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
               : "";
           if (!spokenText) return null;
 
+          const title =
+            typeof scene?.title === "string" && scene.title.trim()
+              ? scene.title.trim()
+              : `סצנה ${idx + 1}`;
+
+          const rawVisual = typeof scene?.visualDescription === "string" ? scene.visualDescription.trim() : "";
+          const rawBackground = typeof scene?.backgroundAction === "string" ? scene.backgroundAction.trim() : "";
+          const rawCamera = typeof scene?.cameraDirection === "string" ? scene.cameraDirection.trim() : "";
+          const rawEnvironment = typeof scene?.environment === "string" ? scene.environment.trim() : "";
+          const rawCharacters = typeof scene?.characters === "string" ? scene.characters.trim() : "";
+
+          const visualDescription = rawVisual.length >= 180
+            ? rawVisual
+            : `פריים פתיחה: ${title} — ${spokenText}.\nדמות מרכזית בפוקוס עם הבעה אותנטית ושפת גוף טבעית.\nForeground: אלמנט נע (יד/עלה/אובייקט) שעובר בפריים.\nMidground: אנשים/אובייקטים תומכים שמחזקים את המסר.\nBackground: סביבה עמוקה ורלוונטית לתחום הפעילות.\nתאורה קולנועית: Key light רכה + Rim light להפרדת הדמות מהרקע.\nצבעוניות: פלטה מקצועית עקבית עם ניגוד ברור לנושא.\nטקסטורות: בד/עץ/זכוכית/מתכת ברמת פירוט גבוהה.\nתנועת מצלמה: מעבר חלק שמדגיש את האקשן המרכזי.\nסיום הסצנה בפריים שמכין מעבר טבעי לסצנה הבאה.`;
+
+          const backgroundAction = rawBackground.length >= 120
+            ? rawBackground
+            : `ברקע יש לפחות 5 אלמנטים דינמיים: (1) אנשים בתנועה טבעית, (2) אינטראקציה אנושית משנית, (3) אלמנט סביבתי נע (אור/עשן/עלים), (4) אובייקט עבודה/מוצר בפעולה, (5) שינוי עומק שמוסיף חיים לפריים.`;
+
+          const cameraDirection = rawCamera.length >= 16
+            ? rawCamera
+            : "פתיחה ב-Wide Shot, מעבר ל-Medium עם Dolly-in עדין, וסיום ב-Close-up רגשי";
+
+          const environment = rawEnvironment.length >= 60
+            ? rawEnvironment
+            : "סביבה ריאליסטית עשירה בפרטים, מותאמת לתחום הפעילות, עם תאורה מקצועית ועומק ויזואלי ברור";
+
+          const characters = rawCharacters.length >= 60
+            ? rawCharacters
+            : "דמות מרכזית מפורטת (גיל, לבוש, הבעה, תנוחה) ודמויות משנה תומכות עם אינטראקציה טבעית";
+
           return {
             id: idx + 1,
-            title:
-              typeof scene?.title === "string" && scene.title.trim()
-                ? scene.title.trim()
-                : `סצנה ${idx + 1}`,
+            title,
             speaker:
               typeof scene?.speaker === "string" && scene.speaker.trim()
                 ? scene.speaker.trim()
                 : "קריין",
             spokenText,
-            visualDescription:
-              typeof scene?.visualDescription === "string" && scene.visualDescription.trim()
-                ? scene.visualDescription.trim()
-                : "סצנה קולנועית מותאמת לנושא עם תאורה מקצועית ותנועה טבעית.",
-            backgroundAction:
-              typeof scene?.backgroundAction === "string" && scene.backgroundAction.trim()
-                ? scene.backgroundAction.trim()
-                : "ברקע יש תנועה דינמית שמוסיפה חיות ואותנטיות.",
-            cameraDirection:
-              typeof scene?.cameraDirection === "string" && scene.cameraDirection.trim()
-                ? scene.cameraDirection.trim()
-                : "פתיחה ב-Wide shot עם Dolly-in עדין",
-            environment:
-              typeof scene?.environment === "string" && scene.environment.trim()
-                ? scene.environment.trim()
-                : "סביבה ריאליסטית המתאימה לתוכן הסרטון",
-            characters:
-              typeof scene?.characters === "string" && scene.characters.trim()
-                ? scene.characters.trim()
-                : "דמות מרכזית ודמויות משנה רלוונטיות",
+            visualDescription,
+            backgroundAction,
+            cameraDirection,
+            environment,
+            characters,
             subtitleText:
               typeof scene?.subtitleText === "string" && scene.subtitleText.trim()
                 ? scene.subtitleText.trim().slice(0, 64)

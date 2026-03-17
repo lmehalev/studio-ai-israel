@@ -502,6 +502,8 @@ export function VideoWizardFlow({
 
           if (runwayBlocked && normalizedAvatarUrl) {
             clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
+          } else if (runwayBlocked) {
+            clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
           } else if (normalizedAvatarUrl && sceneIdx === 0) {
             // First scene with avatar → try HeyGen first
             try {
@@ -514,7 +516,6 @@ export function VideoWizardFlow({
                   updateSceneProgress(sceneIdx, p);
                 });
               } catch {
-                // Final fallback to simple text-to-video for first scene
                 const emergencyPrompt = toRunwayPrompt([
                   scene.title,
                   scene.spokenText,
@@ -534,7 +535,6 @@ export function VideoWizardFlow({
                 updateSceneProgress(sceneIdx, p);
               });
             } catch {
-              // Retry with simplified fallback prompt
               try {
                 const fallbackPrompt = toRunwayPrompt([
                   scene.title,
@@ -547,7 +547,6 @@ export function VideoWizardFlow({
                   updateSceneProgress(sceneIdx, p);
                 });
               } catch {
-                // Final fallback with ultra-simple prompt
                 const emergencyPrompt = toRunwayPrompt(`Cinematic scene. ${scene.spokenText || scene.title}`);
                 const emergencyTask = await runwayService.textToVideo(emergencyPrompt, undefined, sceneDuration);
                 clipUrl = await waitForRunwayResult(emergencyTask.taskId, (p) => {
@@ -566,8 +565,9 @@ export function VideoWizardFlow({
           const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
 
           if (isRunwayCreditsErrorMessage(errMsg)) {
+            runwayBlocked = true;
+
             if (normalizedAvatarUrl) {
-              runwayBlocked = true;
               toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
               try {
                 const didFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
@@ -577,12 +577,21 @@ export function VideoWizardFlow({
                 };
                 toast.success(`סצנה ${sceneNum} הושלמה במסלול חלופי`);
                 continue;
-              } catch (didFallbackErr: any) {
-                throw new Error(didFallbackErr?.message || 'נכשל גם במסלול אווטאר חלופי');
-              }
+              } catch {}
             }
 
-            throw new Error('נגמרו הקרדיטים לספק הווידאו. נסה שוב לאחר חידוש קרדיטים או בחר מסלול עם אווטאר.');
+            try {
+              toast.warning('ממשיך אוטומטית למסלול Krea וידאו...');
+              const kreaUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+              sceneResults[sceneIdx] = {
+                url: kreaUrl,
+                scene: { ...scene, duration: sceneDuration },
+              };
+              toast.success(`סצנה ${sceneNum} הושלמה במסלול Krea`);
+              continue;
+            } catch (kreaErr: any) {
+              throw new Error(kreaErr?.message || 'נגמרו הקרדיטים ל-Runway וגם מסלול Krea נכשל');
+            }
           }
 
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
