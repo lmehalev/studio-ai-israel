@@ -1086,9 +1086,9 @@ ${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.in
 
                 if (scenes.length > 0) {
                   const composeResult = await composeService.render({
+                    videoUrl: scenes[0]?.src || baseVideoUrl,
                     scenes,
                     audioUrl: audioUrl || undefined,
-                    subtitleSegments: [],
                   });
 
                   if (composeResult?.renderId) {
