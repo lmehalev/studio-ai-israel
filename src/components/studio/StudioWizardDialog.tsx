@@ -307,6 +307,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightProgress(0);
         setHighlightStage('');
         setHighlightOutputType('viral_short');
+        setVideoWizardSession(null);
       }, 300);
     }
   }, [open]);
