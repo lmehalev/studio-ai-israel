@@ -55,6 +55,26 @@ interface VideoWizardFlowProps {
   brandDepartments: string[];
   onBack: () => void;
   onClose: () => void;
+  /** If provided, restore session from this data */
+  restoredSession?: VideoWizardSession | null;
+  /** Called whenever session-worthy state changes */
+  onSessionChange?: (session: VideoWizardSession) => void;
+}
+
+export interface VideoWizardSession {
+  step: number;
+  prompt: string;
+  selectedAvatarIds: string[];
+  selectedVoiceIds: string[];
+  useAiVoice: boolean;
+  videoStyle: string;
+  generatedScript: GeneratedScript | null;
+  uploadedImages: string[];
+  resultVideoUrl: string | null;
+  selectedCategory: string;
+  customCategory: string;
+  websiteUrl: string;
+  improvePrompt: string;
 }
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;
