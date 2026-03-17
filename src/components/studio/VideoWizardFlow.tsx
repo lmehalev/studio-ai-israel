@@ -79,6 +79,16 @@ const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
   );
 };
 
+const isKreaCreditsErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('insufficient_balance') ||
+    message.includes('krea video error: 402') ||
+    message.includes('אין מספיק קרדיט') ||
+    message.includes('נגמרו הקרדיטים')
+  );
+};
+
 const toSceneChunks = (text: string): string[] => {
   const sentences = text
     .split(/\n+|(?<=[.!?！？。])\s+/)
