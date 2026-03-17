@@ -20,3 +20,42 @@ verify_jwt = false
 
 [functions.check-credits]
 verify_jwt = false
+
+[functions.runway-video]
+verify_jwt = false
+
+[functions.krea-image]
+verify_jwt = false
+
+[functions.compose-video]
+verify_jwt = false
+
+[functions.clone-voice-tts]
+verify_jwt = false
+
+[functions.elevenlabs-music]
+verify_jwt = false
+
+[functions.generate-script]
+verify_jwt = false
+
+[functions.storage-manager]
+verify_jwt = false
+
+[functions.firecrawl-scrape]
+verify_jwt = false
+
+[functions.fetch-trends]
+verify_jwt = false
+
+[functions.auto-fetch-trends]
+verify_jwt = false
+
+[functions.avatar-manager]
+verify_jwt = false
+
+[functions.voice-manager]
+verify_jwt = false
+
+[functions.generate-avatar]
+verify_jwt = false
