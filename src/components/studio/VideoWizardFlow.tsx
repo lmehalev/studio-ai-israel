@@ -544,7 +544,7 @@ export function VideoWizardFlow({
               runwayBlocked = true;
               toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
               try {
-                const didFallbackUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+                const didFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
                 sceneResults[sceneIdx] = {
                   url: didFallbackUrl,
                   scene: { ...scene, duration: sceneDuration },
