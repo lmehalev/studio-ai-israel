@@ -14,6 +14,16 @@ const CATEGORIES = [
   'עמותות ומלכ"רים',
 ];
 
+const ALLOWED_DOMAINS = [
+  'tiktok.com', 'instagram.com', 'facebook.com', 'youtube.com', 'youtu.be',
+  'linkedin.com', 'fb.watch',
+];
+
+function isSocialUrl(url: string): boolean {
+  if (!url || url === '#') return false;
+  return ALLOWED_DOMAINS.some(domain => url.toLowerCase().includes(domain));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -30,7 +40,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Parse optional body for single category or "all"
   let categoriesToFetch = CATEGORIES;
   try {
     const body = await req.json();
@@ -51,31 +60,32 @@ Deno.serve(async (req) => {
     try {
       console.log(`Fetching trends for: ${category}`);
 
-      // Delete existing trends for this category before inserting new ones
       await supabase.from('saved_trends').delete().eq('category', category);
 
-      const prompt = `אתה מומחה לטרנדים ויראליים ברשתות החברתיות ומומחה קריאייטיב. מצא בדיוק 10 טרנדים חזקים ואיכותיים מהשבוע האחרון בתחום "${category}".
+      const prompt = `אתה מומחה לתוכן ויראלי ברשתות חברתיות. מצא בדיוק 10 פוסטים/סרטונים/תמונות ויראליים מהשבוע האחרון בתחום "${category}".
 
-כללים קריטיים:
-- עדיפות לתוכן ישראלי בעברית. אם אין מספיק, אפשר להוסיף השראות מחו"ל שרלוונטיות לשוק הישראלי.
-- בדיוק 10 טרנדים - לא פחות ולא יותר.
-- רק תוכן שבאמת התפוצץ ויראלית - צפיות גבוהות, שיתופים, תגובות.
-- כלול גם תמונות ויזואליות חזקות (פרומפטים, עיצובים, קמפיינים) ולא רק סרטונים!
-- כל URL חייב להיות אמיתי ומאומת ממקורות החיפוש שלך.
+⚠️ כללים קריטיים - חובה לקיים:
+- חפש אך ורק תוכן מתוך: TikTok, Instagram (Reels/Posts), Facebook (Reels/Posts), YouTube (Shorts/Videos), LinkedIn.
+- אסור בתכלית האיסור קישורים לאתרי חדשות, בלוגים, מגזינים, עיתונים (מעריב, גלובס, ynet, וואלה, Forbes וכו׳). רק פוסטים מרשתות חברתיות!
+- כל קישור חייב להיות URL ישיר לפוסט/סרטון/ריל ספציפי ברשת חברתית.
+- עדיפות לתוכן ישראלי. אם אין מספיק, תוכן בינלאומי ויראלי מאותו תחום.
+- בדיוק 10 תוצאות.
+- רק תוכן שבאמת ויראלי - צפיות גבוהות, שיתופים, תגובות.
+- כלול מגוון: סרטונים, תמונות, Reels, Shorts, קרוסלות.
 - הכל בעברית חוץ משמות פלטפורמות.
 
-לכל טרנד תן:
-1. title - כותרת קצרה ומושכת בעברית
-2. description - תיאור קצר בעברית: מה התוכן מראה, למה הוא הצליח
-3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn
-4. url - קישור אמיתי מהמקורות שלך
-5. views - מספר צפיות/אינטראקציות משוער
-6. content_type - "video" או "image" או "carousel"
-7. tip - טיפ קריאייטיבי: מבנה התוכן, קצב עריכה, טקסטים, CTA
-8. visual_style - סגנון ויזואלי מפורט: צבעים, קומפוזיציה, זוויות, עריכה, תאורה, טיפוגרפיה, אפקטים
-9. music_style - סגנון מוזיקה/אודיו: סוג, קצב, אווירה, קריינות, אפקטי סאונד. לתמונות - "ללא"
+לכל טרנד:
+1. title - כותרת מושכת בעברית
+2. description - מה התוכן, למה הצליח, מי היוצר
+3. platform - TikTok / Instagram / YouTube / Facebook / LinkedIn
+4. url - קישור ישיר לפוסט ברשת החברתית
+5. views - צפיות/לייקים משוערים
+6. content_type - "video" / "image" / "carousel" / "reel" / "short"
+7. tip - טיפ קריאייטיבי: מבנה, קצב, טקסטים, CTA, Hook
+8. visual_style - סגנון ויזואלי: צבעים, קומפוזיציה, עריכה, תאורה, אפקטים
+9. music_style - מוזיקה/אודיו: סוג, קצב, אווירה, קריינות. לתמונות "ללא"
 
-החזר רק JSON תקין:
+החזר רק JSON:
 {
   "trends": [
     { "title": "...", "description": "...", "platform": "...", "url": "...", "views": "...", "content_type": "...", "tip": "...", "visual_style": "...", "music_style": "..." }
@@ -92,8 +102,12 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: 'sonar-pro',
           messages: [
-            { role: 'system', content: 'אתה מומחה בטרנדים דיגיטליים בישראל ובעולם ומומחה קריאייטיב. תמיד תענה ב-JSON תקין בלבד. קריטי: השתמש רק בURLים מתוצאות החיפוש שלך. תן בדיוק 10 טרנדים. כלול גם טרנדים של תמונות.' },
+            { role: 'system', content: 'אתה מומחה בתוכן ויראלי ברשתות חברתיות (TikTok, Instagram, YouTube, Facebook, LinkedIn). תענה ב-JSON תקין בלבד. כל הקישורים חייבים להיות URLs ישירים לפוסטים ברשתות חברתיות. אסור לכלול קישורים לאתרי חדשות או בלוגים.' },
             { role: 'user', content: prompt }
+          ],
+          search_domain_filter: [
+            'tiktok.com', 'instagram.com', 'facebook.com', 'youtube.com',
+            'linkedin.com', 'fb.watch',
           ],
           search_recency_filter: 'week',
           temperature: 0.3,
@@ -108,6 +122,7 @@ Deno.serve(async (req) => {
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || '';
       const citations = data.citations || [];
+      const socialCitations = citations.filter((c: string) => isSocialUrl(c));
 
       let parsed;
       try {
@@ -120,20 +135,34 @@ Deno.serve(async (req) => {
 
       if (!parsed.trends || !Array.isArray(parsed.trends)) continue;
 
-      // Fix fake URLs with citations
-      parsed.trends = parsed.trends.map((trend: any, idx: number) => {
+      // Fix non-social URLs
+      let citationIdx = 0;
+      parsed.trends = parsed.trends.map((trend: any) => {
         const url = trend.url || '';
-        const isFake = !url || url === '#' || url.includes('example.com');
-        if (isFake && citations[idx]) {
-          trend.url = citations[idx];
+        if (!isSocialUrl(url)) {
+          if (citationIdx < socialCitations.length) {
+            trend.url = socialCitations[citationIdx++];
+          } else {
+            const platform = (trend.platform || '').toLowerCase();
+            const query = encodeURIComponent(trend.title || '');
+            if (platform.includes('tiktok')) trend.url = `https://www.tiktok.com/search?q=${query}`;
+            else if (platform.includes('instagram')) trend.url = `https://www.instagram.com/explore/tags/${query}`;
+            else if (platform.includes('youtube')) trend.url = `https://www.youtube.com/results?search_query=${query}`;
+            else if (platform.includes('facebook')) trend.url = `https://www.facebook.com/search/videos/?q=${query}`;
+            else if (platform.includes('linkedin')) trend.url = `https://www.linkedin.com/search/results/content/?keywords=${query}`;
+          }
         }
         return trend;
       });
 
-      // Limit to 10
+      // Filter out any remaining news URLs
+      parsed.trends = parsed.trends.filter((t: any) => {
+        const url = (t.url || '').toLowerCase();
+        return !['maariv', 'globes', 'ynet', 'walla', 'themarker', 'calcalist', 'forbes', 'techcrunch'].some(d => url.includes(d));
+      });
+
       const trendsToSave = parsed.trends.slice(0, 10);
 
-      // Save each trend — music_style and content_type stored in visual_style and tip fields
       for (const trend of trendsToSave) {
         const enrichedVisualStyle = [
           trend.visual_style || '',
