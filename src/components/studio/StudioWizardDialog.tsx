@@ -1211,7 +1211,8 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
             {loading ? 'מעבד...' : 'צור סרטון ויראלי'}
           </button>
         </div>
-      );
+        );
+      }
 
       if (wizardStep === 2 && loading) return (
         <div className="space-y-6 py-8 text-center">
