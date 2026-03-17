@@ -17,6 +17,7 @@ interface TrendItem {
   url: string;
   views: string;
   tip: string;
+  visual_style?: string;
 }
 
 const INDUSTRY_PRESETS = [
