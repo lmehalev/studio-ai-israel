@@ -63,10 +63,12 @@ serve(async (req) => {
       });
 
       const data = await response.json();
-      if (!response.ok) {
-        console.error("HeyGen create error:", data);
+      console.log("HeyGen create response:", response.status, JSON.stringify(data).slice(0, 500));
+      if (!response.ok || data?.error) {
+        const errDetail = data?.error?.message || data?.error?.code || data?.message || (typeof data?.error === 'string' ? data.error : JSON.stringify(data?.error || data));
+        console.error("HeyGen create error:", errDetail);
         return new Response(
-          JSON.stringify({ error: `שגיאה ביצירת סרטון: ${data.message || data.error || response.status}` }),
+          JSON.stringify({ error: `שגיאה ביצירת סרטון: ${errDetail}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
