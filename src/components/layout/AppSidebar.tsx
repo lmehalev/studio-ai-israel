@@ -12,6 +12,7 @@ const mainMenuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
   { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
   { title: 'פרויקטים', icon: FolderOpen, path: '/projects' },
+  { title: 'טרנדים חזקים', icon: Flame, path: '/trends' },
 ];
 
 const capabilityItems = [
