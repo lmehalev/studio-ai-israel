@@ -10,6 +10,7 @@ const ELEVENLABS_DASHBOARD_URL = "https://elevenlabs.io/subscription";
 const RUNWAY_DASHBOARD_URL = "https://app.runwayml.com/settings/billing";
 const RUNWAY_VERSION = "2024-11-06";
 const RUNWAY_VALIDATION_TASK_ID = "00000000-0000-0000-0000-000000000000";
+const SERVICE_CHECK_TIMEOUT_MS = 9000;
 
 interface ServiceCredits {
   service: string;
@@ -21,6 +22,35 @@ interface ServiceCredits {
   dashboardUrl: string;
   error?: string;
 }
+
+const withServiceTimeout = (
+  service: ServiceCredits["service"],
+  unit: string,
+  dashboardUrl: string,
+  checkPromise: Promise<ServiceCredits>,
+): Promise<ServiceCredits> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  return Promise.race([
+    checkPromise,
+    new Promise<ServiceCredits>((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve({
+          service,
+          used: 0,
+          limit: 0,
+          unit,
+          plan: "unknown",
+          canGenerate: false,
+          dashboardUrl,
+          error: `Timeout after ${SERVICE_CHECK_TIMEOUT_MS}ms`,
+        });
+      }, SERVICE_CHECK_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+};
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
