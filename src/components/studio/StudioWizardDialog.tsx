@@ -428,6 +428,12 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'מה לשנות?', desc: 'תאר את השינויים שתרצה' },
         { title: 'התוצאה', desc: 'התוצאה הערוכה' },
       ],
+      highlight: [
+        { title: 'העלה תוכן', desc: 'העלה סרטונים ותמונות מהתוכן שלך' },
+        { title: 'מה הסרטון?', desc: 'תאר את הסרטון הקצר שתרצה לקבל' },
+        { title: 'יוצר סרטון ויראלי...', desc: 'מעבד, חותך ומרכיב את הסרטון' },
+        { title: 'התוצאה', desc: 'הסרטון הקצר שלך מוכן' },
+      ],
     };
 
     const steps = stepsMap[selectedAction];
@@ -438,7 +444,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 1, subtitles: 1, import_edit: 3,
+      image: 2, video_ai: 1, subtitles: 1, import_edit: 3, highlight: 4,
     };
     return counts[selectedAction] + 1;
   };
