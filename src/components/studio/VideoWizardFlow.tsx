@@ -475,11 +475,11 @@ export function VideoWizardFlow({
           let clipUrl: string;
 
           if (runwayBlocked && normalizedAvatarUrl) {
-            clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx);
+            clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
           } else if (normalizedAvatarUrl && sceneIdx === 0) {
-            // First scene with avatar → try D-ID first
+            // First scene with avatar → try HeyGen first
             try {
-              clipUrl = await createDidSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
+              clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {
               // Fallback to Runway image-to-video
               try {
