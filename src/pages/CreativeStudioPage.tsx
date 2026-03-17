@@ -44,11 +44,11 @@ export default function CreativeStudioPage() {
   // Trend knowledge for prompts
   const [trendKnowledge, setTrendKnowledge] = useState('');
 
-  // Load latest saved trends to enrich prompts
+  // Load latest saved trends to enrich prompts — structured as creative inspiration
   useEffect(() => {
     const loadTrendKnowledge = async () => {
       try {
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/saved_trends?select=tip,visual_style,category&order=fetched_at.desc&limit=20`;
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/saved_trends?select=title,tip,visual_style,category,url&order=fetched_at.desc&limit=20`;
         const res = await fetch(url, {
           headers: {
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
@@ -58,12 +58,20 @@ export default function CreativeStudioPage() {
         if (!res.ok) return;
         const data = await res.json();
         if (data && data.length > 0) {
-          const tips = data
+          const inspirations = data
             .filter((t: any) => t.tip || t.visual_style)
             .slice(0, 10)
-            .map((t: any) => `[${t.category}] ${t.tip || ''} סגנון: ${t.visual_style || ''}`)
+            .map((t: any) => {
+              const parts = [
+                `• "${t.title}"`,
+                t.tip ? `מבנה: ${t.tip}` : '',
+                t.visual_style ? `סגנון: ${t.visual_style}` : '',
+                t.url ? `מקור: ${t.url}` : '',
+              ].filter(Boolean);
+              return parts.join(' | ');
+            })
             .join('\n');
-          setTrendKnowledge(tips);
+          setTrendKnowledge(inspirations);
         }
       } catch { /* silent */ }
     };

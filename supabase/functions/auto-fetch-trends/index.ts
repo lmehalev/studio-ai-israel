@@ -54,12 +54,13 @@ Deno.serve(async (req) => {
       // Delete existing trends for this category before inserting new ones
       await supabase.from('saved_trends').delete().eq('category', category);
 
-      const prompt = `אתה מומחה לטרנדים ויראליים ברשתות החברתיות. מצא בדיוק 10 טרנדים חזקים ואיכותיים מהשבוע האחרון בתחום "${category}".
+      const prompt = `אתה מומחה לטרנדים ויראליים ברשתות החברתיות ומומחה קריאייטיב. מצא בדיוק 10 טרנדים חזקים ואיכותיים מהשבוע האחרון בתחום "${category}".
 
 כללים קריטיים:
 - עדיפות לתוכן ישראלי בעברית. אם אין מספיק, אפשר להוסיף השראות מחו"ל שרלוונטיות לשוק הישראלי.
 - בדיוק 10 טרנדים - לא פחות ולא יותר.
 - רק תוכן שבאמת התפוצץ ויראלית - צפיות גבוהות, שיתופים, תגובות.
+- כלול גם תמונות ויזואליות חזקות (פרומפטים, עיצובים, קמפיינים) ולא רק סרטונים!
 - כל URL חייב להיות אמיתי ומאומת ממקורות החיפוש שלך.
 - הכל בעברית חוץ משמות פלטפורמות.
 
@@ -69,13 +70,15 @@ Deno.serve(async (req) => {
 3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn
 4. url - קישור אמיתי מהמקורות שלך
 5. views - מספר צפיות/אינטראקציות משוער
-6. tip - טיפ קריאייטיבי בעברית: איך ליצור תוכן דומה, עם דגש על סגנון צילום, עריכה, וטקסטים
-7. visual_style - תיאור הסגנון הויזואלי בעברית: צבעים, קומפוזיציה, זוויות צילום, סגנון עריכה
+6. content_type - "video" או "image" או "carousel"
+7. tip - טיפ קריאייטיבי: מבנה התוכן, קצב עריכה, טקסטים, CTA
+8. visual_style - סגנון ויזואלי מפורט: צבעים, קומפוזיציה, זוויות, עריכה, תאורה, טיפוגרפיה, אפקטים
+9. music_style - סגנון מוזיקה/אודיו: סוג, קצב, אווירה, קריינות, אפקטי סאונד. לתמונות - "ללא"
 
 החזר רק JSON תקין:
 {
   "trends": [
-    { "title": "...", "description": "...", "platform": "...", "url": "...", "views": "...", "tip": "...", "visual_style": "..." }
+    { "title": "...", "description": "...", "platform": "...", "url": "...", "views": "...", "content_type": "...", "tip": "...", "visual_style": "...", "music_style": "..." }
   ],
   "summary": "סיכום קצר בעברית"
 }`;
@@ -89,7 +92,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: 'sonar-pro',
           messages: [
-            { role: 'system', content: 'אתה מומחה בטרנדים דיגיטליים בישראל ובעולם. תמיד תענה ב-JSON תקין בלבד. קריטי: השתמש רק בURLים מתוצאות החיפוש שלך. תן בדיוק 10 טרנדים.' },
+            { role: 'system', content: 'אתה מומחה בטרנדים דיגיטליים בישראל ובעולם ומומחה קריאייטיב. תמיד תענה ב-JSON תקין בלבד. קריטי: השתמש רק בURLים מתוצאות החיפוש שלך. תן בדיוק 10 טרנדים. כלול גם טרנדים של תמונות.' },
             { role: 'user', content: prompt }
           ],
           search_recency_filter: 'week',
@@ -130,8 +133,14 @@ Deno.serve(async (req) => {
       // Limit to 10
       const trendsToSave = parsed.trends.slice(0, 10);
 
-      // Save each trend
+      // Save each trend — music_style and content_type stored in visual_style and tip fields
       for (const trend of trendsToSave) {
+        const enrichedVisualStyle = [
+          trend.visual_style || '',
+          trend.music_style ? `🎵 מוזיקה: ${trend.music_style}` : '',
+          trend.content_type ? `📦 סוג: ${trend.content_type}` : '',
+        ].filter(Boolean).join(' | ');
+
         const { error } = await supabase.from('saved_trends').insert({
           category,
           title: trend.title || '',
@@ -140,7 +149,7 @@ Deno.serve(async (req) => {
           url: trend.url || '',
           views: trend.views || '',
           tip: trend.tip || '',
-          visual_style: trend.visual_style || '',
+          visual_style: enrichedVisualStyle,
           summary: parsed.summary || '',
         });
         if (error) console.error('Insert error:', error.message);
