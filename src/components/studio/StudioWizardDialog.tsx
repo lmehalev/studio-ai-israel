@@ -249,6 +249,15 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
       if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
       if (s.customCategory) setCustomCategory(s.customCategory);
+      if (s.highlightFiles) setHighlightFiles(s.highlightFiles);
+      if (s.highlightOutputType) setHighlightOutputType(s.highlightOutputType);
+      // Restore video wizard sub-session
+      if (s.selectedAction === 'video_ai') {
+        try {
+          const videoRaw = localStorage.getItem(VIDEO_SESSION_KEY);
+          if (videoRaw) setVideoWizardSession(JSON.parse(videoRaw));
+        } catch {}
+      }
       toast.success('הסשן שוחזר בהצלחה!');
     } catch {}
     setHasPendingSession(false);
