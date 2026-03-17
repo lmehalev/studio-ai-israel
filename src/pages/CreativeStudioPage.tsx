@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
