@@ -79,6 +79,16 @@ const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
   );
 };
 
+const isKreaCreditsErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('insufficient_balance') ||
+    message.includes('krea video error: 402') ||
+    message.includes('אין מספיק קרדיט') ||
+    message.includes('נגמרו הקרדיטים')
+  );
+};
+
 const toSceneChunks = (text: string): string[] => {
   const sentences = text
     .split(/\n+|(?<=[.!?！？。])\s+/)
@@ -384,6 +394,9 @@ export function VideoWizardFlow({
 
       let forceDidOnlyMode = false;
       let forceKreaOnlyMode = false;
+      let heygenFallbackEnabled = true;
+      let kreaFallbackEnabled = true;
+
       try {
         const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
         const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
@@ -394,24 +407,27 @@ export function VideoWizardFlow({
         ) as Record<string, { canGenerate?: boolean }>;
 
         const runwayCanGenerate = creditsMap.runway ? creditsMap.runway.canGenerate !== false : true;
-        const didCanGenerate = creditsMap.heygen ? creditsMap.heygen.canGenerate !== false : true;
+        const heygenCanGenerate = creditsMap.heygen ? creditsMap.heygen.canGenerate !== false : true;
         const kreaCanGenerate = creditsMap.krea ? creditsMap.krea.canGenerate !== false : true;
 
+        heygenFallbackEnabled = heygenCanGenerate;
+        kreaFallbackEnabled = kreaCanGenerate;
+
         if (!runwayCanGenerate) {
-          if (avatarImage && didCanGenerate) {
+          if (heygenCanGenerate) {
             forceDidOnlyMode = true;
-            toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול אווטאר כדי לסיים את הסרטון.');
+            toast.warning('אין כרגע קרדיטים ל-Runway, עובר אוטומטית למסלול HeyGen.');
           } else if (kreaCanGenerate) {
             forceKreaOnlyMode = true;
             toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול Krea וידאו אוטומטית.');
           } else {
-            throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו. יש לחדש קרדיטים ואז לנסות שוב.');
+            throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו (Runway/Krea/HeyGen). יש לחדש קרדיטים ואז לנסות שוב.');
           }
         }
       } catch (creditsErr: any) {
         const msg = creditsErr?.message || '';
         if (msg.includes('אין קרדיטים')) throw creditsErr;
-        // If credit check fails, continue with normal flow.
+        // If credit check fails, continue with runtime fallbacks.
       }
 
       const shouldGenerateNarration = !forceDidOnlyMode;
@@ -500,10 +516,12 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (runwayBlocked && normalizedAvatarUrl) {
-            clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
-          } else if (runwayBlocked) {
+          if (runwayBlocked && heygenFallbackEnabled) {
+            clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
+          } else if (runwayBlocked && kreaFallbackEnabled) {
             clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+          } else if (runwayBlocked) {
+            throw new Error('אין ספק וידאו זמין כרגע (Runway/Krea/HeyGen). יש לחדש קרדיטים ולנסות שוב.');
           } else if (normalizedAvatarUrl && sceneIdx === 0) {
             // First scene with avatar → try HeyGen first
             try {
@@ -567,31 +585,44 @@ export function VideoWizardFlow({
           if (isRunwayCreditsErrorMessage(errMsg)) {
             runwayBlocked = true;
 
-            if (normalizedAvatarUrl) {
-              toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית במסלול אווטאר.');
+            if (heygenFallbackEnabled) {
+              toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית למסלול HeyGen.');
               try {
-                const didFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx);
+                const heygenFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
                 sceneResults[sceneIdx] = {
-                  url: didFallbackUrl,
+                  url: heygenFallbackUrl,
                   scene: { ...scene, duration: sceneDuration },
                 };
-                toast.success(`סצנה ${sceneNum} הושלמה במסלול חלופי`);
+                toast.success(`סצנה ${sceneNum} הושלמה במסלול HeyGen`);
                 continue;
-              } catch {}
+              } catch {
+                // Continue to Krea fallback
+              }
             }
 
-            try {
-              toast.warning('ממשיך אוטומטית למסלול Krea וידאו...');
-              const kreaUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
-              sceneResults[sceneIdx] = {
-                url: kreaUrl,
-                scene: { ...scene, duration: sceneDuration },
-              };
-              toast.success(`סצנה ${sceneNum} הושלמה במסלול Krea`);
-              continue;
-            } catch (kreaErr: any) {
-              throw new Error(kreaErr?.message || 'נגמרו הקרדיטים ל-Runway וגם מסלול Krea נכשל');
+            if (kreaFallbackEnabled) {
+              try {
+                toast.warning('ממשיך אוטומטית למסלול Krea וידאו...');
+                const kreaUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+                sceneResults[sceneIdx] = {
+                  url: kreaUrl,
+                  scene: { ...scene, duration: sceneDuration },
+                };
+                toast.success(`סצנה ${sceneNum} הושלמה במסלול Krea`);
+                continue;
+              } catch (kreaErr: any) {
+                if (isKreaCreditsErrorMessage(kreaErr?.message)) {
+                  kreaFallbackEnabled = false;
+                }
+                throw new Error(kreaErr?.message || 'נגמרו הקרדיטים ל-Runway וגם מסלול Krea נכשל');
+              }
             }
+
+            throw new Error('נגמרו הקרדיטים ל-Runway ואין מסלול חלופי זמין כרגע (HeyGen/Krea).');
+          }
+
+          if (isKreaCreditsErrorMessage(errMsg)) {
+            kreaFallbackEnabled = false;
           }
 
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
