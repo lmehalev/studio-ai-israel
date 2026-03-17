@@ -10,6 +10,7 @@ const ELEVENLABS_DASHBOARD_URL = "https://elevenlabs.io/subscription";
 const RUNWAY_DASHBOARD_URL = "https://app.runwayml.com/settings/billing";
 const RUNWAY_VERSION = "2024-11-06";
 const RUNWAY_VALIDATION_TASK_ID = "00000000-0000-0000-0000-000000000000";
+const SERVICE_CHECK_TIMEOUT_MS = 9000;
 
 interface ServiceCredits {
   service: string;
@@ -21,6 +22,35 @@ interface ServiceCredits {
   dashboardUrl: string;
   error?: string;
 }
+
+const withServiceTimeout = (
+  service: ServiceCredits["service"],
+  unit: string,
+  dashboardUrl: string,
+  checkPromise: Promise<ServiceCredits>,
+): Promise<ServiceCredits> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  return Promise.race([
+    checkPromise,
+    new Promise<ServiceCredits>((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve({
+          service,
+          used: 0,
+          limit: 0,
+          unit,
+          plan: "unknown",
+          canGenerate: false,
+          dashboardUrl,
+          error: `Timeout after ${SERVICE_CHECK_TIMEOUT_MS}ms`,
+        });
+      }, SERVICE_CHECK_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+};
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -317,14 +347,24 @@ serve(async (req) => {
 
     const promises: Promise<ServiceCredits>[] = [];
 
-    if (elevenLabsKey) promises.push(checkElevenLabs(elevenLabsKey));
-    if (heygenKey) promises.push(checkHeyGen(heygenKey));
-    if (runwayKey) promises.push(checkRunway(runwayKey));
-    if (shotstackKey) promises.push(checkShotstack(shotstackKey));
-    if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
-      promises.push(checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret));
+    if (elevenLabsKey) {
+      promises.push(withServiceTimeout("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, checkElevenLabs(elevenLabsKey)));
     }
-    if (kreaKey) promises.push(checkKrea(kreaKey));
+    if (heygenKey) {
+      promises.push(withServiceTimeout("heygen", "קרדיטים", "https://app.heygen.com/settings", checkHeyGen(heygenKey)));
+    }
+    if (runwayKey) {
+      promises.push(withServiceTimeout("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, checkRunway(runwayKey)));
+    }
+    if (shotstackKey) {
+      promises.push(withServiceTimeout("shotstack", "רינדורים", "https://dashboard.shotstack.io/", checkShotstack(shotstackKey)));
+    }
+    if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
+      promises.push(withServiceTimeout("cloudinary", "% קרדיטים", "https://console.cloudinary.com/settings/account", checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret)));
+    }
+    if (kreaKey) {
+      promises.push(withServiceTimeout("krea", "קרדיטים", "https://krea.ai/account", checkKrea(kreaKey)));
+    }
 
     const settled = await Promise.allSettled(promises);
     for (const result of settled) {

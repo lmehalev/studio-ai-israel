@@ -84,9 +84,25 @@ const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
 const HEYGEN_MAX_POLL_ATTEMPTS = 180;
+const CREDITS_CHECK_TIMEOUT_MS = 8000;
 
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
   const message = typeof value === 'string' ? value.toLowerCase() : '';
@@ -108,6 +124,33 @@ const isKreaCreditsErrorMessage = (value: unknown): boolean => {
     message.includes('אין מספיק קרדיט') ||
     message.includes('נגמרו הקרדיטים')
   );
+};
+
+const isProviderConfigErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('not configured') ||
+    message.includes('לא מוגדר') ||
+    message.includes('missing') ||
+    message.includes('מפתח')
+  );
+};
+
+const isHeygenUnavailableErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    isProviderConfigErrorMessage(value) ||
+    message.includes('quota') ||
+    message.includes('insufficient') ||
+    message.includes('credit') ||
+    message.includes('403') ||
+    message.includes('401')
+  );
+};
+
+const hasTimeoutErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return message.includes('timeout') || message.includes('timed out') || message.includes('לקחה יותר מדי זמן');
 };
 
 const toSceneChunks = (text: string): string[] => {
@@ -461,18 +504,32 @@ export function VideoWizardFlow({
       let heygenFallbackEnabled = true;
       let kreaFallbackEnabled = true;
 
+      setProgressStage('בודק זמינות ספקים וקרדיטים...');
+      setRunwayProgress(2);
+
       try {
-        const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
+        const { data: creditsData } = await withTimeout(
+          supabase.functions.invoke('check-credits', { body: {} }),
+          CREDITS_CHECK_TIMEOUT_MS,
+          'בדיקת הקרדיטים לקחה יותר מדי זמן'
+        );
+
         const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
         const creditsMap = Object.fromEntries(
           creditItems
             .filter((c: any) => typeof c?.service === 'string')
             .map((c: any) => [c.service, c])
-        ) as Record<string, { canGenerate?: boolean }>;
+        ) as Record<string, { canGenerate?: boolean; error?: string }>;
 
-        const runwayCanGenerate = creditsMap.runway ? creditsMap.runway.canGenerate !== false : true;
-        const heygenCanGenerate = creditsMap.heygen ? creditsMap.heygen.canGenerate !== false : true;
-        const kreaCanGenerate = creditsMap.krea ? creditsMap.krea.canGenerate !== false : true;
+        const runwayCanGenerate = !!creditsMap.runway && (
+          creditsMap.runway.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.runway.error)
+        );
+        const heygenCanGenerate = !!creditsMap.heygen && (
+          creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
+        );
+        const kreaCanGenerate = !!creditsMap.krea && (
+          creditsMap.krea.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.krea.error)
+        );
 
         heygenFallbackEnabled = heygenCanGenerate;
         kreaFallbackEnabled = kreaCanGenerate;
@@ -491,7 +548,8 @@ export function VideoWizardFlow({
       } catch (creditsErr: any) {
         const msg = creditsErr?.message || '';
         if (msg.includes('אין קרדיטים')) throw creditsErr;
-        // If credit check fails, continue with runtime fallbacks.
+        console.warn('Credit check skipped:', msg);
+        toast.info('בדיקת הקרדיטים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
       }
 
       const shouldGenerateNarration = !forceDidOnlyMode;
@@ -541,34 +599,34 @@ export function VideoWizardFlow({
 
       // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
       const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        // If we have a user avatar image, use talking_photo approach (much more reliable)
-        if (normalizedAvatarUrl) {
+        const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
           const result = await heygenExtendedService.createPhotoAvatarVideo(
-            normalizedAvatarUrl,
+            photoUrl,
             sceneText,
             undefined,
-            audioUrl,
+            includeAudio ? audioUrl : undefined,
           );
           if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
           return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        };
+
+        const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
+          const { data: imgData } = await supabase.functions.invoke('generate-image', {
+            body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
+          });
+          return imgData?.imageUrl as string | undefined;
+        })());
+
+        if (!primaryPhotoUrl) {
+          throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
         }
 
-        // No avatar image — try generating an AI image to use as talking photo
-        const { data: imgData } = await supabase.functions.invoke('generate-image', {
-          body: { prompt: `Professional presenter headshot, studio lighting, looking at camera, neutral background` },
-        });
-        if (imgData?.imageUrl) {
-          const result = await heygenExtendedService.createPhotoAvatarVideo(
-            imgData.imageUrl,
-            sceneText,
-            undefined,
-            audioUrl,
-          );
-          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        try {
+          return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
+        } catch (firstErr) {
+          if (!audioUrl) throw firstErr;
+          return createFromPhoto(primaryPhotoUrl, false);
         }
-
-        throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
       };
 
       // Generate a scene image via AI, then animate it with Krea image-to-video
@@ -624,8 +682,11 @@ export function VideoWizardFlow({
           if (runwayBlocked && heygenFallbackEnabled) {
             try {
               clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
-            } catch {
-              heygenFallbackEnabled = false;
+            } catch (heygenErr: any) {
+              if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
+                heygenFallbackEnabled = false;
+              }
+
               if (kreaFallbackEnabled) {
                 clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
               } else {
@@ -714,7 +775,10 @@ export function VideoWizardFlow({
                 };
                 toast.success(`סצנה ${sceneNum} הושלמה במסלול HeyGen`);
                 continue;
-              } catch {
+              } catch (heygenErr: any) {
+                if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
+                  heygenFallbackEnabled = false;
+                }
                 // Continue to Krea fallback
               }
             }
