@@ -230,9 +230,23 @@ export function VideoWizardFlow({
       const result = await websiteScraperService.scrape(websiteUrl.trim());
       setWebsiteData(result);
       toast.success('האתר נסרק בהצלחה! המידע ישולב בסרטון');
-      // If branding has a logo, add it as first image
-      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo)) {
-        setUploadedImages(prev => [result.branding!.logo!, ...prev].slice(0, MAX_IMAGES));
+      
+      const newImages: string[] = [];
+      
+      // Add screenshot as usable image for video scenes
+      const screenshotUrl = websiteScraperService.getScreenshotUrl(result);
+      if (screenshotUrl && !uploadedImages.includes(screenshotUrl)) {
+        newImages.push(screenshotUrl);
+      }
+      
+      // Add logo if available
+      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo) && result.branding.logo !== screenshotUrl) {
+        newImages.push(result.branding.logo);
+      }
+      
+      if (newImages.length > 0) {
+        setUploadedImages(prev => [...newImages, ...prev].slice(0, MAX_IMAGES));
+        toast.info(`נוספו ${newImages.length} תמונות מהאתר (צילום מסך${result.branding?.logo ? ' + לוגו' : ''})`);
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בסריקת האתר');
