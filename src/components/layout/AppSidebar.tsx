@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
   ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
-  ChevronDown
+  ChevronDown, Flame
 } from 'lucide-react';
 import { useState } from 'react';
 import { OpenGuideTourButton } from '@/components/GuidedTour';
@@ -12,6 +12,7 @@ const mainMenuItems = [
   { title: 'דשבורד', icon: LayoutDashboard, path: '/' },
   { title: 'סטודיו קריאייטיב', icon: Sparkles, path: '/creative-studio' },
   { title: 'פרויקטים', icon: FolderOpen, path: '/projects' },
+  { title: 'טרנדים חזקים', icon: Flame, path: '/trends' },
 ];
 
 const capabilityItems = [
