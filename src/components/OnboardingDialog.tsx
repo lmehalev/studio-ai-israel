@@ -82,7 +82,7 @@ const steps: OnboardingStep[] = [
     subtitle: 'סרטון עם דמות מדברת בעברית',
     icon: UserCircle,
     color: 'from-orange-500 to-amber-400',
-    description: 'תן תמונת פנים, כתוב מה הדמות תגיד, ובחר קול. D-ID ייצור סרטון עם דמות שמדברת את הטקסט שלך.',
+    description: 'תן תמונת פנים, כתוב מה הדמות תגיד, ובחר קול. HeyGen ייצור סרטון עם דמות שמדברת את הטקסט שלך.',
     features: [
       { icon: CheckCircle2, text: 'הדבק תמונת פנים חזיתית' },
       { icon: CheckCircle2, text: 'כתוב טקסט בעברית' },

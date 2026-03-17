@@ -18,7 +18,7 @@ interface ServiceCredits {
 const serviceConfig = [
   { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
   { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב בעברית (4 קולות)', icon: Mic, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
-  { id: 'did', name: 'D-ID', desc: 'אווטאר מדבר', icon: UserCircle, free: false, plan: 'חינם (Trial)', hasCredits: true },
+  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר (מתקדם)', icon: UserCircle, free: false, plan: 'חינם (Trial)', hasCredits: true },
   { id: 'runway', name: 'RunwayML', desc: 'וידאו AI (תמונה/טקסט → סרטון)', icon: Video, free: false, plan: 'חינם (Trial)', hasCredits: true },
   { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו ורינדור אוטומטי', icon: Video, free: false, plan: 'Sandbox (חינם)', hasCredits: true },
   { id: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)', hasCredits: true },

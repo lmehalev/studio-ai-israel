@@ -269,7 +269,7 @@ serve(async (req) => {
     const results: ServiceCredits[] = [];
 
     const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
-    const didKey = Deno.env.get("DID_API_KEY");
+    const heygenKey = Deno.env.get("HEYGEN_API_KEY");
     const runwayKey = Deno.env.get("RUNWAY_API_KEY");
     const shotstackKey = Deno.env.get("SHOTSTACK_API_KEY");
     const cloudinaryName = Deno.env.get("CLOUDINARY_CLOUD_NAME");
@@ -279,7 +279,7 @@ serve(async (req) => {
     const promises: Promise<ServiceCredits>[] = [];
 
     if (elevenLabsKey) promises.push(checkElevenLabs(elevenLabsKey));
-    if (didKey) promises.push(checkDID(didKey));
+    if (heygenKey) promises.push(checkHeyGen(heygenKey));
     if (runwayKey) promises.push(checkRunway(runwayKey));
     if (shotstackKey) promises.push(checkShotstack(shotstackKey));
     if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
