@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
   ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
-  ChevronDown
+  ChevronDown, Flame
 } from 'lucide-react';
 import { useState } from 'react';
 import { OpenGuideTourButton } from '@/components/GuidedTour';
