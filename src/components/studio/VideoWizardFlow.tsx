@@ -474,19 +474,60 @@ export function VideoWizardFlow({
       };
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
+
+      // Fetch a valid HeyGen stock avatar ID if we don't have one
+      let stockHeygenAvatarId: string | null = null;
+      try {
+        const avatarList = await heygenService.listAvatars();
+        if (Array.isArray(avatarList) && avatarList.length > 0) {
+          // Pick the first available avatar
+          const first = avatarList[0];
+          stockHeygenAvatarId = first?.avatar_id || first?.id || null;
+          console.log('Stock HeyGen avatar found:', stockHeygenAvatarId);
+        }
+      } catch {
+        console.warn('Could not list HeyGen avatars, will skip HeyGen fallback');
+      }
+
       const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
+        const avatarId = stockHeygenAvatarId;
+        if (!avatarId) throw new Error('אין אווטאר HeyGen זמין');
+
         const result = await heygenService.createVideo(
           sceneText,
-          undefined, // avatarId - use default or selected
-          undefined, // voiceId
+          avatarId,
+          undefined, // voiceId — will use default Hebrew
           audioUrl,
         );
 
-        if (!result?.videoId) throw new Error('HeyGen error');
+        if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
 
         return waitForHeygenResult(result.videoId, (p) => {
           updateSceneProgress(sceneIdx, p);
         });
+      };
+
+      // Generate a scene image via AI, then animate it with Krea image-to-video
+      const createAIImageToVideoClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
+        updateSceneProgress(sceneIdx, 5);
+        // Step 1: Generate a still image via Lovable AI (Gemini image)
+        const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
+          body: { prompt: scenePrompt },
+        });
+        if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
+        updateSceneProgress(sceneIdx, 40);
+
+        // Step 2: Animate the image with Krea image-to-video
+        const kreaResult = await kreaService.generateVideo(scenePrompt, {
+          model: 'kling-2.5',
+          width: 1280,
+          height: 720,
+          duration: Math.max(5, Math.min(10, sceneDuration)),
+          imageUrl: imgData.imageUrl,
+        });
+        updateSceneProgress(sceneIdx, 100);
+        if (!kreaResult?.videoUrl) throw new Error('Krea image-to-video failed');
+        return kreaResult.videoUrl;
       };
 
       const createKreaSceneClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
