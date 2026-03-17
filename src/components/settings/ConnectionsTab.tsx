@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell } from 'lucide-react';
+import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell, Zap, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -16,12 +16,14 @@ interface ServiceCredits {
 }
 
 const serviceConfig = [
-  { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
-  { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב בעברית (4 קולות)', icon: Mic, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
-  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר (מתקדם)', icon: UserCircle, free: false, plan: 'חינם (Trial)', hasCredits: true },
-  { id: 'runway', name: 'RunwayML', desc: 'וידאו AI (תמונה/טקסט → סרטון)', icon: Video, free: false, plan: 'חינם (Trial)', hasCredits: true },
-  { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו ורינדור אוטומטי', icon: Video, free: false, plan: 'Sandbox (חינם)', hasCredits: true },
+  { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים + שיפור פרומפטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
+  { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב, שכפול קול, מוזיקה, SFX, Voice Isolation', icon: Mic, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
+  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר, Photo Avatar, תבניות, Quota', icon: UserCircle, free: false, plan: 'חינם (Trial)', hasCredits: true },
+  { id: 'runway', name: 'RunwayML', desc: 'וידאו AI קולנועי (Image/Text → Video)', icon: Video, free: false, plan: 'חינם (Trial)', hasCredits: true },
+  { id: 'krea', name: 'Krea AI', desc: '40+ מודלים: Flux, Seedream, Veo 3, Kling 2.5, Upscale 22K', icon: Wand2, free: false, plan: 'API מחובר', hasCredits: true },
+  { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו, רינדור רב-שכבתי, כתוביות', icon: Video, free: false, plan: 'Sandbox (חינם)', hasCredits: true },
   { id: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
+  { id: 'perplexity', name: 'Perplexity AI', desc: 'ניתוח טרנדים ויראליים בזמן אמת', icon: Zap, free: false, plan: 'API מחובר', hasCredits: false },
   { id: 'whisper', name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
   { id: 'storage', name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, free: true, plan: 'חינם (מובנה)', hasCredits: false },
 ];

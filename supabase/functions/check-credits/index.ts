@@ -260,6 +260,44 @@ async function checkCloudinary(cloudName: string, apiKey: string, apiSecret: str
   }
 }
 
+async function checkKrea(apiKey: string): Promise<ServiceCredits> {
+  try {
+    // Validate the Krea API key by listing models
+    const res = await fetch("https://api.krea.ai/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (res.ok || res.status === 404) {
+      return {
+        service: "krea",
+        used: 0,
+        limit: -1,
+        unit: "קרדיטים",
+        plan: "API מחובר",
+        canGenerate: true,
+        dashboardUrl: "https://krea.ai/account",
+      };
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      const message = await parseErrorBody(res);
+      throw new Error(`HTTP ${res.status}: ${message}`);
+    }
+
+    return {
+      service: "krea",
+      used: 0,
+      limit: -1,
+      unit: "קרדיטים",
+      plan: "API מחובר",
+      canGenerate: true,
+      dashboardUrl: "https://krea.ai/account",
+    };
+  } catch (error) {
+    return toErrorResult("krea", "קרדיטים", "https://krea.ai/account", error);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -275,6 +313,7 @@ serve(async (req) => {
     const cloudinaryName = Deno.env.get("CLOUDINARY_CLOUD_NAME");
     const cloudinaryKey = Deno.env.get("CLOUDINARY_API_KEY");
     const cloudinarySecret = Deno.env.get("CLOUDINARY_API_SECRET");
+    const kreaKey = Deno.env.get("KREA_API_KEY");
 
     const promises: Promise<ServiceCredits>[] = [];
 
@@ -285,6 +324,7 @@ serve(async (req) => {
     if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
       promises.push(checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret));
     }
+    if (kreaKey) promises.push(checkKrea(kreaKey));
 
     const settled = await Promise.allSettled(promises);
     for (const result of settled) {

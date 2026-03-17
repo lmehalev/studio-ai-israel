@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
-  avatarDbService, storageService,
+  avatarDbService, storageService, composeService, soundEffectService,
   type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -26,13 +26,14 @@ import {
 import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
-export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
+export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
 
 const actionOptions: { id: StudioAction; label: string; icon: typeof ImageIcon; desc: string }[] = [
   { id: 'image', label: 'צור תמונה', icon: ImageIcon, desc: 'יצירת תמונה שיווקית מתיאור טקסט' },
   { id: 'video_ai', label: 'וידאו AI', icon: Video, desc: 'צור סרטון מתמונה או טקסט' },
   { id: 'subtitles', label: 'כתוביות לסרטון', icon: Subtitles, desc: 'תמלול אוטומטי + עריכת כתוביות' },
   { id: 'import_edit', label: 'ייבוא ועריכה', icon: Link2, desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך' },
+  { id: 'highlight', label: 'סרטון קצר מתוכן ארוך', icon: Scissors, desc: 'העלה סרטונים ותמונות — קבל סרטון ויראלי 30-60 שניות' },
 ];
 
 const subtitleFontOptions = [

@@ -1,7 +1,7 @@
-import { ImageIcon, Subtitles, Video, Link2, Sparkles } from 'lucide-react';
+import { ImageIcon, Subtitles, Video, Link2, Sparkles, Scissors } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit';
+export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
 
 export interface ActionItem {
   id: StudioAction;
@@ -16,6 +16,7 @@ export const studioActions: ActionItem[] = [
   { id: 'video_ai', label: 'וידאו AI', desc: 'צור סרטון מתמונה או טקסט', icon: Video, color: 'from-green-500/20 to-emerald-500/20 border-green-500/30' },
   { id: 'subtitles', label: 'כתוביות לסרטון', desc: 'תמלול אוטומטי + עריכת כתוביות', icon: Subtitles, color: 'from-teal-500/20 to-cyan-500/20 border-teal-500/30' },
   { id: 'import_edit', label: 'ייבוא ועריכה', desc: 'קישור לתמונה, סרטון או YouTube — חלץ וערוך', icon: Link2, color: 'from-purple-500/20 to-pink-500/20 border-purple-500/30' },
+  { id: 'highlight', label: 'סרטון קצר מתוכן ארוך', desc: 'העלה סרטונים ותמונות — קבל סרטון ויראלי 30-60 שניות', icon: Scissors, color: 'from-red-500/20 to-rose-500/20 border-red-500/30' },
 ];
 
 interface StudioActionCardsProps {
@@ -42,6 +43,7 @@ export function StudioActionCards({ onSelect }: StudioActionCardsProps) {
               className={cn(
                 'group relative bg-gradient-to-br border rounded-xl p-4 text-right transition-all hover:scale-[1.03] hover:shadow-lg cursor-pointer',
                 action.color,
+                action.id === 'highlight' && 'col-span-2',
               )}
             >
               <div className="w-10 h-10 rounded-xl bg-background/60 flex items-center justify-center mb-3 group-hover:bg-background/80 transition-colors">
