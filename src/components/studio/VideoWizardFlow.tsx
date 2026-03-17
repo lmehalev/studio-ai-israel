@@ -655,11 +655,25 @@ export function VideoWizardFlow({
                 if (isKreaCreditsErrorMessage(kreaErr?.message)) {
                   kreaFallbackEnabled = false;
                 }
-                throw new Error(kreaErr?.message || 'נגמרו הקרדיטים ל-Runway וגם מסלול Krea נכשל');
+                // Don't throw yet — try AI image-to-video as last resort
               }
             }
 
-            throw new Error('נגמרו הקרדיטים ל-Runway ואין מסלול חלופי זמין כרגע (HeyGen/Krea).');
+            // Last resort: generate AI image then animate
+            try {
+              toast.info('מנסה מסלול חלופי אחרון: תמונת AI + אנימציה...');
+              const aiVideoUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
+              sceneResults[sceneIdx] = {
+                url: aiVideoUrl,
+                scene: { ...scene, duration: sceneDuration },
+              };
+              toast.success(`סצנה ${sceneNum} הושלמה במסלול AI`);
+              continue;
+            } catch {
+              // All fallbacks exhausted
+            }
+
+            throw new Error('כל ספקי הווידאו (Runway/HeyGen/Krea) אינם זמינים כרגע. יש לחדש קרדיטים באחד מהספקים.');
           }
 
           if (isKreaCreditsErrorMessage(errMsg)) {
