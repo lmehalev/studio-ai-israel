@@ -1209,7 +1209,7 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
             className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-            {loading ? 'מעבד...' : 'צור סרטון ויראלי'}
+            {loading ? 'מעבד...' : highlightOutputType === 'podcast_edit' ? 'ערוך פודקאסט' : 'צור סרטון'}
           </button>
         </div>
         );
