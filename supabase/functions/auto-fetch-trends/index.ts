@@ -14,6 +14,53 @@ const CATEGORIES = [
   'עמותות ומלכ"רים',
 ];
 
+async function ensureTable(supabaseUrl: string, serviceKey: string) {
+  const sql = `
+    CREATE TABLE IF NOT EXISTS public.saved_trends (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      category text NOT NULL,
+      title text NOT NULL,
+      description text NOT NULL DEFAULT '',
+      platform text NOT NULL DEFAULT '',
+      url text NOT NULL DEFAULT '',
+      views text NOT NULL DEFAULT '',
+      tip text NOT NULL DEFAULT '',
+      visual_style text NOT NULL DEFAULT '',
+      summary text NOT NULL DEFAULT '',
+      fetched_at timestamptz NOT NULL DEFAULT now()
+    );
+    ALTER TABLE public.saved_trends ENABLE ROW LEVEL SECURITY;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public select on saved_trends') THEN
+        CREATE POLICY "Allow public select on saved_trends" ON public.saved_trends FOR SELECT TO public USING (true);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public insert on saved_trends') THEN
+        CREATE POLICY "Allow public insert on saved_trends" ON public.saved_trends FOR INSERT TO public WITH CHECK (true);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public delete on saved_trends') THEN
+        CREATE POLICY "Allow public delete on saved_trends" ON public.saved_trends FOR DELETE TO public USING (true);
+      END IF;
+    END $$;
+  `;
+
+  const dbUrl = Deno.env.get('SUPABASE_DB_URL');
+  if (!dbUrl) {
+    console.warn('SUPABASE_DB_URL not set, skipping table creation');
+    return;
+  }
+
+  // Use the Supabase REST API to run SQL
+  const res = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${serviceKey}`,
+      'apikey': serviceKey,
+      'Content-Type': 'application/json',
+    },
+  });
+  console.log('Table ensure attempted');
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -30,9 +77,24 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Parse optional body for single category or "all"
+  let categoriesToFetch = CATEGORIES;
+  try {
+    const body = await req.json();
+    if (body?.category && body.category !== 'all') {
+      categoriesToFetch = [body.category];
+    }
+  } catch {
+    // No body = fetch all categories
+  }
+
   const results: { category: string; count: number }[] = [];
 
-  for (const category of CATEGORIES) {
+  // Delete trends older than 7 days
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from('saved_trends').delete().lt('fetched_at', weekAgo);
+
+  for (const category of categoriesToFetch) {
     try {
       console.log(`Fetching trends for: ${category}`);
 
@@ -48,8 +110,8 @@ For each item provide:
 3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn etc.
 4. url - the REAL original link (must be from your sources)
 5. views - estimated views/interactions as a string
-6. tip - in Hebrew, actionable tip for creating similar content, focusing on image/video generation
-7. visual_style - in Hebrew, describe colors, composition, camera angles, editing style, lighting
+6. tip - in Hebrew, actionable tip for creating similar content, focusing on image/video generation techniques
+7. visual_style - in Hebrew, describe colors, composition, camera angles, editing style, lighting, typography
 
 Return ONLY valid JSON:
 {
@@ -106,7 +168,7 @@ Return ONLY valid JSON:
         return trend;
       });
 
-      // Save each trend to the database
+      // Save each trend
       for (const trend of parsed.trends) {
         const { error } = await supabase.from('saved_trends').insert({
           category,
