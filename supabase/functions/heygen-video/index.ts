@@ -77,6 +77,59 @@ serve(async (req) => {
       );
     }
 
+    // ====== Create photo avatar video (use own photo) ======
+    if (action === "create_photo_avatar_video") {
+      const { photoUrl, script, voiceId, audioUrl, aspectRatio } = params;
+
+      if (!photoUrl) {
+        return new Response(
+          JSON.stringify({ error: "חסר קישור לתמונה" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const videoInput: any = {
+        character: {
+          type: "talking_photo",
+          talking_photo_url: photoUrl,
+        },
+        voice: voiceId
+          ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
+          : audioUrl
+            ? { type: "audio", audio_url: audioUrl }
+            : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 },
+      };
+
+      const dimension = aspectRatio === "9:16"
+        ? { width: 1080, height: 1920 }
+        : aspectRatio === "1:1"
+          ? { width: 1080, height: 1080 }
+          : { width: 1920, height: 1080 };
+
+      const response = await fetch(`${HEYGEN_API}/v2/video/generate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          video_inputs: [videoInput],
+          dimension,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error("HeyGen photo avatar error:", data);
+        return new Response(
+          JSON.stringify({ error: `שגיאה ביצירת סרטון תמונה מדברת: ${data.message || data.error || response.status}` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ videoId: data.data?.video_id, status: "processing" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ====== Check video status ======
     if (action === "check_status") {
       const { videoId } = params;
@@ -134,6 +187,62 @@ serve(async (req) => {
       const data = await response.json();
       return new Response(
         JSON.stringify({ voices: data.data?.voices || [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== List templates ======
+    if (action === "list_templates") {
+      const response = await fetch(`${HEYGEN_API}/v2/templates`, {
+        headers: { "X-Api-Key": HEYGEN_API_KEY },
+      });
+
+      const data = await response.json();
+      return new Response(
+        JSON.stringify({ templates: data.data?.templates || [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== Create video from template ======
+    if (action === "create_from_template") {
+      const { templateId, variables } = params;
+      if (!templateId) {
+        return new Response(
+          JSON.stringify({ error: "חסר מזהה תבנית" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const response = await fetch(`${HEYGEN_API}/v2/template/${templateId}/generate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ variables: variables || {} }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({ error: `שגיאה ביצירה מתבנית: ${data.message || response.status}` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ videoId: data.data?.video_id, status: "processing" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== Get remaining quota ======
+    if (action === "get_quota") {
+      const response = await fetch(`${HEYGEN_API}/v1/user/remaining_quota`, {
+        headers: { "X-Api-Key": HEYGEN_API_KEY },
+      });
+
+      const data = await response.json();
+      return new Response(
+        JSON.stringify({ quota: data.data || {} }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
