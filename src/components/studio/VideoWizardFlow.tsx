@@ -499,8 +499,16 @@ export function VideoWizardFlow({
       let heygenFallbackEnabled = true;
       let kreaFallbackEnabled = true;
 
+      setProgressStage('בודק זמינות ספקים וקרדיטים...');
+      setRunwayProgress(2);
+
       try {
-        const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
+        const { data: creditsData } = await withTimeout(
+          supabase.functions.invoke('check-credits', { body: {} }),
+          CREDITS_CHECK_TIMEOUT_MS,
+          'בדיקת הקרדיטים לקחה יותר מדי זמן'
+        );
+
         const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
         const creditsMap = Object.fromEntries(
           creditItems
@@ -508,9 +516,9 @@ export function VideoWizardFlow({
             .map((c: any) => [c.service, c])
         ) as Record<string, { canGenerate?: boolean }>;
 
-        const runwayCanGenerate = creditsMap.runway ? creditsMap.runway.canGenerate !== false : true;
-        const heygenCanGenerate = creditsMap.heygen ? creditsMap.heygen.canGenerate !== false : true;
-        const kreaCanGenerate = creditsMap.krea ? creditsMap.krea.canGenerate !== false : true;
+        const runwayCanGenerate = creditsMap.runway?.canGenerate !== false;
+        const heygenCanGenerate = !!creditsMap.heygen && creditsMap.heygen.canGenerate !== false;
+        const kreaCanGenerate = !!creditsMap.krea && creditsMap.krea.canGenerate !== false;
 
         heygenFallbackEnabled = heygenCanGenerate;
         kreaFallbackEnabled = kreaCanGenerate;
@@ -529,7 +537,8 @@ export function VideoWizardFlow({
       } catch (creditsErr: any) {
         const msg = creditsErr?.message || '';
         if (msg.includes('אין קרדיטים')) throw creditsErr;
-        // If credit check fails, continue with runtime fallbacks.
+        console.warn('Credit check skipped:', msg);
+        toast.info('בדיקת הקרדיטים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
       }
 
       const shouldGenerateNarration = !forceDidOnlyMode;
