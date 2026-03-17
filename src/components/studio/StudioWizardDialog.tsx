@@ -266,6 +266,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   const dismissSession = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(VIDEO_SESSION_KEY);
+    setVideoWizardSession(null);
     setHasPendingSession(false);
     setSessionRestoreOffered(true);
   };
