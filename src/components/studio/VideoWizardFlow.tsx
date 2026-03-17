@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   runwayService, heygenService, storageService, voiceCloneService, composeService,
-  voiceService, websiteScraperService, kreaService, type Brand, type WebsiteScrapeResult,
+  voiceService, websiteScraperService, kreaService, heygenExtendedService,
+  type Brand, type WebsiteScrapeResult,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
@@ -55,6 +56,26 @@ interface VideoWizardFlowProps {
   brandDepartments: string[];
   onBack: () => void;
   onClose: () => void;
+  /** If provided, restore session from this data */
+  restoredSession?: VideoWizardSession | null;
+  /** Called whenever session-worthy state changes */
+  onSessionChange?: (session: VideoWizardSession) => void;
+}
+
+export interface VideoWizardSession {
+  step: number;
+  prompt: string;
+  selectedAvatarIds: string[];
+  selectedVoiceIds: string[];
+  useAiVoice: boolean;
+  videoStyle: string;
+  generatedScript: GeneratedScript | null;
+  uploadedImages: string[];
+  resultVideoUrl: string | null;
+  selectedCategory: string;
+  customCategory: string;
+  websiteUrl: string;
+  improvePrompt: string;
 }
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;
@@ -139,41 +160,41 @@ const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptS
 export function VideoWizardFlow({
   avatars, voices, activeBrand, activeBrandId,
   buildPrompt, initialCategory, brandDepartments,
-  onBack, onClose,
+  onBack, onClose, restoredSession, onSessionChange,
 }: VideoWizardFlowProps) {
   // Step: 0=prompt, 1=script review, 2=media+settings, 3=generating, 4=result
-  const [step, setStep] = useState(0);
-  const [prompt, setPrompt] = useState('');
+  const [step, setStep] = useState(restoredSession?.step ?? 0);
+  const [prompt, setPrompt] = useState(restoredSession?.prompt ?? '');
   const [loading, setLoading] = useState(false);
 
   // Multi-select avatars & voices
-  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>([]);
-  const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>([]);
-  const [useAiVoice, setUseAiVoice] = useState(false);
-  const [videoStyle, setVideoStyle] = useState<string>('cinematic');
+  const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>(restoredSession?.selectedAvatarIds ?? []);
+  const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>(restoredSession?.selectedVoiceIds ?? []);
+  const [useAiVoice, setUseAiVoice] = useState(restoredSession?.useAiVoice ?? false);
+  const [videoStyle, setVideoStyle] = useState<string>(restoredSession?.videoStyle ?? 'cinematic');
 
   // Script
-  const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(null);
+  const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(restoredSession?.generatedScript ?? null);
   const [editingSceneIdx, setEditingSceneIdx] = useState<number | null>(null);
 
   // Media
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>(restoredSession?.uploadedImages ?? []);
   const MAX_IMAGES = 7;
 
   // Result
-  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
+  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(restoredSession?.resultVideoUrl ?? null);
   const [runwayPolling, setRunwayPolling] = useState(false);
   const [runwayProgress, setRunwayProgress] = useState(0);
   const [progressStage, setProgressStage] = useState('');
 
   // Improve / refine
-  const [improvePrompt, setImprovePrompt] = useState('');
+  const [improvePrompt, setImprovePrompt] = useState(restoredSession?.improvePrompt ?? '');
   const [isImproving, setIsImproving] = useState(false);
 
   // Save
   const [savingOutput, setSavingOutput] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || '');
-  const [customCategory, setCustomCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(restoredSession?.selectedCategory ?? initialCategory ?? '');
+  const [customCategory, setCustomCategory] = useState(restoredSession?.customCategory ?? '');
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
   // Speech
@@ -183,9 +204,24 @@ export function VideoWizardFlow({
   });
 
   // Website scraping
-  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState(restoredSession?.websiteUrl ?? '');
   const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
   const [scrapingWebsite, setScrapingWebsite] = useState(false);
+
+  // Emit session changes to parent for persistence
+  useEffect(() => {
+    if (!onSessionChange) return;
+    // Don't save while generating (step 3) — transient state
+    if (step === 3 || loading) return;
+    const session: VideoWizardSession = {
+      step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
+      generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
+      websiteUrl, improvePrompt,
+    };
+    onSessionChange(session);
+  }, [step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
+      generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
+      websiteUrl, improvePrompt, loading]);
 
   const handleScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
@@ -475,36 +511,36 @@ export function VideoWizardFlow({
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
 
-      // Fetch a valid HeyGen stock avatar ID if we don't have one
-      let stockHeygenAvatarId: string | null = null;
-      try {
-        const avatarList = await heygenService.listAvatars();
-        if (Array.isArray(avatarList) && avatarList.length > 0) {
-          // Pick the first available avatar
-          const first = avatarList[0];
-          stockHeygenAvatarId = first?.avatar_id || first?.id || null;
-          console.log('Stock HeyGen avatar found:', stockHeygenAvatarId);
-        }
-      } catch {
-        console.warn('Could not list HeyGen avatars, will skip HeyGen fallback');
-      }
-
+      // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
       const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        const avatarId = stockHeygenAvatarId;
-        if (!avatarId) throw new Error('אין אווטאר HeyGen זמין');
+        // If we have a user avatar image, use talking_photo approach (much more reliable)
+        if (normalizedAvatarUrl) {
+          const result = await heygenExtendedService.createPhotoAvatarVideo(
+            normalizedAvatarUrl,
+            sceneText,
+            undefined,
+            audioUrl,
+          );
+          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        }
 
-        const result = await heygenService.createVideo(
-          sceneText,
-          avatarId,
-          undefined, // voiceId — will use default Hebrew
-          audioUrl,
-        );
-
-        if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-
-        return waitForHeygenResult(result.videoId, (p) => {
-          updateSceneProgress(sceneIdx, p);
+        // No avatar image — try generating an AI image to use as talking photo
+        const { data: imgData } = await supabase.functions.invoke('generate-image', {
+          body: { prompt: `Professional presenter headshot, studio lighting, looking at camera, neutral background` },
         });
+        if (imgData?.imageUrl) {
+          const result = await heygenExtendedService.createPhotoAvatarVideo(
+            imgData.imageUrl,
+            sceneText,
+            undefined,
+            audioUrl,
+          );
+          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
+        }
+
+        throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
       };
 
       // Generate a scene image via AI, then animate it with Krea image-to-video
@@ -557,7 +593,7 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (runwayBlocked && heygenFallbackEnabled && stockHeygenAvatarId) {
+          if (runwayBlocked && heygenFallbackEnabled) {
             try {
               clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
             } catch {

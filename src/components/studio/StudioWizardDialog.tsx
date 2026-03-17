@@ -23,7 +23,7 @@ import { UrlImportInput } from '@/components/UrlImportInput';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { VideoWizardFlow } from '@/components/studio/VideoWizardFlow';
+import { VideoWizardFlow, type VideoWizardSession } from '@/components/studio/VideoWizardFlow';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
@@ -190,6 +190,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // Session persistence key
   const SESSION_KEY = 'studio_wizard_session';
 
+  // Video wizard sub-session (stored separately due to size)
+  const VIDEO_SESSION_KEY = 'studio_video_wizard_session';
+  const [videoWizardSession, setVideoWizardSession] = useState<VideoWizardSession | null>(null);
+
   // Save session to localStorage on meaningful state changes
   useEffect(() => {
     if (!open) return;
@@ -197,10 +201,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     const session = {
       selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
       importUrl, importType, selectedAvatarId, selectedVoiceId,
-      selectedCategory, customCategory, timestamp: Date.now(),
+      selectedCategory, customCategory, highlightFiles, highlightOutputType,
+      timestamp: Date.now(),
     };
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
-  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory]);
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {
+      // localStorage might be full — try removing large data URLs
+      try {
+        const lite = { ...session, result: null, imageRefPhotos: [], editHistory: [] };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(lite));
+      } catch {}
+    }
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
 
   // Restore session when dialog opens
   const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
@@ -238,6 +249,15 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
       if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
       if (s.customCategory) setCustomCategory(s.customCategory);
+      if (s.highlightFiles) setHighlightFiles(s.highlightFiles);
+      if (s.highlightOutputType) setHighlightOutputType(s.highlightOutputType);
+      // Restore video wizard sub-session
+      if (s.selectedAction === 'video_ai') {
+        try {
+          const videoRaw = localStorage.getItem(VIDEO_SESSION_KEY);
+          if (videoRaw) setVideoWizardSession(JSON.parse(videoRaw));
+        } catch {}
+      }
       toast.success('הסשן שוחזר בהצלחה!');
     } catch {}
     setHasPendingSession(false);
@@ -246,12 +266,16 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   const dismissSession = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(VIDEO_SESSION_KEY);
+    setVideoWizardSession(null);
     setHasPendingSession(false);
     setSessionRestoreOffered(true);
   };
 
   const clearSession = () => {
     try { localStorage.removeItem(SESSION_KEY); } catch {}
+    try { localStorage.removeItem(VIDEO_SESSION_KEY); } catch {}
+    setVideoWizardSession(null);
   };
 
   // Reset when dialog closes — but don't clear session (only clear on explicit "start fresh")
@@ -283,6 +307,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightProgress(0);
         setHighlightStage('');
         setHighlightOutputType('viral_short');
+        setVideoWizardSession(null);
       }, 300);
     }
   }, [open]);
@@ -825,8 +850,13 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           buildPrompt={buildPrompt}
           initialCategory={initialCategory}
           brandDepartments={brandDepartments}
-          onBack={() => { setSelectedAction(null); setStep(0); }}
+          onBack={() => { setSelectedAction(null); setStep(0); setVideoWizardSession(null); }}
           onClose={() => onOpenChange(false)}
+          restoredSession={videoWizardSession}
+          onSessionChange={(session) => {
+            setVideoWizardSession(session);
+            try { localStorage.setItem(VIDEO_SESSION_KEY, JSON.stringify(session)); } catch {}
+          }}
         />
       );
     }
