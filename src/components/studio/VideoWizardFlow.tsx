@@ -557,12 +557,26 @@ export function VideoWizardFlow({
         try {
           let clipUrl: string;
 
-          if (runwayBlocked && heygenFallbackEnabled) {
-            clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
+          if (runwayBlocked && heygenFallbackEnabled && stockHeygenAvatarId) {
+            try {
+              clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
+            } catch {
+              heygenFallbackEnabled = false;
+              if (kreaFallbackEnabled) {
+                clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+              } else {
+                clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
+              }
+            }
           } else if (runwayBlocked && kreaFallbackEnabled) {
-            clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+            try {
+              clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
+            } catch (ke: any) {
+              if (isKreaCreditsErrorMessage(ke?.message)) kreaFallbackEnabled = false;
+              clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
+            }
           } else if (runwayBlocked) {
-            throw new Error('אין ספק וידאו זמין כרגע (Runway/Krea/HeyGen). יש לחדש קרדיטים ולנסות שוב.');
+            clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
           } else if (normalizedAvatarUrl && sceneIdx === 0) {
             // First scene with avatar → try HeyGen first
             try {
