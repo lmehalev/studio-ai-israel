@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import AvatarsManagePage from "./pages/capabilities/AvatarsPage";
 import VoicesManagePage from "./pages/capabilities/VoicesPage";
 import ScriptsManagePage from "./pages/capabilities/ScriptsPage";
+import TrendsPage from "./pages/TrendsPage";
 
 const queryClient = new QueryClient();
 
