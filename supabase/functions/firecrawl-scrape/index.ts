@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         url: formattedUrl,
         formats: options?.formats || ['markdown', 'screenshot', 'branding', 'links'],
-        onlyMainContent: options?.onlyMainContent ?? true,
-        waitFor: options?.waitFor || 3000,
+        onlyMainContent: options?.onlyMainContent ?? false,
+        waitFor: options?.waitFor || 5000,
         location: options?.location,
       }),
     });

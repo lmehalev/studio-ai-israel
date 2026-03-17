@@ -399,7 +399,8 @@ export const brandService = {
 
 // ====== Website Scraper Service (Firecrawl) ======
 export interface WebsiteScrapeResult {
-  screenshot?: string;
+  screenshot?: string; // URL or base64
+  screenshotIsUrl?: boolean;
   markdown?: string;
   branding?: {
     logo?: string;
@@ -411,6 +412,7 @@ export interface WebsiteScrapeResult {
     title?: string;
     description?: string;
     sourceURL?: string;
+    ogImage?: string;
   };
   links?: string[];
 }
@@ -421,9 +423,9 @@ export const websiteScraperService = {
       body: {
         url,
         options: {
-          formats: ['markdown', 'screenshot', 'branding'],
-          onlyMainContent: true,
-          waitFor: 3000,
+          formats: ['markdown', 'screenshot', 'branding', 'links'],
+          onlyMainContent: false, // Get full page for better screenshot
+          waitFor: 5000, // Wait longer for full render
         },
       },
     });
@@ -432,13 +434,43 @@ export const websiteScraperService = {
 
     // Firecrawl nests inside data.data
     const result = data?.data || data;
+    
+    // Screenshot can be a URL or base64 string
+    let screenshot = result?.screenshot;
+    let screenshotIsUrl = false;
+    if (screenshot && (screenshot.startsWith('http://') || screenshot.startsWith('https://'))) {
+      screenshotIsUrl = true;
+    }
+
+    // Extract OG image from metadata as fallback
+    const ogImage = result?.metadata?.ogImage || result?.metadata?.['og:image'];
+
     return {
-      screenshot: result?.screenshot,
+      screenshot,
+      screenshotIsUrl,
       markdown: result?.markdown,
       branding: result?.branding,
-      metadata: result?.metadata,
+      metadata: {
+        ...result?.metadata,
+        ogImage,
+      },
       links: result?.links,
     };
+  },
+
+  /** Get a usable image URL from scrape result — screenshot or OG image */
+  getScreenshotUrl: (result: WebsiteScrapeResult): string | null => {
+    if (result.screenshot) {
+      if (result.screenshotIsUrl) return result.screenshot;
+      // Base64 — return as data URL
+      if (result.screenshot.startsWith('data:')) return result.screenshot;
+      return `data:image/png;base64,${result.screenshot}`;
+    }
+    // Fallback to OG image
+    if (result.metadata?.ogImage) return result.metadata.ogImage;
+    // Fallback to branding logo
+    if (result.branding?.logo) return result.branding.logo;
+    return null;
   },
 };
 

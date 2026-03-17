@@ -230,9 +230,23 @@ export function VideoWizardFlow({
       const result = await websiteScraperService.scrape(websiteUrl.trim());
       setWebsiteData(result);
       toast.success('האתר נסרק בהצלחה! המידע ישולב בסרטון');
-      // If branding has a logo, add it as first image
-      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo)) {
-        setUploadedImages(prev => [result.branding!.logo!, ...prev].slice(0, MAX_IMAGES));
+      
+      const newImages: string[] = [];
+      
+      // Add screenshot as usable image for video scenes
+      const screenshotUrl = websiteScraperService.getScreenshotUrl(result);
+      if (screenshotUrl && !uploadedImages.includes(screenshotUrl)) {
+        newImages.push(screenshotUrl);
+      }
+      
+      // Add logo if available
+      if (result.branding?.logo && !uploadedImages.includes(result.branding.logo) && result.branding.logo !== screenshotUrl) {
+        newImages.push(result.branding.logo);
+      }
+      
+      if (newImages.length > 0) {
+        setUploadedImages(prev => [...newImages, ...prev].slice(0, MAX_IMAGES));
+        toast.info(`נוספו ${newImages.length} תמונות מהאתר (צילום מסך${result.branding?.logo ? ' + לוגו' : ''})`);
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בסריקת האתר');
@@ -277,6 +291,20 @@ export function VideoWizardFlow({
         // Include first 800 chars of markdown as content summary
         if (websiteData.markdown) {
           parts.push(`תוכן האתר (תקציר):\n${websiteData.markdown.slice(0, 800)}`);
+        }
+        // Include key links from the website
+        if (websiteData.links?.length) {
+          const keyLinks = websiteData.links
+            .filter(l => !l.includes('#') && !l.includes('javascript:'))
+            .slice(0, 10);
+          if (keyLinks.length > 0) {
+            parts.push(`דפים עיקריים באתר:\n${keyLinks.join('\n')}`);
+          }
+        }
+        // Note screenshot availability
+        const hasScreenshotImg = !!websiteScraperService.getScreenshotUrl(websiteData);
+        if (hasScreenshotImg) {
+          parts.push('יש צילום מסך איכותי של האתר שנוסף כתמונה — חובה לשלב סצנה שמציגה את האתר על מסך מחשב/טלפון עם גלילה/אינטראקציה.');
         }
         websiteContext = parts.join('\n');
       }
@@ -1209,11 +1237,14 @@ export function VideoWizardFlow({
                     ))}
                   </div>
                 )}
-                {websiteData.screenshot && (
-                  <div className="rounded-lg overflow-hidden border border-border max-h-32">
-                    <img src={`data:image/png;base64,${websiteData.screenshot}`} alt="צילום מסך" className="w-full object-cover object-top" />
-                  </div>
-                )}
+                {(() => {
+                  const imgUrl = websiteScraperService.getScreenshotUrl(websiteData);
+                  return imgUrl ? (
+                    <div className="rounded-lg overflow-hidden border border-border max-h-40">
+                      <img src={imgUrl} alt="צילום מסך" className="w-full object-cover object-top" />
+                    </div>
+                  ) : null;
+                })()}
               </div>
             ) : (
               <div className="flex gap-2">
