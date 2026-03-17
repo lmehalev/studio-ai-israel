@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TrendingUp, ExternalLink, Lightbulb, Search, RefreshCw, Eye, Flame } from 'lucide-react';
+import { TrendingUp, ExternalLink, Lightbulb, Search, RefreshCw, Eye, Flame, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface TrendItem {
