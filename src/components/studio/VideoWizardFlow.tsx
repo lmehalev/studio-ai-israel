@@ -519,11 +519,17 @@ export function VideoWizardFlow({
           creditItems
             .filter((c: any) => typeof c?.service === 'string')
             .map((c: any) => [c.service, c])
-        ) as Record<string, { canGenerate?: boolean }>;
+        ) as Record<string, { canGenerate?: boolean; error?: string }>;
 
-        const runwayCanGenerate = creditsMap.runway?.canGenerate !== false;
-        const heygenCanGenerate = !!creditsMap.heygen && creditsMap.heygen.canGenerate !== false;
-        const kreaCanGenerate = !!creditsMap.krea && creditsMap.krea.canGenerate !== false;
+        const runwayCanGenerate = !!creditsMap.runway && (
+          creditsMap.runway.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.runway.error)
+        );
+        const heygenCanGenerate = !!creditsMap.heygen && (
+          creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
+        );
+        const kreaCanGenerate = !!creditsMap.krea && (
+          creditsMap.krea.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.krea.error)
+        );
 
         heygenFallbackEnabled = heygenCanGenerate;
         kreaFallbackEnabled = kreaCanGenerate;
