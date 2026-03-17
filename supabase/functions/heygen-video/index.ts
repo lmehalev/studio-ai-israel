@@ -236,15 +236,31 @@ serve(async (req) => {
 
     // ====== Get remaining quota ======
     if (action === "get_quota") {
-      const response = await fetch(`${HEYGEN_API}/v1/user/remaining_quota`, {
-        headers: { "X-Api-Key": HEYGEN_API_KEY },
-      });
+      try {
+        const response = await fetch(`${HEYGEN_API}/v2/user/remaining_quota`, {
+          headers: { "X-Api-Key": HEYGEN_API_KEY },
+        });
 
-      const data = await response.json();
-      return new Response(
-        JSON.stringify({ quota: data.data || {} }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        if (!response.ok) {
+          const text = await response.text();
+          console.error("HeyGen quota error:", response.status, text.slice(0, 200));
+          return new Response(
+            JSON.stringify({ quota: { error: "לא ניתן לבדוק מכסה" } }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const data = await response.json();
+        return new Response(
+          JSON.stringify({ quota: data.data || data || {} }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ quota: { error: "שגיאה בבדיקת מכסה" } }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     return new Response(JSON.stringify({ error: "פעולה לא מוכרת" }), {
