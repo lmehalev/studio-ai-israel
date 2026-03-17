@@ -85,7 +85,7 @@ export default function CreativeStudioPage() {
       prompt = `${prompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.${subActivityContext}`;
     }
     if (trendKnowledge) {
-      prompt = `${prompt}\n\n--- טרנדים ויזואליים עדכניים (למד מהם וצור תוכן בסגנון דומה) ---\n${trendKnowledge}`;
+      prompt = `${prompt}\n\n--- השראות מטרנדים ויראליים עדכניים ---\nקח השראה מהמבנה, הסגנון הויזואלי, והמוזיקה של הטרנדים הבאים. אל תעתיק — תלמד מהם ותתאים לבריף.\nאם השתמשת בהשראה מטרנד מסוים, ציין זאת בתשובתך: "קיבלתי השראה מ: [שם הטרנד]".\n${trendKnowledge}`;
     }
     return prompt;
   };
