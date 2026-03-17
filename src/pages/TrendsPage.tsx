@@ -123,19 +123,20 @@ export default function TrendsPage() {
   const loadSavedTrends = async (category?: string) => {
     setSavedLoading(true);
     try {
-      let query = supabase
-        .from('saved_trends')
-        .select('*')
-        .order('fetched_at', { ascending: false })
-        .limit(50);
-      
+      let url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/saved_trends?select=*&order=fetched_at.desc&limit=50`;
       if (category) {
-        query = query.eq('category', category);
+        url += `&category=eq.${encodeURIComponent(category)}`;
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setSavedTrends((data as any[]) || []);
+      const res = await fetch(url, {
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to load saved trends');
+      const data = await res.json();
+      setSavedTrends(data || []);
     } catch (err: any) {
       console.error('Error loading saved trends:', err);
     } finally {
