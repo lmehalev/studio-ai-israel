@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TrendingUp, ExternalLink, Lightbulb, Search, RefreshCw, Eye, Flame } from 'lucide-react';
+import { TrendingUp, ExternalLink, Lightbulb, Search, RefreshCw, Eye, Flame, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface TrendItem {
@@ -17,6 +17,7 @@ interface TrendItem {
   url: string;
   views: string;
   tip: string;
+  visual_style?: string;
 }
 
 const INDUSTRY_PRESETS = [
@@ -179,6 +180,12 @@ export default function TrendsPage() {
                         <div className="flex items-start gap-1.5 bg-accent/50 rounded-lg p-2 mt-2">
                           <Lightbulb className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                           <p className="text-xs text-foreground">{trend.tip}</p>
+                        </div>
+                      )}
+                      {trend.visual_style && (
+                        <div className="flex items-start gap-1.5 bg-primary/5 rounded-lg p-2 mt-1">
+                          <Palette className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">סגנון ויזואלי:</span> {trend.visual_style}</p>
                         </div>
                       )}
                     </div>
