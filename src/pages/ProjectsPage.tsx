@@ -65,12 +65,12 @@ export default function ProjectsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-rubik font-bold">פרויקטים</h1>
+            <h1 className="text-xl md:text-2xl font-rubik font-bold">פרויקטים</h1>
             <p className="text-muted-foreground text-sm mt-1">{projects.length} פרויקטים במערכת</p>
           </div>
-          <Link to="/creative-studio" className="gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2">
+          <Link to="/creative-studio" className="gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 w-full sm:w-auto justify-center">
             <Building2 className="w-4 h-4" /> הוסף חברה
           </Link>
         </div>
