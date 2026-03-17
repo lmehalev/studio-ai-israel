@@ -347,14 +347,24 @@ serve(async (req) => {
 
     const promises: Promise<ServiceCredits>[] = [];
 
-    if (elevenLabsKey) promises.push(checkElevenLabs(elevenLabsKey));
-    if (heygenKey) promises.push(checkHeyGen(heygenKey));
-    if (runwayKey) promises.push(checkRunway(runwayKey));
-    if (shotstackKey) promises.push(checkShotstack(shotstackKey));
-    if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
-      promises.push(checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret));
+    if (elevenLabsKey) {
+      promises.push(withServiceTimeout("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, checkElevenLabs(elevenLabsKey)));
     }
-    if (kreaKey) promises.push(checkKrea(kreaKey));
+    if (heygenKey) {
+      promises.push(withServiceTimeout("heygen", "קרדיטים", "https://app.heygen.com/settings", checkHeyGen(heygenKey)));
+    }
+    if (runwayKey) {
+      promises.push(withServiceTimeout("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, checkRunway(runwayKey)));
+    }
+    if (shotstackKey) {
+      promises.push(withServiceTimeout("shotstack", "רינדורים", "https://dashboard.shotstack.io/", checkShotstack(shotstackKey)));
+    }
+    if (cloudinaryName && cloudinaryKey && cloudinarySecret) {
+      promises.push(withServiceTimeout("cloudinary", "% קרדיטים", "https://console.cloudinary.com/settings/account", checkCloudinary(cloudinaryName, cloudinaryKey, cloudinarySecret)));
+    }
+    if (kreaKey) {
+      promises.push(withServiceTimeout("krea", "קרדיטים", "https://krea.ai/account", checkKrea(kreaKey)));
+    }
 
     const settled = await Promise.allSettled(promises);
     for (const result of settled) {
