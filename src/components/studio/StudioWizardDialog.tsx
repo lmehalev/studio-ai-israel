@@ -438,9 +438,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       ],
       highlight: [
         { title: 'העלה תוכן', desc: 'העלה סרטונים ותמונות מהתוכן שלך' },
-        { title: 'מה הסרטון?', desc: 'תאר את הסרטון הקצר שתרצה לקבל' },
-        { title: 'יוצר סרטון ויראלי...', desc: 'מעבד, חותך ומרכיב את הסרטון' },
-        { title: 'התוצאה', desc: 'הסרטון הקצר שלך מוכן' },
+        { title: 'הגדר את הפלט', desc: 'בחר סוג סרטון ותאר מה אתה רוצה' },
+        { title: 'מעבד...', desc: 'חותך, מרכיב ומעצב את התוצר' },
+        { title: 'התוצאה', desc: 'התוצר שלך מוכן' },
       ],
     };
 
