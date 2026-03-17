@@ -383,15 +383,27 @@ export function VideoWizardFlow({
       const failedSceneIndexes: number[] = [];
 
       let forceDidOnlyMode = false;
+      let forceKreaOnlyMode = false;
       try {
         const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
-        const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
-        const didCanGenerate = creditsData?.heygen ? creditsData.heygen.canGenerate !== false : true;
+        const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
+        const creditsMap = Object.fromEntries(
+          creditItems
+            .filter((c: any) => typeof c?.service === 'string')
+            .map((c: any) => [c.service, c])
+        ) as Record<string, { canGenerate?: boolean }>;
+
+        const runwayCanGenerate = creditsMap.runway ? creditsMap.runway.canGenerate !== false : true;
+        const didCanGenerate = creditsMap.heygen ? creditsMap.heygen.canGenerate !== false : true;
+        const kreaCanGenerate = creditsMap.krea ? creditsMap.krea.canGenerate !== false : true;
 
         if (!runwayCanGenerate) {
           if (avatarImage && didCanGenerate) {
             forceDidOnlyMode = true;
             toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול אווטאר כדי לסיים את הסרטון.');
+          } else if (kreaCanGenerate) {
+            forceKreaOnlyMode = true;
+            toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול Krea וידאו אוטומטית.');
           } else {
             throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו. יש לחדש קרדיטים ואז לנסות שוב.');
           }
