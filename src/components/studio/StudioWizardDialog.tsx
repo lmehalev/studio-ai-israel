@@ -278,6 +278,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setCustomCategory('');
         setSessionRestoreOffered(false);
         setHasPendingSession(false);
+        setHighlightFiles([]);
+        setHighlightProgress(0);
+        setHighlightStage('');
       }, 300);
     }
   }, [open]);
