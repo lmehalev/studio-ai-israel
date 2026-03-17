@@ -446,21 +446,17 @@ export function VideoWizardFlow({
       };
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
-      const createDidSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        if (!normalizedAvatarUrl) {
-          throw new Error('אין אווטאר זמין למסלול חלופי');
-        }
-
-        const talkResult = await didService.createTalk(
-          normalizedAvatarUrl,
-          audioUrl ? undefined : sceneText,
-          undefined,
-          audioUrl
+      const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
+        const result = await heygenService.createVideo(
+          sceneText,
+          undefined, // avatarId - use default or selected
+          undefined, // voiceId
+          audioUrl,
         );
 
-        if (!talkResult?.id) throw new Error('D-ID error');
+        if (!result?.videoId) throw new Error('HeyGen error');
 
-        return waitForDidResult(talkResult.id, (p) => {
+        return waitForHeygenResult(result.videoId, (p) => {
           updateSceneProgress(sceneIdx, p);
         });
       };
