@@ -21,23 +21,25 @@ Deno.serve(async (req) => {
 
     const industryText = industry || 'שיווק דיגיטלי';
 
-    const prompt = `Find the 5-8 most viral videos and content from the past week in Israel in the field of "${industryText}".
+    const prompt = `אתה מומחה לטרנדים ויראליים ברשתות החברתיות. מצא בדיוק 10 טרנדים חזקים ואיכותיים מהשבוע האחרון בתחום "${industryText}".
 
-CRITICAL RULES:
-- ONLY include content with REAL, VERIFIED URLs that actually exist. Do NOT invent or guess URLs.
-- Every URL must come from your search sources/citations. If you cannot find a real URL, use the citation URL where you found the information.
-- Prefer direct links to the actual content (TikTok, Instagram, YouTube posts). If unavailable, link to the article/source discussing it.
+כללים קריטיים:
+- עדיפות לתוכן ישראלי בעברית. אם אין מספיק, אפשר להוסיף השראות מחו"ל שרלוונטיות לשוק הישראלי.
+- בדיוק 10 טרנדים - לא פחות ולא יותר.
+- רק תוכן שבאמת התפוצץ ויראלית - צפיות גבוהות, שיתופים, תגובות.
+- כל URL חייב להיות אמיתי ומאומת ממקורות החיפוש שלך. אם אין לך URL אמיתי, השתמש בURL של המקור/ציטוט.
+- הכל בעברית חוץ משמות פלטפורמות.
 
-For each item provide:
-1. title - in Hebrew
-2. description - in Hebrew, what the content shows and why it succeeded  
-3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn etc.
-4. url - the REAL original link (must be from your sources)
-5. views - estimated views/interactions as a string
-6. tip - in Hebrew, what can be learned for creating similar content, specifically tips for generating images and videos that match this trend style
-7. visual_style - in Hebrew, describe the visual style, colors, composition, camera angles, editing style that made this content successful
+לכל טרנד תן:
+1. title - כותרת קצרה ומושכת בעברית
+2. description - תיאור קצר בעברית: מה התוכן מראה, למה הוא הצליח, מה הקהל אהב
+3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn
+4. url - קישור אמיתי מהמקורות שלך
+5. views - מספר צפיות/אינטראקציות משוער
+6. tip - טיפ קריאייטיבי בעברית: איך ליצור תוכן דומה, עם דגש על סגנון צילום, עריכה, וטקסטים
+7. visual_style - תיאור הסגנון הויזואלי בעברית: צבעים, קומפוזיציה, זוויות צילום, סגנון עריכה, תאורה, טיפוגרפיה
 
-Return ONLY valid JSON, no extra text:
+החזר רק JSON תקין:
 {
   "trends": [
     {
@@ -50,7 +52,7 @@ Return ONLY valid JSON, no extra text:
       "visual_style": "..."
     }
   ],
-  "summary": "סיכום קצר בעברית של הטרנדים והסגנון הויזואלי השולט השבוע"
+  "summary": "סיכום של 2-3 משפטים בעברית על הטרנדים והסגנון הויזואלי השולט השבוע"
 }`;
 
     console.log('Fetching trends for industry:', industryText);
@@ -62,16 +64,16 @@ Return ONLY valid JSON, no extra text:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar',
+        model: 'sonar-pro',
         messages: [
           {
             role: 'system',
-            content: 'You are an expert on digital trends in Israel. Always respond in valid JSON only. CRITICAL: Only include URLs that come from your actual search results/citations. Never fabricate URLs. If you reference content, use the citation URL where you found it. Include visual style analysis for each trend.'
+            content: 'אתה מומחה בטרנדים דיגיטליים בישראל ובעולם. תמיד תענה ב-JSON תקין בלבד. קריטי: השתמש רק בURLים שמגיעים מתוצאות החיפוש שלך. אל תמציא URLים. תן בדיוק 10 טרנדים.'
           },
           { role: 'user', content: prompt }
         ],
         search_recency_filter: 'week',
-        temperature: 0.2,
+        temperature: 0.3,
       }),
     });
 
@@ -88,21 +90,17 @@ Return ONLY valid JSON, no extra text:
     const content = data.choices?.[0]?.message?.content || '';
     const citations = data.citations || [];
 
-    // Try to parse JSON from response
     let parsed;
     try {
-      // Remove code fences if present
       const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // If JSON parse fails, return raw content
       parsed = { trends: [], summary: content, raw: true };
     }
 
     // Replace fake URLs with citation URLs where possible
     if (parsed.trends && citations.length > 0) {
       parsed.trends = parsed.trends.map((trend: any, idx: number) => {
-        // If URL looks fake or is missing, use citation
         const url = trend.url || '';
         const isFake = !url || url === '#' || url.includes('example.com') || 
           (url.includes('tiktok.com') && url.includes('1234')) ||
@@ -113,6 +111,11 @@ Return ONLY valid JSON, no extra text:
         }
         return trend;
       });
+    }
+
+    // Limit to max 10 trends
+    if (parsed.trends && parsed.trends.length > 10) {
+      parsed.trends = parsed.trends.slice(0, 10);
     }
 
     console.log('Trends fetched successfully, count:', parsed.trends?.length || 0);
