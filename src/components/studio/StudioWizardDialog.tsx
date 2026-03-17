@@ -272,6 +272,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   const clearSession = () => {
     try { localStorage.removeItem(SESSION_KEY); } catch {}
+    try { localStorage.removeItem(VIDEO_SESSION_KEY); } catch {}
+    setVideoWizardSession(null);
   };
 
   // Reset when dialog closes — but don't clear session (only clear on explicit "start fresh")
