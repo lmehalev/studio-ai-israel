@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GuidedTour } from '@/components/GuidedTour';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
@@ -41,10 +41,45 @@ export default function CreativeStudioPage() {
       .catch(() => {});
   }, [searchParams]);
 
+  // Trend knowledge for prompts
+  const [trendKnowledge, setTrendKnowledge] = useState('');
+
+  // Load latest saved trends to enrich prompts
+  useEffect(() => {
+    const loadTrendKnowledge = async () => {
+      try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/saved_trends?select=tip,visual_style,category&order=fetched_at.desc&limit=20`;
+        const res = await fetch(url, {
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const tips = data
+            .filter((t: any) => t.tip || t.visual_style)
+            .slice(0, 10)
+            .map((t: any) => `[${t.category}] ${t.tip || ''} סגנון: ${t.visual_style || ''}`)
+            .join('\n');
+          setTrendKnowledge(tips);
+        }
+      } catch { /* silent */ }
+    };
+    loadTrendKnowledge();
+  }, []);
+
   const buildPrompt = (basePrompt: string) => {
-    if (!activeBrand) return basePrompt;
-    const subActivityContext = activeSubActivity ? ` תת-פעילות נבחרת: ${activeSubActivity}.` : '';
-    return `${basePrompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.${subActivityContext}`;
+    let prompt = basePrompt;
+    if (activeBrand) {
+      const subActivityContext = activeSubActivity ? ` תת-פעילות נבחרת: ${activeSubActivity}.` : '';
+      prompt = `${prompt}\n\nהנחיות מותג: ${activeBrand.name}. טון: ${activeBrand.tone}. קהל: ${activeBrand.targetAudience}. תחום: ${activeBrand.industry}.${subActivityContext}`;
+    }
+    if (trendKnowledge) {
+      prompt = `${prompt}\n\n--- טרנדים ויזואליים עדכניים (למד מהם וצור תוכן בסגנון דומה) ---\n${trendKnowledge}`;
+    }
+    return prompt;
   };
 
   const handleAddBrand = () => {
