@@ -14,53 +14,6 @@ const CATEGORIES = [
   'עמותות ומלכ"רים',
 ];
 
-async function ensureTable(supabaseUrl: string, serviceKey: string) {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS public.saved_trends (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      category text NOT NULL,
-      title text NOT NULL,
-      description text NOT NULL DEFAULT '',
-      platform text NOT NULL DEFAULT '',
-      url text NOT NULL DEFAULT '',
-      views text NOT NULL DEFAULT '',
-      tip text NOT NULL DEFAULT '',
-      visual_style text NOT NULL DEFAULT '',
-      summary text NOT NULL DEFAULT '',
-      fetched_at timestamptz NOT NULL DEFAULT now()
-    );
-    ALTER TABLE public.saved_trends ENABLE ROW LEVEL SECURITY;
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public select on saved_trends') THEN
-        CREATE POLICY "Allow public select on saved_trends" ON public.saved_trends FOR SELECT TO public USING (true);
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public insert on saved_trends') THEN
-        CREATE POLICY "Allow public insert on saved_trends" ON public.saved_trends FOR INSERT TO public WITH CHECK (true);
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_trends' AND policyname = 'Allow public delete on saved_trends') THEN
-        CREATE POLICY "Allow public delete on saved_trends" ON public.saved_trends FOR DELETE TO public USING (true);
-      END IF;
-    END $$;
-  `;
-
-  const dbUrl = Deno.env.get('SUPABASE_DB_URL');
-  if (!dbUrl) {
-    console.warn('SUPABASE_DB_URL not set, skipping table creation');
-    return;
-  }
-
-  // Use the Supabase REST API to run SQL
-  const res = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${serviceKey}`,
-      'apikey': serviceKey,
-      'Content-Type': 'application/json',
-    },
-  });
-  console.log('Table ensure attempted');
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -98,22 +51,28 @@ Deno.serve(async (req) => {
     try {
       console.log(`Fetching trends for: ${category}`);
 
-      const prompt = `Find the 5 most viral videos and content from the past 3 days in Israel in the field of "${category}".
+      // Delete existing trends for this category before inserting new ones
+      await supabase.from('saved_trends').delete().eq('category', category);
 
-CRITICAL RULES:
-- ONLY include content with REAL, VERIFIED URLs from your search sources/citations.
-- Every URL must come from your actual search results. If unavailable, use the citation URL.
+      const prompt = `אתה מומחה לטרנדים ויראליים ברשתות החברתיות. מצא בדיוק 10 טרנדים חזקים ואיכותיים מהשבוע האחרון בתחום "${category}".
 
-For each item provide:
-1. title - in Hebrew
-2. description - in Hebrew, what the content shows and why it succeeded
-3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn etc.
-4. url - the REAL original link (must be from your sources)
-5. views - estimated views/interactions as a string
-6. tip - in Hebrew, actionable tip for creating similar content, focusing on image/video generation techniques
-7. visual_style - in Hebrew, describe colors, composition, camera angles, editing style, lighting, typography
+כללים קריטיים:
+- עדיפות לתוכן ישראלי בעברית. אם אין מספיק, אפשר להוסיף השראות מחו"ל שרלוונטיות לשוק הישראלי.
+- בדיוק 10 טרנדים - לא פחות ולא יותר.
+- רק תוכן שבאמת התפוצץ ויראלית - צפיות גבוהות, שיתופים, תגובות.
+- כל URL חייב להיות אמיתי ומאומת ממקורות החיפוש שלך.
+- הכל בעברית חוץ משמות פלטפורמות.
 
-Return ONLY valid JSON:
+לכל טרנד תן:
+1. title - כותרת קצרה ומושכת בעברית
+2. description - תיאור קצר בעברית: מה התוכן מראה, למה הוא הצליח
+3. platform - TikTok, Instagram, YouTube, Facebook, LinkedIn
+4. url - קישור אמיתי מהמקורות שלך
+5. views - מספר צפיות/אינטראקציות משוער
+6. tip - טיפ קריאייטיבי בעברית: איך ליצור תוכן דומה, עם דגש על סגנון צילום, עריכה, וטקסטים
+7. visual_style - תיאור הסגנון הויזואלי בעברית: צבעים, קומפוזיציה, זוויות צילום, סגנון עריכה
+
+החזר רק JSON תקין:
 {
   "trends": [
     { "title": "...", "description": "...", "platform": "...", "url": "...", "views": "...", "tip": "...", "visual_style": "..." }
@@ -128,13 +87,13 @@ Return ONLY valid JSON:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'sonar',
+          model: 'sonar-pro',
           messages: [
-            { role: 'system', content: 'You are an expert on digital trends in Israel. Always respond in valid JSON only. CRITICAL: Only include URLs from your actual search results/citations. Never fabricate URLs.' },
+            { role: 'system', content: 'אתה מומחה בטרנדים דיגיטליים בישראל ובעולם. תמיד תענה ב-JSON תקין בלבד. קריטי: השתמש רק בURLים מתוצאות החיפוש שלך. תן בדיוק 10 טרנדים.' },
             { role: 'user', content: prompt }
           ],
           search_recency_filter: 'week',
-          temperature: 0.2,
+          temperature: 0.3,
         }),
       });
 
@@ -168,8 +127,11 @@ Return ONLY valid JSON:
         return trend;
       });
 
+      // Limit to 10
+      const trendsToSave = parsed.trends.slice(0, 10);
+
       // Save each trend
-      for (const trend of parsed.trends) {
+      for (const trend of trendsToSave) {
         const { error } = await supabase.from('saved_trends').insert({
           category,
           title: trend.title || '',
@@ -184,8 +146,8 @@ Return ONLY valid JSON:
         if (error) console.error('Insert error:', error.message);
       }
 
-      results.push({ category, count: parsed.trends.length });
-      console.log(`Saved ${parsed.trends.length} trends for ${category}`);
+      results.push({ category, count: trendsToSave.length });
+      console.log(`Saved ${trendsToSave.length} trends for ${category}`);
 
     } catch (err) {
       console.error(`Error processing ${category}:`, err);
