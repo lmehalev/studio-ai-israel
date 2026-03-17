@@ -84,9 +84,25 @@ const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
 const HEYGEN_MAX_POLL_ATTEMPTS = 180;
+const CREDITS_CHECK_TIMEOUT_MS = 8000;
 
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 const isRunwayCreditsErrorMessage = (value: unknown): boolean => {
   const message = typeof value === 'string' ? value.toLowerCase() : '';
@@ -107,6 +123,28 @@ const isKreaCreditsErrorMessage = (value: unknown): boolean => {
     message.includes('krea video error: 402') ||
     message.includes('אין מספיק קרדיט') ||
     message.includes('נגמרו הקרדיטים')
+  );
+};
+
+const isProviderConfigErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    message.includes('not configured') ||
+    message.includes('לא מוגדר') ||
+    message.includes('missing') ||
+    message.includes('מפתח')
+  );
+};
+
+const isHeygenUnavailableErrorMessage = (value: unknown): boolean => {
+  const message = typeof value === 'string' ? value.toLowerCase() : '';
+  return (
+    isProviderConfigErrorMessage(value) ||
+    message.includes('quota') ||
+    message.includes('insufficient') ||
+    message.includes('credit') ||
+    message.includes('403') ||
+    message.includes('401')
   );
 };
 
