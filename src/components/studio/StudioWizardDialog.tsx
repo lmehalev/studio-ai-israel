@@ -1088,8 +1088,7 @@ ${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.in
                   const composeResult = await composeService.render({
                     scenes,
                     audioUrl: audioUrl || undefined,
-                    subtitles: [],
-                    logoUrl: activeBrand?.logoUrl || undefined,
+                    subtitleSegments: [],
                   });
 
                   if (composeResult?.renderId) {
