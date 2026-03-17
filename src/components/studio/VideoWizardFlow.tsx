@@ -386,7 +386,7 @@ export function VideoWizardFlow({
       try {
         const { data: creditsData } = await supabase.functions.invoke('check-credits', { body: {} });
         const runwayCanGenerate = creditsData?.runway ? creditsData.runway.canGenerate !== false : true;
-        const didCanGenerate = creditsData?.did ? creditsData.did.canGenerate !== false : true;
+        const didCanGenerate = creditsData?.heygen ? creditsData.heygen.canGenerate !== false : true;
 
         if (!runwayCanGenerate) {
           if (avatarImage && didCanGenerate) {

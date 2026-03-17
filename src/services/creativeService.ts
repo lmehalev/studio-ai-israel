@@ -80,7 +80,7 @@ export const voiceService = {
 
   /**
    * Generate TTS and upload to cloud storage, returning a public URL
-   * suitable for use with Shotstack / D-ID compositing.
+   * suitable for use with Shotstack / HeyGen compositing.
    */
   generateAndUpload: async (text: string, voiceId?: string): Promise<string> => {
     const normalizedText = text.replace(/\s+/g, ' ').trim();
