@@ -201,19 +201,19 @@ export default function TrendsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6" dir="rtl">
+      <div className="max-w-5xl mx-auto space-y-4 md:space-y-6" dir="rtl">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl gradient-gold flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl gradient-gold flex items-center justify-center flex-shrink-0">
               <Flame className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">טרנדים חזקים היום</h1>
-              <p className="text-sm text-muted-foreground">גלה מה מתפוצץ ברשת — המערכת לומדת ומשתפרת כל יום</p>
+              <h1 className="text-xl md:text-2xl font-bold text-foreground">טרנדים חזקים היום</h1>
+              <p className="text-xs md:text-sm text-muted-foreground">גלה מה מתפוצץ ברשת — המערכת לומדת ומשתפרת כל יום</p>
             </div>
           </div>
-          <Button variant="outline" onClick={triggerAutoFetch} disabled={loading} className="gap-2">
+          <Button variant="outline" onClick={triggerAutoFetch} disabled={loading} className="gap-2 w-full sm:w-auto">
             <Database className="w-4 h-4" />
             עדכן את כל הקטגוריות
           </Button>

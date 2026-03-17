@@ -1272,7 +1272,7 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] md:max-h-[85vh] overflow-y-auto w-[95vw] md:w-full" dir="rtl">
         <DialogHeader>
           <div className="flex items-center gap-3">
             {step > 0 && (
