@@ -99,7 +99,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [subtitleOffset, setSubtitleOffset] = useState(0.3);
   const [subtitleFontClass, setSubtitleFontClass] = useState<string>('font-heebo');
 
-  // Avatar & Voice selection
+  // Highlight (long → short viral video)
+  const [highlightFiles, setHighlightFiles] = useState<string[]>([]);
+  const [highlightProgress, setHighlightProgress] = useState(0);
+  const [highlightStage, setHighlightStage] = useState('');
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
   interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
