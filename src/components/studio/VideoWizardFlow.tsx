@@ -668,6 +668,90 @@ export function VideoWizardFlow({
 
       let runwayBlocked = forceDidOnlyMode || forceKreaOnlyMode;
 
+      // Universal fallback function — tries all available providers in order
+      const generateSceneWithFallbacks = async (
+        scene: ScriptScene, sceneIdx: number, sceneDuration: number, scenePrompt: string
+      ): Promise<string> => {
+        const errors: string[] = [];
+
+        // Provider 1: Runway (if not blocked)
+        if (!runwayBlocked) {
+          try {
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Runway...`);
+            if (normalizedAvatarUrl && sceneIdx === 0) {
+              const taskData = await withTimeout(
+                runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration),
+                30000, 'Runway image-to-video timeout'
+              );
+              return await waitForRunwayResult(taskData.taskId, (p) => updateSceneProgress(sceneIdx, p));
+            } else {
+              const taskData = await withTimeout(
+                runwayService.textToVideo(scenePrompt, undefined, sceneDuration),
+                30000, 'Runway text-to-video timeout'
+              );
+              return await waitForRunwayResult(taskData.taskId, (p) => updateSceneProgress(sceneIdx, p));
+            }
+          } catch (runwayErr: any) {
+            const msg = runwayErr?.message || '';
+            errors.push(`Runway: ${msg}`);
+            console.warn(`Scene ${sceneIdx + 1} Runway failed:`, msg);
+            if (isRunwayCreditsErrorMessage(msg)) {
+              runwayBlocked = true;
+              toast.warning('Runway לא זמין, עובר לספק חלופי...');
+            }
+          }
+        }
+
+        // Provider 2: HeyGen (avatar-based video)
+        if (heygenFallbackEnabled) {
+          try {
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם HeyGen...`);
+            return await withTimeout(
+              createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl),
+              120000, 'HeyGen timeout'
+            );
+          } catch (heygenErr: any) {
+            const msg = heygenErr?.message || '';
+            errors.push(`HeyGen: ${msg}`);
+            console.warn(`Scene ${sceneIdx + 1} HeyGen failed:`, msg);
+            if (isHeygenUnavailableErrorMessage(msg) || hasTimeoutErrorMessage(msg)) {
+              heygenFallbackEnabled = false;
+            }
+          }
+        }
+
+        // Provider 3: Krea (direct video generation)
+        if (kreaFallbackEnabled) {
+          try {
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Krea...`);
+            return await withTimeout(
+              createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration),
+              60000, 'Krea timeout'
+            );
+          } catch (kreaErr: any) {
+            const msg = kreaErr?.message || '';
+            errors.push(`Krea: ${msg}`);
+            console.warn(`Scene ${sceneIdx + 1} Krea failed:`, msg);
+            if (isKreaCreditsErrorMessage(msg)) {
+              kreaFallbackEnabled = false;
+            }
+          }
+        }
+
+        // Provider 4: AI Image + Animation (last resort — always available)
+        try {
+          setProgressStage(`סצנה ${sceneIdx + 1}: מייצר תמונת AI + אנימציה...`);
+          return await withTimeout(
+            createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration),
+            60000, 'AI Image timeout'
+          );
+        } catch (aiErr: any) {
+          errors.push(`AI Image: ${aiErr?.message || 'unknown'}`);
+        }
+
+        throw new Error(`כל הספקים נכשלו בסצנה ${sceneIdx + 1}: ${errors.join(' | ')}`);
+      };
+
       for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
         const scene = workingScenes[sceneIdx];
         const sceneNum = sceneIdx + 1;
@@ -677,82 +761,7 @@ export function VideoWizardFlow({
         const scenePrompt = buildRunwayPromptForScene(scene);
 
         try {
-          let clipUrl: string;
-
-          if (runwayBlocked && heygenFallbackEnabled) {
-            try {
-              clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
-            } catch (heygenErr: any) {
-              if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
-                heygenFallbackEnabled = false;
-              }
-
-              if (kreaFallbackEnabled) {
-                clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
-              } else {
-                clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
-              }
-            }
-          } else if (runwayBlocked && kreaFallbackEnabled) {
-            try {
-              clipUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
-            } catch (ke: any) {
-              if (isKreaCreditsErrorMessage(ke?.message)) kreaFallbackEnabled = false;
-              clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
-            }
-          } else if (runwayBlocked) {
-            clipUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
-          } else if (normalizedAvatarUrl && sceneIdx === 0) {
-            // First scene with avatar → try HeyGen first
-            try {
-              clipUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
-            } catch {
-              // Fallback to Runway image-to-video
-              try {
-                const taskData = await runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration);
-                clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-                  updateSceneProgress(sceneIdx, p);
-                });
-              } catch {
-                const emergencyPrompt = toRunwayPrompt([
-                  scene.title,
-                  scene.spokenText,
-                  activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
-                ].filter(Boolean).join('. '));
-                const emergencyTask = await runwayService.textToVideo(emergencyPrompt, undefined, sceneDuration);
-                clipUrl = await waitForRunwayResult(emergencyTask.taskId, (p) => {
-                  updateSceneProgress(sceneIdx, p);
-                });
-              }
-            }
-          } else {
-            // Cinematic scene via Runway
-            try {
-              const taskData = await runwayService.textToVideo(scenePrompt, undefined, sceneDuration);
-              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => {
-                updateSceneProgress(sceneIdx, p);
-              });
-            } catch {
-              try {
-                const fallbackPrompt = toRunwayPrompt([
-                  scene.title,
-                  scene.spokenText,
-                  activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
-                ].filter(Boolean).join('. '));
-
-                const fallbackTask = await runwayService.textToVideo(fallbackPrompt, undefined, sceneDuration);
-                clipUrl = await waitForRunwayResult(fallbackTask.taskId, (p) => {
-                  updateSceneProgress(sceneIdx, p);
-                });
-              } catch {
-                const emergencyPrompt = toRunwayPrompt(`Cinematic scene. ${scene.spokenText || scene.title}`);
-                const emergencyTask = await runwayService.textToVideo(emergencyPrompt, undefined, sceneDuration);
-                clipUrl = await waitForRunwayResult(emergencyTask.taskId, (p) => {
-                  updateSceneProgress(sceneIdx, p);
-                });
-              }
-            }
-          }
+          const clipUrl = await generateSceneWithFallbacks(scene, sceneIdx, sceneDuration, scenePrompt);
 
           sceneResults[sceneIdx] = {
             url: clipUrl,
@@ -761,71 +770,10 @@ export function VideoWizardFlow({
           toast.success(`סצנה ${sceneNum} מוכנה!`);
         } catch (sceneErr: any) {
           const errMsg = sceneErr?.message || 'שגיאה לא ידועה';
-
-          if (isRunwayCreditsErrorMessage(errMsg)) {
-            runwayBlocked = true;
-
-            if (heygenFallbackEnabled) {
-              toast.warning('נגמרו הקרדיטים ל-Runway, ממשיכים אוטומטית למסלול HeyGen.');
-              try {
-                const heygenFallbackUrl = await createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl);
-                sceneResults[sceneIdx] = {
-                  url: heygenFallbackUrl,
-                  scene: { ...scene, duration: sceneDuration },
-                };
-                toast.success(`סצנה ${sceneNum} הושלמה במסלול HeyGen`);
-                continue;
-              } catch (heygenErr: any) {
-                if (isHeygenUnavailableErrorMessage(heygenErr?.message)) {
-                  heygenFallbackEnabled = false;
-                }
-                // Continue to Krea fallback
-              }
-            }
-
-            if (kreaFallbackEnabled) {
-              try {
-                toast.warning('ממשיך אוטומטית למסלול Krea וידאו...');
-                const kreaUrl = await createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration);
-                sceneResults[sceneIdx] = {
-                  url: kreaUrl,
-                  scene: { ...scene, duration: sceneDuration },
-                };
-                toast.success(`סצנה ${sceneNum} הושלמה במסלול Krea`);
-                continue;
-              } catch (kreaErr: any) {
-                if (isKreaCreditsErrorMessage(kreaErr?.message)) {
-                  kreaFallbackEnabled = false;
-                }
-                // Don't throw yet — try AI image-to-video as last resort
-              }
-            }
-
-            // Last resort: generate AI image then animate
-            try {
-              toast.info('מנסה מסלול חלופי אחרון: תמונת AI + אנימציה...');
-              const aiVideoUrl = await createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration);
-              sceneResults[sceneIdx] = {
-                url: aiVideoUrl,
-                scene: { ...scene, duration: sceneDuration },
-              };
-              toast.success(`סצנה ${sceneNum} הושלמה במסלול AI`);
-              continue;
-            } catch {
-              // All fallbacks exhausted
-            }
-
-            throw new Error('כל ספקי הווידאו (Runway/HeyGen/Krea) אינם זמינים כרגע. יש לחדש קרדיטים באחד מהספקים.');
-          }
-
-          if (isKreaCreditsErrorMessage(errMsg)) {
-            kreaFallbackEnabled = false;
-          }
-
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
           failedSceneIndexes.push(sceneIdx);
-          console.error(`Scene ${sceneNum} failed:`, errMsg);
-          toast.error(`סצנה ${sceneNum} נכשלה — מבצע ניסיון נוסף...`);
+          console.error(`Scene ${sceneNum} all providers failed:`, errMsg);
+          toast.error(`סצנה ${sceneNum} נכשלה — ${errMsg}`);
         }
       }
 
