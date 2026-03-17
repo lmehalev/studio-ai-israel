@@ -847,8 +847,13 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           buildPrompt={buildPrompt}
           initialCategory={initialCategory}
           brandDepartments={brandDepartments}
-          onBack={() => { setSelectedAction(null); setStep(0); }}
+          onBack={() => { setSelectedAction(null); setStep(0); setVideoWizardSession(null); }}
           onClose={() => onOpenChange(false)}
+          restoredSession={videoWizardSession}
+          onSessionChange={(session) => {
+            setVideoWizardSession(session);
+            try { localStorage.setItem(VIDEO_SESSION_KEY, JSON.stringify(session)); } catch {}
+          }}
         />
       );
     }
