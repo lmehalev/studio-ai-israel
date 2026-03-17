@@ -190,6 +190,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // Session persistence key
   const SESSION_KEY = 'studio_wizard_session';
 
+  // Video wizard sub-session (stored separately due to size)
+  const VIDEO_SESSION_KEY = 'studio_video_wizard_session';
+  const [videoWizardSession, setVideoWizardSession] = useState<VideoWizardSession | null>(null);
+
   // Save session to localStorage on meaningful state changes
   useEffect(() => {
     if (!open) return;
@@ -197,10 +201,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     const session = {
       selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
       importUrl, importType, selectedAvatarId, selectedVoiceId,
-      selectedCategory, customCategory, timestamp: Date.now(),
+      selectedCategory, customCategory, highlightFiles, highlightOutputType,
+      timestamp: Date.now(),
     };
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
-  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory]);
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {
+      // localStorage might be full — try removing large data URLs
+      try {
+        const lite = { ...session, result: null, imageRefPhotos: [], editHistory: [] };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(lite));
+      } catch {}
+    }
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
 
   // Restore session when dialog opens
   const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
