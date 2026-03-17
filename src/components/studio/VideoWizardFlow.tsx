@@ -1223,11 +1223,14 @@ export function VideoWizardFlow({
                     ))}
                   </div>
                 )}
-                {websiteData.screenshot && (
-                  <div className="rounded-lg overflow-hidden border border-border max-h-32">
-                    <img src={`data:image/png;base64,${websiteData.screenshot}`} alt="צילום מסך" className="w-full object-cover object-top" />
-                  </div>
-                )}
+                {(() => {
+                  const imgUrl = websiteScraperService.getScreenshotUrl(websiteData);
+                  return imgUrl ? (
+                    <div className="rounded-lg overflow-hidden border border-border max-h-40">
+                      <img src={imgUrl} alt="צילום מסך" className="w-full object-cover object-top" />
+                    </div>
+                  ) : null;
+                })()}
               </div>
             ) : (
               <div className="flex gap-2">
