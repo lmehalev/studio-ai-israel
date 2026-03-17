@@ -473,7 +473,21 @@ export function VideoWizardFlow({
         });
       };
 
-      let runwayBlocked = forceDidOnlyMode;
+      const createKreaSceneClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
+        updateSceneProgress(sceneIdx, 5);
+        const kreaResult = await kreaService.generateVideo(scenePrompt, {
+          model: 'kling-2.5',
+          width: 1280,
+          height: 720,
+          duration: Math.max(5, Math.min(10, sceneDuration)),
+          imageUrl: uploadedImages[0],
+        });
+        updateSceneProgress(sceneIdx, 100);
+        if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
+        return kreaResult.videoUrl;
+      };
+
+      let runwayBlocked = forceDidOnlyMode || forceKreaOnlyMode;
 
       for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
         const scene = workingScenes[sceneIdx];
