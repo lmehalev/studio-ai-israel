@@ -1,11 +1,13 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2 } from 'lucide-react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService, storageService } from '@/services/creativeService';
 import { supabase } from '@/integrations/supabase/client';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
+import { StoragePicker } from '@/components/StoragePicker';
+import { CameraCaptureButton } from '@/components/CameraCaptureButton';
 
 const MAX_PHOTOS = 7;
 
@@ -43,10 +45,13 @@ const EXPRESSION_OPTIONS = [
   { value: 'thinking', label: '🤔 מהרהר', desc: 'מבט מחשבתי, הטיית ראש קלה' },
 ];
 
+type CreationMode = 'photo' | 'prompt';
+
 export default function AvatarsManagePage() {
   const [avatars, setAvatars] = useState<SavedAvatar[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [creationMode, setCreationMode] = useState<CreationMode>('photo');
   const [name, setName] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [style, setStyle] = useState('professional headshot');
@@ -54,12 +59,18 @@ export default function AvatarsManagePage() {
   const [generating, setGenerating] = useState(false);
   const [baseAvatarId, setBaseAvatarId] = useState('');
 
+  // Text prompt mode
+  const [textPrompt, setTextPrompt] = useState('');
+
   // Preview & Refine state
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [refinePrompt, setRefinePrompt] = useState('');
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewHistory, setPreviewHistory] = useState<string[]>([]);
+
+  // Storage picker
+  const [storagePickerOpen, setStoragePickerOpen] = useState(false);
 
   useEffect(() => { loadAvatars(); }, []);
 
@@ -85,30 +96,46 @@ export default function AvatarsManagePage() {
   const mergedReferencePreview = Array.from(new Set([...baseReferences, ...photos])).slice(0, MAX_PHOTOS);
   const remainingPhotoSlots = Math.max(0, MAX_PHOTOS - mergedReferencePreview.length);
 
-  // Step 1: Generate preview (don't save yet)
+  // Generate from photos (allows 1+ photos now)
   const handleGenerate = async () => {
     if (!name.trim()) { toast.error('יש להזין שם לאווטאר'); return; }
-    if (mergedReferencePreview.length < 3) {
-      toast.error('לדיוק פנים גבוה חייבים לפחות 3 תמונות מזוויות שונות (מומלץ 4-7)');
+    if (creationMode === 'photo' && mergedReferencePreview.length < 1) {
+      toast.error('יש להעלות לפחות תמונה אחת');
+      return;
+    }
+    if (creationMode === 'prompt' && !textPrompt.trim()) {
+      toast.error('יש להזין תיאור לדמות');
       return;
     }
 
     setGenerating(true);
     try {
-      const result = await avatarGenService.generate(mergedReferencePreview, style, {
-        baseAvatarUrl: selectedBaseAvatar?.image_url,
-        strictIdentity: true,
-        expression,
-      });
-      if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
-      setPreviewUrl(result.imageUrl);
-      setPreviewHistory([result.imageUrl]);
-      toast.success('האווטאר נוצר! בדוק את התוצאה ושמור או שפר.');
+      if (creationMode === 'prompt') {
+        // Generate from text description using image generation
+        const styleLabel = STYLE_OPTIONS.find(s => s.value === style)?.desc || style;
+        const expLabel = EXPRESSION_OPTIONS.find(e => e.value === expression)?.desc || expression;
+        const fullPrompt = `Create a portrait/avatar of a character: ${textPrompt}. Style: ${styleLabel}. Expression: ${expLabel}. High quality, detailed face, centered composition, clean background.`;
+        const result = await imageService.generate(fullPrompt);
+        if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
+        setPreviewUrl(result.imageUrl);
+        setPreviewHistory([result.imageUrl]);
+        toast.success('האווטאר נוצר! בדוק את התוצאה ושמור או שפר.');
+      } else {
+        // Photo-based generation
+        const result = await avatarGenService.generate(mergedReferencePreview, style, {
+          baseAvatarUrl: selectedBaseAvatar?.image_url,
+          strictIdentity: mergedReferencePreview.length >= 3,
+          expression,
+        });
+        if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
+        setPreviewUrl(result.imageUrl);
+        setPreviewHistory([result.imageUrl]);
+        toast.success('האווטאר נוצר! בדוק את התוצאה ושמור או שפר.');
+      }
     } catch (e: any) { toast.error(e.message); }
     finally { setGenerating(false); }
   };
 
-  // Step 2a: Refine with text instruction
   const handleRefine = async () => {
     if (!refinePrompt.trim() || !previewUrl) return;
     setRefining(true);
@@ -126,7 +153,6 @@ export default function AvatarsManagePage() {
     finally { setRefining(false); }
   };
 
-  // Step 2b: Regenerate from scratch
   const handleRegenerate = async () => {
     setPreviewUrl(null);
     setPreviewHistory([]);
@@ -134,21 +160,17 @@ export default function AvatarsManagePage() {
     await handleGenerate();
   };
 
-  // Step 3: Save to DB
   const handleSave = async () => {
     if (!previewUrl) return;
     setSaving(true);
     try {
       let finalImageUrl = previewUrl;
-
-      // Ensure avatar is saved as a public image URL (not data URL)
       if (finalImageUrl.startsWith('data:image/')) {
         const res = await fetch(finalImageUrl);
         const blob = await res.blob();
         const file = new File([blob], `avatar-${Date.now()}.jpg`, { type: 'image/jpeg' });
         finalImageUrl = await storageService.upload(file);
       }
-
       const saved = await avatarDbService.save(name, finalImageUrl, style, mergedReferencePreview);
       setAvatars((prev) => [saved, ...prev]);
       resetForm();
@@ -161,13 +183,13 @@ export default function AvatarsManagePage() {
     setCreating(false);
     setName(''); setPhotos([]); setStyle('professional headshot'); setExpression('neutral');
     setBaseAvatarId(''); setPreviewUrl(null); setPreviewHistory([]); setRefinePrompt('');
+    setTextPrompt(''); setCreationMode('photo');
   };
 
   const handleDelete = async (id: string) => {
     try {
       const avatar = avatars.find(a => a.id === id);
       await avatarDbService.remove(id);
-      // Also delete avatar image and source photos from storage
       if (avatar) {
         const filesToDelete: string[] = [];
         const extractPath = (url: string) => {
@@ -193,6 +215,7 @@ export default function AvatarsManagePage() {
 
   const startVariationFromAvatar = (avatar: SavedAvatar) => {
     setCreating(true);
+    setCreationMode('photo');
     setBaseAvatarId(avatar.id);
     setName(`${avatar.name} - וריאציה`);
     setStyle('disney hand-drawn classic animation style');
@@ -204,6 +227,24 @@ export default function AvatarsManagePage() {
 
   const selectedStyleObj = STYLE_OPTIONS.find((s) => s.value === style);
   const selectedExpressionObj = EXPRESSION_OPTIONS.find((e) => e.value === expression);
+
+  const addPhotoFromStorage = (urls: string[]) => {
+    setPhotos(prev => {
+      const merged = Array.from(new Set([...baseReferences, ...prev, ...urls])).slice(0, MAX_PHOTOS);
+      return merged.filter(item => !baseReferences.includes(item));
+    });
+  };
+
+  const addPhotoFromCamera = (url: string) => {
+    setPhotos(prev => {
+      const merged = Array.from(new Set([...baseReferences, ...prev, url])).slice(0, MAX_PHOTOS);
+      return merged.filter(item => !baseReferences.includes(item));
+    });
+  };
+
+  const canGenerate = creationMode === 'prompt'
+    ? name.trim() && textPrompt.trim()
+    : name.trim() && mergedReferencePreview.length >= 1;
 
   return (
     <AppLayout>
@@ -233,7 +274,6 @@ export default function AvatarsManagePage() {
             {/* ===== PREVIEW MODE ===== */}
             {previewUrl ? (
               <div className="space-y-4">
-                {/* Version history */}
                 {previewHistory.length > 1 && (
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {previewHistory.map((url, i) => (
@@ -245,12 +285,10 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                {/* Main preview */}
                 <div className="rounded-xl overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
                   <img src={previewUrl} alt="תצוגה מקדימה" className="max-w-full max-h-[400px] object-contain" />
                 </div>
 
-                {/* Refine section */}
                 <div className="bg-muted/30 rounded-xl border border-border p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -277,7 +315,6 @@ export default function AvatarsManagePage() {
                   </button>
                 </div>
 
-                {/* Action buttons */}
                 <div className="flex gap-3">
                   <button onClick={handleRegenerate} disabled={generating}
                     className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
@@ -303,17 +340,61 @@ export default function AvatarsManagePage() {
                   </div>
                 </div>
 
-                {/* Base avatar */}
+                {/* Creation mode toggle */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">שכפול מאווטאר קיים (אופציונלי)</label>
-                  <select value={baseAvatarId} onChange={(e) => setBaseAvatarId(e.target.value)} className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                    <option value="">ללא שכפול - אעלה תמונות ידנית</option>
-                    {avatars.map((avatar) => (<option key={avatar.id} value={avatar.id}>{avatar.name}</option>))}
-                  </select>
-                  {selectedBaseAvatar && (
-                    <p className="text-xs text-primary mt-2">🔁 בסיס נבחר: {selectedBaseAvatar.name} — המערכת תשתמש אוטומטית בתמונות המקור שלו לדיוק גבוה.</p>
-                  )}
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">מצב יצירה</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setCreationMode('photo')}
+                      className={`p-3 rounded-lg border text-sm text-right transition-all flex items-center gap-2 ${creationMode === 'photo' ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'border-border bg-muted/30 hover:bg-muted/60'}`}>
+                      <Camera className="w-5 h-5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold">מתמונות</div>
+                        <div className="text-[10px] text-muted-foreground">העלה תמונה אחת או יותר</div>
+                      </div>
+                    </button>
+                    <button onClick={() => setCreationMode('prompt')}
+                      className={`p-3 rounded-lg border text-sm text-right transition-all flex items-center gap-2 ${creationMode === 'prompt' ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'border-border bg-muted/30 hover:bg-muted/60'}`}>
+                      <MessageSquare className="w-5 h-5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold">מתיאור טקסט</div>
+                        <div className="text-[10px] text-muted-foreground">תאר דמות ו-AI ייצור אותה</div>
+                      </div>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Text prompt mode */}
+                {creationMode === 'prompt' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-medium text-muted-foreground">תאר את הדמות</label>
+                      <VoiceDictationButton onResult={(text) => setTextPrompt(prev => prev ? prev + ' ' + text : text)} />
+                    </div>
+                    <textarea
+                      value={textPrompt}
+                      onChange={e => setTextPrompt(e.target.value)}
+                      onKeyDown={e => e.stopPropagation()}
+                      rows={3}
+                      dir="rtl"
+                      placeholder='למשל: "אישה בת 30, שיער חום ארוך, עיניים ירוקות, חיוך חם, לובשת חולצה לבנה"'
+                      className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                )}
+
+                {/* Photo mode - base avatar */}
+                {creationMode === 'photo' && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">שכפול מאווטאר קיים (אופציונלי)</label>
+                    <select value={baseAvatarId} onChange={(e) => setBaseAvatarId(e.target.value)} className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                      <option value="">ללא שכפול - אעלה תמונות ידנית</option>
+                      {avatars.map((avatar) => (<option key={avatar.id} value={avatar.id}>{avatar.name}</option>))}
+                    </select>
+                    {selectedBaseAvatar && (
+                      <p className="text-xs text-primary mt-2">🔁 בסיס נבחר: {selectedBaseAvatar.name} — המערכת תשתמש אוטומטית בתמונות המקור שלו.</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Style */}
                 <div>
@@ -343,64 +424,81 @@ export default function AvatarsManagePage() {
                   </div>
                 </div>
 
-                {/* Photos */}
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    תמונות רפרנס כולל ({mergedReferencePreview.length}/{MAX_PHOTOS})
-                  </label>
-                  {selectedBaseAvatar && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-primary/40">
-                        <img src={selectedBaseAvatar.image_url} alt={selectedBaseAvatar.name} className="w-full h-full object-cover" />
-                        <div className="absolute bottom-0 inset-x-0 text-[9px] text-center bg-background/80 text-foreground py-0.5">בסיס</div>
-                      </div>
-                    </div>
-                  )}
-                  {photos.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {photos.map((url, i) => (
-                        <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border">
-                          <img src={url} alt={`ref ${i + 1}`} className="w-full h-full object-cover" />
-                          <button onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <X className="w-3 h-3" />
-                          </button>
+                {/* Photos section - only in photo mode */}
+                {creationMode === 'photo' && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      תמונות רפרנס ({mergedReferencePreview.length}/{MAX_PHOTOS}) — מינימום 1, מומלץ 3-7 לדיוק גבוה
+                    </label>
+                    {selectedBaseAvatar && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-primary/40">
+                          <img src={selectedBaseAvatar.image_url} alt={selectedBaseAvatar.name} className="w-full h-full object-cover" />
+                          <div className="absolute bottom-0 inset-x-0 text-[9px] text-center bg-background/80 text-foreground py-0.5">בסיס</div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  {remainingPhotoSlots > 0 && (
-                    <FileUploadZone accept="image/*" multiple label="העלה תמונות" hint={`JPG, PNG — לדיוק גבוה חובה לפחות 3 תמונות מזוויות שונות (מומלץ 4-7). נשארו ${remainingPhotoSlots} מקומות`}
-                      onUploaded={(url) => { if (!url) return; setPhotos((prev) => { const merged = Array.from(new Set([...baseReferences, ...prev, url])).slice(0, MAX_PHOTOS); return merged.filter((item) => !baseReferences.includes(item)); }); }}
-                      onMultipleUploaded={(urls) => { setPhotos((prev) => { const merged = Array.from(new Set([...baseReferences, ...prev, ...urls])).slice(0, MAX_PHOTOS); return merged.filter((item) => !baseReferences.includes(item)); }); }}
-                    />
-                  )}
-                  {remainingPhotoSlots === 0 && (
-                    <div className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">הגעת למקסימום {MAX_PHOTOS} תמונות רפרנס.</div>
-                  )}
-                  {mergedReferencePreview.length < 3 && (
-                    <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 mt-2">
-                      כרגע יש {mergedReferencePreview.length} תמונות. נדרשות לפחות 3 תמונות כדי לקבל זהות פנים מדויקת.
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    )}
+                    {photos.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {photos.map((url, i) => (
+                          <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border">
+                            <img src={url} alt={`ref ${i + 1}`} className="w-full h-full object-cover" />
+                            <button onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {remainingPhotoSlots > 0 && (
+                      <div className="space-y-2">
+                        <FileUploadZone accept="image/*" multiple label="העלה תמונות מהמחשב" hint={`JPG, PNG — נשארו ${remainingPhotoSlots} מקומות`}
+                          onUploaded={(url) => { if (!url) return; addPhotoFromCamera(url); }}
+                          onMultipleUploaded={(urls) => addPhotoFromStorage(urls)}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setStoragePickerOpen(true)}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-border rounded-lg text-sm hover:bg-muted/60 transition-colors"
+                          >
+                            <FolderOpen className="w-4 h-4 text-primary" />
+                            בחר מהאחסון
+                          </button>
+                          <CameraCaptureButton
+                            onCaptured={addPhotoFromCamera}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-border rounded-lg text-sm hover:bg-muted/60 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {remainingPhotoSlots === 0 && (
+                      <div className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">הגעת למקסימום {MAX_PHOTOS} תמונות רפרנס.</div>
+                    )}
+                    {mergedReferencePreview.length >= 1 && mergedReferencePreview.length < 3 && (
+                      <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mt-2">
+                        💡 יש {mergedReferencePreview.length} תמונ{mergedReferencePreview.length === 1 ? 'ה' : 'ות'}. ניתן ליצור, אך מומלץ 3+ תמונות לדיוק גבוה יותר.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Summary */}
                 {selectedStyleObj && (
                   <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
                     <div><span className="font-semibold text-foreground">{selectedStyleObj.label}</span> — {selectedStyleObj.desc}</div>
                     <div><span className="font-semibold text-foreground">{selectedExpressionObj?.label}</span> — {selectedExpressionObj?.desc}</div>
-                    <div className="text-primary">🎯 מצב דיוק זהות פעיל — המערכת תקבע פנים לפי כל תמונות הרפרנס</div>
-                    {style !== 'professional headshot' ? (
-                      <span className="block text-primary">✨ סגנון אמנותי — תישמר זהות הפנים, וישתנה רק סגנון הרינדור</span>
-                    ) : (
-                      <span className="block">📷 סגנון ריאליסטי — מתאים לאווטארים מדברים בסטודיו</span>
+                    {creationMode === 'photo' && mergedReferencePreview.length >= 3 && (
+                      <div className="text-primary">🎯 מצב דיוק זהות פעיל — המערכת תקבע פנים לפי כל תמונות הרפרנס</div>
+                    )}
+                    {creationMode === 'prompt' && (
+                      <div className="text-primary">✨ יצירה מתיאור טקסט — המערכת תייצר דמות חדשה לפי התיאור שלך</div>
                     )}
                   </div>
                 )}
 
-                <button onClick={handleGenerate} disabled={generating || mergedReferencePreview.length < 3} className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+                <button onClick={handleGenerate} disabled={generating || !canGenerate} className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-4 h-4" />}
-                  {generating ? 'מייצר אווטאר...' : mergedReferencePreview.length < 3 ? 'צריך לפחות 3 תמונות' : 'צור אווטאר'}
+                  {generating ? 'מייצר אווטאר...' : 'צור אווטאר'}
                 </button>
               </>
             )}
@@ -446,6 +544,15 @@ export default function AvatarsManagePage() {
           </div>
         )}
       </div>
+
+      {/* Storage picker dialog */}
+      <StoragePicker
+        open={storagePickerOpen}
+        onClose={() => setStoragePickerOpen(false)}
+        onSelect={addPhotoFromStorage}
+        accept="image/*"
+        multiple
+      />
     </AppLayout>
   );
 }
