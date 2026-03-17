@@ -809,18 +809,21 @@ export function VideoWizardFlow({
         }
       }
 
-      const missingSceneNumbers = sceneResults
-        .map((result, idx) => (result ? null : idx + 1))
-        .filter((value): value is number => value !== null);
-
-      if (missingSceneNumbers.length > 0) {
+      const successfulResults = sceneResults.filter((r): r is NonNullable<typeof r> => r !== null);
+      
+      if (successfulResults.length === 0) {
         throw new Error(
-          `לא הצלחתי להשלים את כל הסצנות (${missingSceneNumbers.join(', ')}). ${sceneErrors[sceneErrors.length - 1] || ''}`.trim()
+          `לא הצלחתי ליצור אף סצנה. ${sceneErrors[sceneErrors.length - 1] || 'בדוק את חיבורי הספקים בהגדרות.'}`.trim()
         );
       }
 
-      const finalScenes = sceneResults.map((result) => result!.scene);
-      const sceneVideoUrls = sceneResults.map((result) => result!.url);
+      if (successfulResults.length < sceneResults.length) {
+        const missing = sceneResults.length - successfulResults.length;
+        toast.warning(`${missing} סצנות לא הצליחו — ממשיך עם ${successfulResults.length} סצנות שהצליחו.`);
+      }
+
+      const finalScenes = successfulResults.map((result) => result.scene);
+      const sceneVideoUrls = successfulResults.map((result) => result.url);
 
       // === Stage 3: Composite all clips with Shotstack ===
       setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
