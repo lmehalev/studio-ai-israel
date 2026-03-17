@@ -66,12 +66,12 @@ Return ONLY valid JSON, no extra text:
         messages: [
           {
             role: 'system',
-            content: 'אתה מומחה לטרנדים דיגיטליים בישראל. תמיד תענה בעברית ובפורמט JSON בלבד. אל תוסיף טקסט מחוץ ל-JSON.'
+            content: 'You are an expert on digital trends in Israel. Always respond in valid JSON only. CRITICAL: Only include URLs that come from your actual search results/citations. Never fabricate URLs. If you reference content, use the citation URL where you found it. Include visual style analysis for each trend.'
           },
           { role: 'user', content: prompt }
         ],
         search_recency_filter: 'week',
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     });
 
