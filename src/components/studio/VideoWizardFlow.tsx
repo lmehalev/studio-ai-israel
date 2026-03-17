@@ -292,6 +292,20 @@ export function VideoWizardFlow({
         if (websiteData.markdown) {
           parts.push(`תוכן האתר (תקציר):\n${websiteData.markdown.slice(0, 800)}`);
         }
+        // Include key links from the website
+        if (websiteData.links?.length) {
+          const keyLinks = websiteData.links
+            .filter(l => !l.includes('#') && !l.includes('javascript:'))
+            .slice(0, 10);
+          if (keyLinks.length > 0) {
+            parts.push(`דפים עיקריים באתר:\n${keyLinks.join('\n')}`);
+          }
+        }
+        // Note screenshot availability
+        const hasScreenshotImg = !!websiteScraperService.getScreenshotUrl(websiteData);
+        if (hasScreenshotImg) {
+          parts.push('יש צילום מסך איכותי של האתר שנוסף כתמונה — חובה לשלב סצנה שמציגה את האתר על מסך מחשב/טלפון עם גלילה/אינטראקציה.');
+        }
         websiteContext = parts.join('\n');
       }
 
