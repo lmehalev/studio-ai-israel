@@ -285,11 +285,11 @@ export function VideoWizardFlow({
     return avatarUrl;
   };
 
-  const waitForDidResult = async (talkId: string, onProgress: (p: number) => void): Promise<string> => {
-    for (let attempts = 1; attempts <= DID_MAX_POLL_ATTEMPTS; attempts++) {
-      const status = await didService.checkStatus(talkId);
-      if (status.status === 'done' && status.resultUrl) return status.resultUrl;
-      if (status.status === 'error') throw new Error('שגיאה ביצירת סרטון אווטאר');
+  const waitForHeygenResult = async (videoId: string, onProgress: (p: number) => void): Promise<string> => {
+    for (let attempts = 1; attempts <= HEYGEN_MAX_POLL_ATTEMPTS; attempts++) {
+      const status = await heygenService.checkStatus(videoId);
+      if (status.status === 'done' && status.videoUrl) return status.videoUrl;
+      if (status.status === 'error' || status.status === 'failed') throw new Error('שגיאה ביצירת סרטון אווטאר');
       onProgress(Math.min(95, attempts * 1.2));
       await sleep(RUNWAY_STATUS_POLL_MS);
     }
