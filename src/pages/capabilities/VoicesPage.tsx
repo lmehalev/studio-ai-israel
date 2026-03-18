@@ -810,15 +810,12 @@ export default function VoicesManagePage() {
                   ))}
                 </select>
               )}
-              {selectedVoice?.provider_voice_id && selectedVoice.is_verified && (
-                <p className="text-xs text-green-500 mt-1">✅ קול מאומת — ישתמש בקול המקורי שלך</p>
+              {selectedVoice?.is_verified && (
+                <p className="text-xs text-primary mt-1">✅ קול מאומת — ניתן ליצור דיבוב</p>
               )}
-              {selectedVoice?.provider_voice_id && !selectedVoice.is_verified && (
-                <p className="text-xs text-warning mt-1">⚠️ קול זה טרם אומת. מומלץ לבצע אימות בכרטיס הקול למטה.</p>
-              )}
-              {selectedVoice && !selectedVoice.provider_voice_id && (
-                <p className="text-xs text-muted-foreground mt-1">קול זה ישוכפל בפעם הראשונה (פעולה בתשלום)</p>
-              )}
+              {selectedVoice && !selectedVoice.is_verified && (
+                <p className="text-xs text-warning mt-1">⚠️ הקול לא מאומת — יצירת דיבוב חסומה עד אימות A/B.</p>
+              )
             </div>
 
             {/* Language */}
