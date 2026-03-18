@@ -10,12 +10,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { text, voiceId } = await req.json();
+    const { text, voiceId, language } = await req.json();
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
 
     // Default to a good Hebrew-capable voice
     const selectedVoiceId = voiceId || "onwK4e9ZLuTAKqWW03F9"; // Daniel
+
+    // Force language detection: Hebrew by default if Hebrew chars present
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    const detectedLang = language || (hebrewPattern.test(text) ? "he" : "en");
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_44100_128`,
@@ -28,6 +32,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
+          language_code: detectedLang,
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75,
