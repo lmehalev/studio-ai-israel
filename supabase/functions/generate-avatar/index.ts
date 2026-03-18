@@ -17,6 +17,8 @@ type GenerateAvatarRequest = {
   expression?: string;
   baseAvatarUrl?: string;
   strictIdentity?: boolean;
+  skipAnalysis?: boolean;
+  cachedFaceDescription?: string;
 };
 
 const dedupeUrls = (urls: string[]) =>
