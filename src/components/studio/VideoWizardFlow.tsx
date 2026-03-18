@@ -1145,11 +1145,14 @@ export function VideoWizardFlow({
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
+            const preferredModel = selectedVoice.verification_selected_model || 'eleven_v3';
             const cloneResult = await voiceCloneService.cloneAndSpeak({
               providerVoiceId: selectedVoice.provider_voice_id || undefined,
               audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
               scriptText: narrationText,
               language: 'he',
+              modelId: preferredModel,
+              omitLanguageCode: preferredModel === 'eleven_multilingual_v2',
             });
             narrationAudioUrl = cloneResult.audioUrl;
           } else {
