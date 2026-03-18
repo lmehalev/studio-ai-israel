@@ -209,6 +209,9 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [renderProgress, setRenderProgress] = useState(0);
   const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
 
+  // Cost approval gate
+  const [showCostApproval, setShowCostApproval] = useState(false);
+
   const currentFont = fontPresets.find(p => p.id === selectedFont) || fontPresets[0];
 
   const getAdjustedSegments = useCallback(() => {
