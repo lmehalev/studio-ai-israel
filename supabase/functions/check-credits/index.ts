@@ -177,19 +177,28 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
     let used = 0, limit = -1, plan = "API מחובר", creditsAvailable: boolean | null = null;
     let remaining = -1;
     try {
-      const quotaRes = await fetch("https://api.heygen.com/v1/user/remaining_quota", { headers });
+      // Try v2 quota first (returns {data: {details: {remaining_quota: N}}})
+      const quotaRes = await fetch("https://api.heygen.com/v2/user/remaining_quota", { headers });
       if (quotaRes.ok) {
         const qd = await quotaRes.json();
-        remaining = qd?.data?.remaining_quota ?? qd?.data?.details?.remaining_quota ?? qd?.remaining_quota ?? -1;
-        // If the response has details.api or details.plan_credit, sum them as remaining
+        remaining = qd?.data?.remaining_quota ?? -1;
         if (remaining < 0 && qd?.data?.details) {
           const d = qd.data.details;
-          remaining = (d.api ?? 0) + (d.plan_credit ?? 0);
+          remaining = (d.remaining_quota ?? -1);
+          if (remaining < 0) remaining = (d.api ?? 0) + (d.plan_credit ?? 0);
         }
-        if (typeof remaining === "number" && remaining >= 0) {
-          creditsAvailable = remaining > 0;
-          plan = `Creator — ${remaining} קרדיטים`;
+      }
+      // Fallback to v1
+      if (remaining < 0) {
+        const v1Res = await fetch("https://api.heygen.com/v1/user/remaining_quota", { headers });
+        if (v1Res.ok) {
+          const v1d = await v1Res.json();
+          remaining = v1d?.data?.remaining_quota ?? v1d?.remaining_quota ?? -1;
         }
+      }
+      if (typeof remaining === "number" && remaining >= 0) {
+        creditsAvailable = remaining > 0;
+        plan = `Creator — ${remaining} קרדיטים`;
       }
     } catch { /* quota unknown */ }
 
