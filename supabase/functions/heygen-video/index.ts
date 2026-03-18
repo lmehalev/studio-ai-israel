@@ -80,6 +80,8 @@ serve(async (req) => {
     }
 
     // ====== Create photo avatar video (use own photo) ======
+    // FIX: HeyGen v2 API requires uploading the photo first to get a talking_photo_id,
+    // then using that ID in the video generation request.
     if (action === "create_photo_avatar_video") {
       const { photoUrl, script, voiceId, audioUrl, aspectRatio } = params;
 
@@ -90,16 +92,55 @@ serve(async (req) => {
         );
       }
 
+      // Step 1: Upload the photo to HeyGen to get a talking_photo_id
+      console.log("HeyGen: Uploading talking photo from URL:", photoUrl.slice(0, 100));
+      let talkingPhotoId: string | null = null;
+
+      try {
+        const uploadRes = await fetch(`${HEYGEN_API}/v1/talking_photo`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ photo_url: photoUrl }),
+        });
+
+        const uploadData = await uploadRes.json();
+        console.log("HeyGen talking_photo upload response:", uploadRes.status, JSON.stringify(uploadData).slice(0, 300));
+
+        if (uploadRes.ok && uploadData?.data?.talking_photo_id) {
+          talkingPhotoId = uploadData.data.talking_photo_id;
+        } else if (uploadData?.data?.id) {
+          talkingPhotoId = uploadData.data.id;
+        } else {
+          // Fallback: try the v2 upload endpoint
+          const v2UploadRes = await fetch(`${HEYGEN_API}/v2/photo_avatar/talking_photo/upload`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ image_url: photoUrl }),
+          });
+          const v2Data = await v2UploadRes.json();
+          console.log("HeyGen v2 talking_photo upload response:", v2UploadRes.status, JSON.stringify(v2Data).slice(0, 300));
+          talkingPhotoId = v2Data?.data?.talking_photo_id || v2Data?.data?.id || null;
+        }
+      } catch (uploadErr) {
+        console.error("HeyGen photo upload error:", uploadErr);
+      }
+
+      // Step 2: Create the video with talking_photo_id (or fallback to talking_photo_url)
+      const voiceConfig = voiceId
+        ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
+        : audioUrl
+          ? { type: "audio", audio_url: audioUrl }
+          : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 };
+
+      const characterConfig: any = talkingPhotoId
+        ? { type: "talking_photo", talking_photo_id: talkingPhotoId }
+        : { type: "talking_photo", talking_photo_url: photoUrl };
+
+      console.log("HeyGen: Creating video with character config:", JSON.stringify(characterConfig).slice(0, 200));
+
       const videoInput: any = {
-        character: {
-          type: "talking_photo",
-          talking_photo_url: photoUrl,
-        },
-        voice: voiceId
-          ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
-          : audioUrl
-            ? { type: "audio", audio_url: audioUrl }
-            : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 },
+        character: characterConfig,
+        voice: voiceConfig,
       };
 
       const dimension = aspectRatio === "9:16"
@@ -118,10 +159,13 @@ serve(async (req) => {
       });
 
       const data = await response.json();
-      if (!response.ok) {
-        console.error("HeyGen photo avatar error:", data);
+      console.log("HeyGen photo avatar video response:", response.status, JSON.stringify(data).slice(0, 500));
+      
+      if (!response.ok || data?.error) {
+        const errDetail = data?.error?.message || data?.error?.code || data?.message || (typeof data?.error === 'string' ? data.error : JSON.stringify(data?.error || data));
+        console.error("HeyGen photo avatar error:", errDetail);
         return new Response(
-          JSON.stringify({ error: `שגיאה ביצירת סרטון תמונה מדברת: ${data.message || data.error || response.status}` }),
+          JSON.stringify({ error: `שגיאה ביצירת סרטון תמונה מדברת: ${errDetail}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -260,6 +304,24 @@ serve(async (req) => {
       } catch (e) {
         return new Response(
           JSON.stringify({ quota: { error: "שגיאה בבדיקת מכסה" } }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ====== Health check ======
+    if (action === "health_check") {
+      try {
+        const response = await fetch(`${HEYGEN_API}/v2/avatars`, {
+          headers: { "X-Api-Key": HEYGEN_API_KEY },
+        });
+        return new Response(
+          JSON.stringify({ ok: response.ok, status: response.status }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ ok: false, error: e instanceof Error ? e.message : "health check failed" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

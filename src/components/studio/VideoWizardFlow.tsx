@@ -84,9 +84,10 @@ const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
 const HEYGEN_MAX_POLL_ATTEMPTS = 180;
-const CREDITS_CHECK_TIMEOUT_MS = 10000;
+const CREDITS_CHECK_TIMEOUT_MS = 20000;
 const KREA_GENERATION_TIMEOUT_MS = 360000;
 const HEYGEN_GENERATION_TIMEOUT_MS = 900000;
+const KREA_FALLBACK_TIMEOUT_MS = 360000; // Must match edge function's 5min poll
 
 const DUMMY_RUNWAY_TASK_ID = '00000000-0000-0000-0000-000000000000';
 const DUMMY_COMPOSE_RENDER_ID = '00000000-0000-0000-0000-000000000000';
@@ -512,6 +513,75 @@ export function VideoWizardFlow({
     return toRunwayPrompt(parts.join('. '));
   };
 
+  // ===== Shared scene generation helpers (used by generate + improve) =====
+  const createHeygenSceneClipShared = async (
+    sceneText: string, sceneIdx: number, audioUrl: string | undefined,
+    normalizedAvatarUrl: string | null, onProgress: (p: number) => void
+  ): Promise<string> => {
+    const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
+      const result = await heygenExtendedService.createPhotoAvatarVideo(
+        photoUrl, sceneText, undefined, includeAudio ? audioUrl : undefined,
+      );
+      if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+      return waitForHeygenResult(result.videoId, onProgress);
+    };
+
+    const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
+      const { data: imgData } = await supabase.functions.invoke('generate-image', {
+        body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
+      });
+      return imgData?.imageUrl as string | undefined;
+    })());
+
+    if (!primaryPhotoUrl) throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
+
+    try {
+      return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
+    } catch (firstErr) {
+      if (!audioUrl) throw firstErr;
+      return createFromPhoto(primaryPhotoUrl, false);
+    }
+  };
+
+  const createAIImageToVideoClipShared = async (
+    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
+  ): Promise<string> => {
+    onProgress(5);
+    const imagePrompt = `Ultra high quality cinematic still frame, 8K resolution, professional photography. ${scenePrompt}. Photorealistic, dramatic lighting, shallow depth of field, movie-quality composition. NO text, NO watermarks, NO UI elements.`;
+    const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
+      body: { prompt: imagePrompt },
+    });
+    if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
+    onProgress(40);
+    try {
+      const kreaResult = await kreaService.generateVideo(scenePrompt, {
+        model: 'kling-2.5', width: 1280, height: 720,
+        duration: Math.max(5, Math.min(10, sceneDuration)),
+        imageUrl: imgData.imageUrl,
+      });
+      onProgress(100);
+      if (kreaResult?.videoUrl) return kreaResult.videoUrl;
+    } catch (kreaAnimErr) {
+      console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
+    }
+    onProgress(100);
+    return imgData.imageUrl;
+  };
+
+  const createKreaSceneClipShared = async (
+    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
+  ): Promise<string> => {
+    onProgress(5);
+    const kreaResult = await kreaService.generateVideo(scenePrompt, {
+      model: 'kling-2.5', width: 1280, height: 720,
+      duration: Math.max(5, Math.min(10, sceneDuration)),
+      imageUrl: uploadedImages[0],
+    });
+    onProgress(100);
+    if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
+    return kreaResult.videoUrl;
+  };
+
   // ===== Step 3: Generate video (full pipeline) =====
   const handleGenerateVideo = async () => {
     if (!generatedScript) return;
@@ -562,13 +632,14 @@ export function VideoWizardFlow({
             .map((c: any) => [c.service, c])
         ) as Record<string, { canGenerate?: boolean; error?: string }>;
 
-        const runwayCanGenerate = !!creditsMap.runway && (
+        // FIX: If credit check timed out, assume provider is available (don't block on slow checks)
+        const runwayCanGenerate = !creditsMap.runway ? true : (
           creditsMap.runway.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.runway.error)
         );
-        const heygenCanGenerate = !!creditsMap.heygen && (
+        const heygenCanGenerate = !creditsMap.heygen ? true : (
           creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
         );
-        const kreaCanGenerate = !!creditsMap.krea && (
+        const kreaCanGenerate = !creditsMap.krea ? true : (
           creditsMap.krea.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.krea.error)
         );
 
@@ -638,85 +709,15 @@ export function VideoWizardFlow({
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
 
-      // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
-      const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
-          const result = await heygenExtendedService.createPhotoAvatarVideo(
-            photoUrl,
-            sceneText,
-            undefined,
-            includeAudio ? audioUrl : undefined,
-          );
-          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
-        };
+      // Wrap shared helpers with local progress tracking
+      const createHeygenSceneClip = (sceneText: string, sceneIdx: number, audioUrl?: string) =>
+        createHeygenSceneClipShared(sceneText, sceneIdx, audioUrl, normalizedAvatarUrl, (p) => updateSceneProgress(sceneIdx, p));
 
-        const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
-          const { data: imgData } = await supabase.functions.invoke('generate-image', {
-            body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
-          });
-          return imgData?.imageUrl as string | undefined;
-        })());
+      const createAIImageToVideoClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
+        createAIImageToVideoClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
-        if (!primaryPhotoUrl) {
-          throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
-        }
-
-        try {
-          return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
-        } catch (firstErr) {
-          if (!audioUrl) throw firstErr;
-          return createFromPhoto(primaryPhotoUrl, false);
-        }
-      };
-
-      // Generate a scene image via AI, then animate it with Krea image-to-video
-      const createAIImageToVideoClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
-        updateSceneProgress(sceneIdx, 5);
-        // Enhanced prompt for cinematic still image
-        const imagePrompt = `Ultra high quality cinematic still frame, 8K resolution, professional photography. ${scenePrompt}. Photorealistic, dramatic lighting, shallow depth of field, movie-quality composition. NO text, NO watermarks, NO UI elements.`;
-        
-        // Step 1: Generate a still image via Lovable AI (Gemini image)
-        const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
-          body: { prompt: imagePrompt },
-        });
-        if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
-        updateSceneProgress(sceneIdx, 40);
-
-        // Step 2: Try Krea image-to-video, if it fails just return the image URL
-        // (Shotstack can still use a still image as a video clip)
-        try {
-          const kreaResult = await kreaService.generateVideo(scenePrompt, {
-            model: 'kling-2.5',
-            width: 1280,
-            height: 720,
-            duration: Math.max(5, Math.min(10, sceneDuration)),
-            imageUrl: imgData.imageUrl,
-          });
-          updateSceneProgress(sceneIdx, 100);
-          if (kreaResult?.videoUrl) return kreaResult.videoUrl;
-        } catch (kreaAnimErr) {
-          console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
-        }
-        
-        // Fallback: use the still image directly — Shotstack handles images as video clips
-        updateSceneProgress(sceneIdx, 100);
-        return imgData.imageUrl;
-      };
-
-      const createKreaSceneClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
-        updateSceneProgress(sceneIdx, 5);
-        const kreaResult = await kreaService.generateVideo(scenePrompt, {
-          model: 'kling-2.5',
-          width: 1280,
-          height: 720,
-          duration: Math.max(5, Math.min(10, sceneDuration)),
-          imageUrl: uploadedImages[0],
-        });
-        updateSceneProgress(sceneIdx, 100);
-        if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
-        return kreaResult.videoUrl;
-      };
+      const createKreaSceneClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
+        createKreaSceneClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
       let runwayBlocked = forceDidOnlyMode || forceKreaOnlyMode;
 
@@ -778,7 +779,7 @@ export function VideoWizardFlow({
             setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Krea...`);
             return await withTimeout(
               createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration),
-              60000, 'Krea timeout'
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
             );
           } catch (kreaErr: any) {
             const msg = kreaErr?.message || '';
@@ -966,7 +967,13 @@ export function VideoWizardFlow({
 
       setProgressStage('מייצר סצנות משופרות...');
       const avatarImage = selectedAvatars[0]?.image_url;
+      const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
       const sceneVideoUrls: string[] = [];
+
+      // FIX: Use the same fallback chain as main generation instead of Runway-only
+      let heygenFallbackEnabled = true;
+      let kreaFallbackEnabled = true;
+      let runwayBlocked = false;
 
       for (let i = 0; i < totalScenes; i++) {
         const scene = workingScenes[i];
@@ -978,21 +985,77 @@ export function VideoWizardFlow({
           activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
         ].filter(Boolean).join('. ');
 
-        const runwayPrompt = toRunwayPrompt(improveContext);
+        const scenePrompt = toRunwayPrompt(improveContext);
+        const sceneDuration = Math.max(5, Math.min(10, Number(scene.duration) || 10));
+        const errors: string[] = [];
 
-        try {
-          let clipUrl: string;
-          if (avatarImage && i === 0) {
-            const normalizedUrl = await normalizeAvatarForVideo(avatarImage);
-            const taskData = await runwayService.imageToVideo(normalizedUrl, runwayPrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
-          } else {
-            const taskData = await runwayService.textToVideo(runwayPrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+        let clipUrl: string | null = null;
+
+        // Provider 1: Runway
+        if (!runwayBlocked) {
+          try {
+            if (normalizedAvatarUrl && i === 0) {
+              const taskData = await withTimeout(
+                runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration),
+                30000, 'Runway timeout'
+              );
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+            } else {
+              const taskData = await withTimeout(
+                runwayService.textToVideo(scenePrompt, undefined, sceneDuration),
+                30000, 'Runway timeout'
+              );
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+            }
+          } catch (runwayErr: any) {
+            const msg = runwayErr?.message || '';
+            errors.push(`Runway: ${msg}`);
+            if (isRunwayCreditsErrorMessage(msg)) runwayBlocked = true;
           }
+        }
+
+        // Provider 2: HeyGen
+        if (!clipUrl && heygenFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createHeygenSceneClipShared(scene.spokenText || scene.title, i, narrationAudioUrl, normalizedAvatarUrl, () => {}),
+              120000, 'HeyGen timeout'
+            );
+          } catch (heygenErr: any) {
+            errors.push(`HeyGen: ${heygenErr?.message || ''}`);
+            if (isHeygenUnavailableErrorMessage(heygenErr?.message)) heygenFallbackEnabled = false;
+          }
+        }
+
+        // Provider 3: Krea
+        if (!clipUrl && kreaFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}),
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
+            );
+          } catch (kreaErr: any) {
+            errors.push(`Krea: ${kreaErr?.message || ''}`);
+            if (isKreaCreditsErrorMessage(kreaErr?.message)) kreaFallbackEnabled = false;
+          }
+        }
+
+        // Provider 4: AI Image (last resort)
+        if (!clipUrl) {
+          try {
+            clipUrl = await withTimeout(
+              createAIImageToVideoClipShared(scenePrompt, i, sceneDuration, () => {}),
+              60000, 'AI Image timeout'
+            );
+          } catch (aiErr: any) {
+            errors.push(`AI Image: ${aiErr?.message || ''}`);
+          }
+        }
+
+        if (clipUrl) {
           sceneVideoUrls.push(clipUrl);
-        } catch {
-          // Skip failed scene
+        } else {
+          console.error(`Improve scene ${i + 1} all providers failed:`, errors.join(' | '));
         }
       }
 
@@ -1545,9 +1608,10 @@ export function VideoWizardFlow({
           <p className="text-xs text-muted-foreground">{Math.round(runwayProgress)}% הושלם</p>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             {[
-              { label: 'שכפול קול', done: runwayProgress > 25 },
+              { label: 'בדיקת ספקים', done: runwayProgress > 5 },
+              { label: 'שכפול קול', done: runwayProgress > 15 },
               { label: 'יצירת וידאו', done: runwayProgress > 65 },
-              { label: 'כתוביות ולוגו', done: runwayProgress > 95 },
+              { label: 'הרכבה סופית', done: runwayProgress > 95 },
             ].map(s => (
               <span key={s.label} className={cn(
                 'text-[10px] px-2 py-0.5 rounded-full border',
@@ -1557,6 +1621,12 @@ export function VideoWizardFlow({
               </span>
             ))}
           </div>
+          {/* Debug: current stage detail */}
+          {progressStage && (
+            <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono" dir="ltr">
+              {progressStage}
+            </p>
+          )}
         </div>
       )}
 
