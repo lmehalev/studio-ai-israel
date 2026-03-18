@@ -989,13 +989,17 @@ export function VideoWizardFlow({
           const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
           if (status.status === 'done' && status.url) {
             const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
+            addDebugLog(runId, 'complete', 'success', `Video ready: ${totalDuration}s`, { outputUrl: status.url });
             setResultVideoUrl(status.url);
             setStep(4);
             setProgressStage('');
             toast.success(`🎬 סרטון של ${totalDuration} שניות מוכן!`);
             return;
           }
-          if (status.status === 'failed') throw new Error('Shotstack render failed');
+          if (status.status === 'failed') {
+            addDebugLog(runId, 'compose', 'error', 'Shotstack render failed');
+            throw new Error('Shotstack render failed');
+          }
           setRunwayProgress(70 + (i / composeMaxAttempts) * 28);
           await sleep(COMPOSE_STATUS_POLL_MS);
         }
