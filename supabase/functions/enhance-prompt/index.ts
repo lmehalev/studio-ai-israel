@@ -64,37 +64,51 @@ Deno.serve(async (req) => {
 - אם יש מונחים מקצועיים — הסבר אותם בפשטות`;
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: text },
-        ],
-      }),
-    });
+    const modelsToTry = [
+      "google/gemini-2.5-flash-lite",
+      "google/gemini-2.5-flash",
+      "openai/gpt-5-nano",
+    ];
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    let response: Response | null = null;
+    let lastErrorText = "";
+
+    for (const model of modelsToTry) {
+      console.log(`Trying enhance model: ${model}`);
+      const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: text },
+          ],
+        }),
+      });
+
+      if (attempt.ok) {
+        response = attempt;
+        break;
+      }
+
+      lastErrorText = await attempt.text();
+      console.warn(`Enhance model ${model} failed: ${attempt.status} ${lastErrorText.slice(0, 200)}`);
+
+      if (attempt.status === 429) {
         return new Response(JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד רגע" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "נדרש טעינת קרדיטים" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "שגיאה בשירות ה-AI" }), {
+      if (attempt.status !== 402 && attempt.status < 500) break;
+    }
+
+    if (!response) {
+      console.error("All enhance models failed:", lastErrorText.slice(0, 300));
+      return new Response(JSON.stringify({ error: "שגיאה בשירות ה-AI — כל המודלים נכשלו" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
