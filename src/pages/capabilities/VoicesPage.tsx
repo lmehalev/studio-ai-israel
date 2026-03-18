@@ -1115,12 +1115,27 @@ export default function VoicesManagePage() {
                         <div className="bg-background border border-border rounded-lg p-3 text-xs space-y-1 font-mono" dir="ltr">
                           <p><span className="text-muted-foreground">voice_id (DB):</span> {voice.id}</p>
                           <p><span className="text-muted-foreground">provider_voice_id:</span> {voice.provider_voice_id || '(not cloned yet)'}</p>
+                          <p><span className="text-muted-foreground">selected_model:</span> {voice.verification_selected_model || '(not selected yet)'}</p>
                           <p><span className="text-muted-foreground">training_file:</span> {voice.training_audio_file_name || '—'}</p>
+                          <p><span className="text-muted-foreground">training_url:</span> {voice.audio_url}</p>
+                          <p><span className="text-muted-foreground">training_size_bytes:</span> {trainingAuditByVoiceId[voice.id]?.sizeBytes ?? 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_duration_sec:</span> {trainingAuditByVoiceId[voice.id]?.durationSec ? trainingAuditByVoiceId[voice.id].durationSec!.toFixed(2) : 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_content_type:</span> {trainingAuditByVoiceId[voice.id]?.contentType || 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_codec:</span> {trainingAuditByVoiceId[voice.id]?.codec || 'unknown'}</p>
                           <p><span className="text-muted-foreground">created_at:</span> {voice.created_at}</p>
                           <p><span className="text-muted-foreground">verification:</span> {voice.verification_status || 'unverified'}</p>
                           {voice.verification_updated_at && (
                             <p><span className="text-muted-foreground">verified_at:</span> {voice.verification_updated_at}</p>
                           )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => togglePlay(`training-${voice.id}`, voice.audio_url)}
+                            className="px-3 py-1.5 border border-border rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-muted"
+                          >
+                            <Play className="w-3.5 h-3.5" /> נגן קובץ אימון
+                          </button>
                         </div>
 
                         {/* Verification sample playback */}
@@ -1133,7 +1148,6 @@ export default function VoicesManagePage() {
 
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-2">
-                          {/* Reset / Re-clone */}
                           <button
                             onClick={() => handleResetVoice(voice.id)}
                             disabled={resettingVoiceId === voice.id}
@@ -1143,34 +1157,52 @@ export default function VoicesManagePage() {
                             איפוס ושכפול מחדש
                           </button>
 
-                          {/* Verify — only if cloned but not verified */}
-                          {voice.provider_voice_id && !voice.is_verified && (
+                          {!voice.is_verified && (
                             <button
                               onClick={() => requestVerification(voice.id)}
                               disabled={verifyingVoiceId === voice.id}
                               className="px-3 py-1.5 border border-primary/50 text-primary rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-primary/10 disabled:opacity-50"
                             >
                               {verifyingVoiceId === voice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                              💰 אמת את הקול
+                              💰 אמת את הקול (A/B)
                             </button>
                           )}
                         </div>
 
                         {/* Active verification flow */}
-                        {verifyingVoiceId === voice.id && verificationAudioUrl && (
+                        {verifyingVoiceId === voice.id && verificationSamples && (
                           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
-                            <p className="text-sm font-semibold text-primary">🔊 האזן לדגימת האימות:</p>
+                            <p className="text-sm font-semibold text-primary">🔊 אימות A/B — אותו משפט, אותו provider_voice_id</p>
                             <p className="text-xs text-muted-foreground">"{VERIFICATION_TEST_SENTENCE}"</p>
-                            <audio src={verificationAudioUrl} controls className="w-full h-8" autoPlay />
-                            <p className="text-xs font-medium text-foreground">האם הקול נשמע כמוך?</p>
-                            <div className="flex gap-3">
-                              <button onClick={() => confirmVerification(true)}
-                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5">
-                                <ShieldCheck className="w-4 h-4" /> כן, זה נשמע כמוני ✅
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium">A: eleven_v3 + he</p>
+                              <audio src={verificationSamples.optionAUrl} controls className="w-full h-8" />
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium">B: eleven_multilingual_v2 (auto)</p>
+                              <audio src={verificationSamples.optionBUrl} controls className="w-full h-8" />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <button
+                                onClick={() => confirmVerification('eleven_v3')}
+                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                              >
+                                לבחור A (נשמע כמוני)
                               </button>
-                              <button onClick={() => confirmVerification(false)}
-                                className="flex-1 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5">
-                                <X className="w-4 h-4" /> לא, זה לא אני ❌
+                              <button
+                                onClick={() => confirmVerification('eleven_multilingual_v2')}
+                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                              >
+                                לבחור B (נשמע כמוני)
+                              </button>
+                              <button
+                                onClick={() => confirmVerification('reject')}
+                                className="px-3 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold"
+                              >
+                                אף אחד מהם
                               </button>
                             </div>
                           </div>
