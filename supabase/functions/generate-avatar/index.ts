@@ -174,19 +174,22 @@ Deno.serve(async (req) => {
               content: [
                 {
                   type: "text",
-                  text: `You are a forensic facial analyst. Study these ${referenceUrls.length} photos of the SAME person from different angles and lighting.
+                  text: `You are a forensic facial identification expert. Study these ${referenceUrls.length} photos of the SAME person from different angles and lighting.
 
-Return a compact, ultra-precise identity profile with recurring facial signals only (ignore temporary lighting/expression noise):
-- Face geometry and proportions
-- Eyes (shape, spacing, depth)
-- Nose structure
-- Mouth/lips structure
-- Jaw/chin/cheek structure
-- Skin tone + stable marks
-- Hairline and facial hair map
-- Distinctive immutable traits
+Your goal: produce an identity profile so precise that another AI could reproduce THIS EXACT person and no one else.
 
-Keep it under 2200 characters. Prioritize identity-lock details.`
+Return a structured identity profile covering:
+1. FACE GEOMETRY: exact face shape (oval/round/square/heart/oblong), face width-to-height ratio, forehead height and width
+2. EYES: exact shape (almond/round/hooded/monolid), spacing (close/average/wide), depth (deep-set/protruding/average), color, brow position and shape
+3. NOSE: bridge width (narrow/medium/wide), tip shape (pointed/bulbous/upturned), nostril visibility, overall length
+4. MOUTH: width relative to nose, lip thickness (upper vs lower), cupid's bow prominence, lip color
+5. JAW & CHIN: jaw angle (sharp/soft/rounded), chin shape (pointed/square/cleft), jawline prominence
+6. SKIN: exact tone (very fair/fair/medium/olive/brown/dark), undertone (warm/cool/neutral), visible marks, moles, freckles with locations
+7. HAIR: hairline shape (straight/widow's peak/receding/M-shaped), hair color, texture, facial hair pattern and density
+8. DISTINCTIVE FEATURES: anything that makes this person uniquely identifiable — asymmetries, scars, dimples, ear shape
+
+Focus ONLY on immutable structural features. Ignore temporary lighting, expression, or angle artifacts.
+Keep under 2500 characters. Be maximally specific — "slightly wide nose with rounded tip" not just "normal nose".`
                 },
                 ...imageContentParts,
               ],
