@@ -570,7 +570,7 @@ export function VideoWizardFlow({
         const heygenCanGenerate = !creditsMap.heygen ? true : (
           creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
         );
-        const kreaCanGenerate = !!creditsMap.krea && (
+        const kreaCanGenerate = !creditsMap.krea ? true : (
           creditsMap.krea.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.krea.error)
         );
 
