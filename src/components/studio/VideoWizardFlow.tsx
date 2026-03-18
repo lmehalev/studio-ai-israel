@@ -1031,7 +1031,7 @@ export function VideoWizardFlow({
         if (!clipUrl && kreaFallbackEnabled) {
           try {
             clipUrl = await withTimeout(
-              createKreaSceneClip(scenePrompt, i, sceneDuration),
+              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}),
               KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
             );
           } catch (kreaErr: any) {
