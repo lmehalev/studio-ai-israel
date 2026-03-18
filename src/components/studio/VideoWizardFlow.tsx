@@ -513,6 +513,75 @@ export function VideoWizardFlow({
     return toRunwayPrompt(parts.join('. '));
   };
 
+  // ===== Shared scene generation helpers (used by generate + improve) =====
+  const createHeygenSceneClipShared = async (
+    sceneText: string, sceneIdx: number, audioUrl: string | undefined,
+    normalizedAvatarUrl: string | null, onProgress: (p: number) => void
+  ): Promise<string> => {
+    const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
+      const result = await heygenExtendedService.createPhotoAvatarVideo(
+        photoUrl, sceneText, undefined, includeAudio ? audioUrl : undefined,
+      );
+      if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
+      return waitForHeygenResult(result.videoId, onProgress);
+    };
+
+    const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
+      const { data: imgData } = await supabase.functions.invoke('generate-image', {
+        body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
+      });
+      return imgData?.imageUrl as string | undefined;
+    })());
+
+    if (!primaryPhotoUrl) throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
+
+    try {
+      return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
+    } catch (firstErr) {
+      if (!audioUrl) throw firstErr;
+      return createFromPhoto(primaryPhotoUrl, false);
+    }
+  };
+
+  const createAIImageToVideoClipShared = async (
+    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
+  ): Promise<string> => {
+    onProgress(5);
+    const imagePrompt = `Ultra high quality cinematic still frame, 8K resolution, professional photography. ${scenePrompt}. Photorealistic, dramatic lighting, shallow depth of field, movie-quality composition. NO text, NO watermarks, NO UI elements.`;
+    const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
+      body: { prompt: imagePrompt },
+    });
+    if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
+    onProgress(40);
+    try {
+      const kreaResult = await kreaService.generateVideo(scenePrompt, {
+        model: 'kling-2.5', width: 1280, height: 720,
+        duration: Math.max(5, Math.min(10, sceneDuration)),
+        imageUrl: imgData.imageUrl,
+      });
+      onProgress(100);
+      if (kreaResult?.videoUrl) return kreaResult.videoUrl;
+    } catch (kreaAnimErr) {
+      console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
+    }
+    onProgress(100);
+    return imgData.imageUrl;
+  };
+
+  const createKreaSceneClipShared = async (
+    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
+  ): Promise<string> => {
+    onProgress(5);
+    const kreaResult = await kreaService.generateVideo(scenePrompt, {
+      model: 'kling-2.5', width: 1280, height: 720,
+      duration: Math.max(5, Math.min(10, sceneDuration)),
+      imageUrl: uploadedImages[0],
+    });
+    onProgress(100);
+    if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
+    return kreaResult.videoUrl;
+  };
+
   // ===== Step 3: Generate video (full pipeline) =====
   const handleGenerateVideo = async () => {
     if (!generatedScript) return;
