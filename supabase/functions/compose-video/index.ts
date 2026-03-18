@@ -414,12 +414,16 @@ serve(async (req) => {
 
       const r = data.response;
 
+      // Shotstack returns "done" or "rendered" for completed renders
+      const isDone = r.status === "done" || r.status === "rendered";
+      const normalizedStatus = isDone ? "done" : r.status;
+
       return new Response(
         JSON.stringify({
-          status: r.status,
+          status: normalizedStatus,
           url: r.url || null,
           progress:
-            r.status === "done" ? 100 :
+            isDone ? 100 :
             r.status === "rendering" ? 50 :
             r.status === "fetching" ? 20 : 10,
         }),
