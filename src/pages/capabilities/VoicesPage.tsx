@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useEffect, useRef } from 'react';
-import { Mic, Plus, Trash2, X, Play, Pause, Loader2, Download, DollarSign, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Mic, Plus, Trash2, X, Play, Pause, Loader2, Download, DollarSign, FileText, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { FileUploadZone } from '@/components/FileUploadZone';
@@ -13,6 +13,7 @@ interface SavedVoice {
   name: string;
   audio_url: string;
   type: 'recorded' | 'uploaded';
+  provider_voice_id?: string | null;
   created_at: string;
 }
 
@@ -26,6 +27,43 @@ interface VoiceGeneration {
   audio_url: string;
   duration_seconds: number | null;
   created_at: string;
+}
+
+// Vibe/Delivery presets - only affect delivery, not identity
+const VIBE_PRESETS: Record<string, { label: string; settings: { stability: number; similarity_boost: number; style?: number; use_speaker_boost: boolean; speed: number } }> = {
+  default: {
+    label: 'רגיל',
+    settings: { stability: 0.45, similarity_boost: 0.9, use_speaker_boost: true, speed: 1 },
+  },
+  happy: {
+    label: 'שמח / עליז',
+    settings: { stability: 0.35, similarity_boost: 0.9, style: 0.4, use_speaker_boost: true, speed: 1.05 },
+  },
+  sad: {
+    label: 'עצוב / אמפתי',
+    settings: { stability: 0.55, similarity_boost: 0.9, style: 0.3, use_speaker_boost: true, speed: 0.9 },
+  },
+  energetic: {
+    label: 'אנרגטי / מכירתי',
+    settings: { stability: 0.3, similarity_boost: 0.9, style: 0.6, use_speaker_boost: true, speed: 1.1 },
+  },
+  calm: {
+    label: 'רגוע / מקצועי',
+    settings: { stability: 0.6, similarity_boost: 0.9, style: 0.1, use_speaker_boost: true, speed: 0.95 },
+  },
+  gentle: {
+    label: 'מתנצל / עדין',
+    settings: { stability: 0.55, similarity_boost: 0.9, style: 0.2, use_speaker_boost: true, speed: 0.9 },
+  },
+};
+
+// Preprocess script for punctuation/pauses
+function preprocessPauses(text: string): string {
+  // Convert double newlines to longer pause
+  let result = text.replace(/\n\n+/g, '... ... ');
+  // Convert single newlines to short pause
+  result = result.replace(/\n/g, '... ');
+  return result;
 }
 
 export default function VoicesManagePage() {
@@ -55,6 +93,21 @@ export default function VoicesManagePage() {
     status?: number;
     providerError?: string;
   } | null>(null);
+
+  // New: vibe preset + punctuation toggle + tech details
+  const [vibePreset, setVibePreset] = useState<string>('default');
+  const [respectPauses, setRespectPauses] = useState(true);
+  const [techDetails, setTechDetails] = useState<{
+    selectedVoiceId: string;
+    providerVoiceIdSent: string;
+    voiceIdReturned: string;
+    clonedFresh: boolean;
+    provider: string;
+    modelId: string;
+    language: string;
+    voiceSettings: Record<string, unknown>;
+  } | null>(null);
+  const [showTechDetails, setShowTechDetails] = useState(false);
 
   // Generation detail view
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -156,10 +209,7 @@ export default function VoicesManagePage() {
     const response = error?.context;
 
     if (!response || typeof response.text !== 'function') {
-      return {
-        message: fallback,
-        meta: null,
-      };
+      return { message: fallback, meta: null };
     }
 
     try {
@@ -191,19 +241,25 @@ export default function VoicesManagePage() {
     setShowScriptToVoice(true);
     setGenerationError(null);
     setGenerationErrorMeta(null);
+    setTechDetails(null);
+    setShowTechDetails(false);
     if (!selectedVoiceId && voices.length > 0) {
       setSelectedVoiceId(voices[0].id);
     }
   };
 
+  const currentVibeSettings = VIBE_PRESETS[vibePreset]?.settings || VIBE_PRESETS.default.settings;
+
   const costEstimates: CostEstimate[] = [{
     provider: 'ElevenLabs',
     model: language === 'he' ? 'eleven_v3' : 'eleven_multilingual_v2',
-    action: 'שכפול קול + קריינות',
+    action: selectedVoice?.provider_voice_id ? 'קריינות (קול שמור)' : 'שכפול קול + קריינות',
     estimatedCost: `~${scriptText.length} תווים`,
     details: [
-      'שכפול הקול הנבחר ויצירת קריינות',
-      'עלות לפי תוכנית המנוי שלך ב-ElevenLabs',
+      selectedVoice?.provider_voice_id
+        ? 'שימוש בקול ששוכפל בעבר — ללא עלות שכפול נוספת'
+        : 'שכפול הקול הנבחר ויצירת קריינות',
+      `פריסט: ${VIBE_PRESETS[vibePreset]?.label || 'רגיל'}`,
     ],
   }];
 
@@ -225,17 +281,62 @@ export default function VoicesManagePage() {
     setGeneratedAudioUrl(null);
     setGenerationError(null);
     setGenerationErrorMeta(null);
+    setTechDetails(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
-        body: { audioUrl: selectedVoice.audio_url, scriptText, language },
-      });
+      // Prepare script: optionally preprocess pauses
+      const processedScript = respectPauses ? preprocessPauses(scriptText) : scriptText;
+
+      // Build request body
+      const body: Record<string, unknown> = {
+        scriptText: processedScript,
+        language,
+        voiceSettings: currentVibeSettings,
+      };
+
+      // If we have a stored provider_voice_id, reuse it (no re-clone)
+      if (selectedVoice.provider_voice_id) {
+        body.providerVoiceId = selectedVoice.provider_voice_id;
+      } else {
+        body.audioUrl = selectedVoice.audio_url;
+      }
+
+      const { data, error } = await supabase.functions.invoke('clone-voice-tts', { body });
+
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (!data?.audioUrl) throw new Error('לא התקבל קובץ אודיו');
 
       setGeneratedAudioUrl(data.audioUrl);
       setGeneratedVoiceId(data.voiceId || null);
+
+      // Save tech details for debugging
+      setTechDetails({
+        selectedVoiceId: selectedVoice.id,
+        providerVoiceIdSent: selectedVoice.provider_voice_id || '(שוכפל חדש)',
+        voiceIdReturned: data.voiceId || '',
+        clonedFresh: data.clonedFresh || false,
+        provider: 'ElevenLabs',
+        modelId: data.modelId || '',
+        language: data.language || '',
+        voiceSettings: data.voiceSettings || currentVibeSettings,
+      });
+
+      // If cloned fresh, save the provider_voice_id back to DB for reuse
+      if (data.clonedFresh && data.voiceId) {
+        try {
+          await supabase.functions.invoke('voice-manager', {
+            body: { action: 'update_provider_voice_id', id: selectedVoice.id, provider_voice_id: data.voiceId },
+          });
+          // Update local state
+          setVoices(prev => prev.map(v =>
+            v.id === selectedVoice.id ? { ...v, provider_voice_id: data.voiceId } : v
+          ));
+        } catch (e) {
+          console.warn('Failed to save provider_voice_id:', e);
+        }
+      }
+
       toast.success('הדיבוב נוצר בהצלחה!');
     } catch (e: any) {
       console.error('TTS generation error:', e);
@@ -282,6 +383,7 @@ export default function VoicesManagePage() {
       setGeneratedVoiceId(null);
       setGenerationError(null);
       setGenerationErrorMeta(null);
+      setTechDetails(null);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
@@ -331,6 +433,7 @@ export default function VoicesManagePage() {
                   setGeneratedAudioUrl(null);
                   setGenerationError(null);
                   setGenerationErrorMeta(null);
+                  setTechDetails(null);
                 }}
                 className="p-1 hover:bg-muted rounded-lg"
               >
@@ -353,9 +456,13 @@ export default function VoicesManagePage() {
                   {voices.map(v => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.type === 'recorded' ? '🎙️ הוקלט' : '📁 הועלה'})
+                      {v.provider_voice_id ? ' ✓' : ''}
                     </option>
                   ))}
                 </select>
+              )}
+              {selectedVoice?.provider_voice_id && (
+                <p className="text-xs text-green-500 mt-1">✓ קול זה כבר שוכפל — ישתמש בקול המקורי ללא שכפול חוזר</p>
               )}
             </div>
 
@@ -371,6 +478,44 @@ export default function VoicesManagePage() {
                 <option value="en">🇺🇸 English</option>
                 <option value="ar">🇸🇦 عربية</option>
               </select>
+            </div>
+
+            {/* Vibe / Delivery preset */}
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">סגנון דיבור (Vibe)</label>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(VIBE_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => setVibePreset(key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      vibePreset === key
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-muted/50 text-foreground border-border hover:bg-muted'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Punctuation / Pauses toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">כבד פסיקים ושורות</label>
+                <p className="text-xs text-muted-foreground/70">שורות חדשות יהפכו להפסקות קצרות</p>
+              </div>
+              <button
+                onClick={() => setRespectPauses(!respectPauses)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  respectPauses ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  respectPauses ? 'right-0.5' : 'left-0.5'
+                }`} />
+              </button>
             </div>
 
             {/* Title */}
@@ -391,7 +536,7 @@ export default function VoicesManagePage() {
             {/* Script textarea */}
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">
-                תסריט (עברית) — {scriptText.length}/4,500 תווים
+                תסריט ({language === 'he' ? 'עברית' : language === 'ar' ? 'عربية' : 'English'}) — {scriptText.length}/4,500 תווים
               </label>
               <div className="relative">
                 <textarea
@@ -485,6 +630,32 @@ export default function VoicesManagePage() {
                     שמור לספריית קולות
                   </button>
                 </div>
+
+                {/* Technical details panel */}
+                {techDetails && (
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setShowTechDetails(!showTechDetails)}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                      פרטים טכניים
+                      {showTechDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                    {showTechDetails && (
+                      <div className="mt-2 bg-background border border-border rounded-lg p-3 text-xs space-y-1 font-mono" dir="ltr">
+                        <p><span className="text-muted-foreground">selectedVoiceId:</span> {techDetails.selectedVoiceId}</p>
+                        <p><span className="text-muted-foreground">providerVoiceId sent:</span> {techDetails.providerVoiceIdSent}</p>
+                        <p><span className="text-muted-foreground">voiceId returned:</span> {techDetails.voiceIdReturned}</p>
+                        <p><span className="text-muted-foreground">clonedFresh:</span> {techDetails.clonedFresh ? 'yes' : 'no (reused)'}</p>
+                        <p><span className="text-muted-foreground">provider:</span> {techDetails.provider}</p>
+                        <p><span className="text-muted-foreground">modelId:</span> {techDetails.modelId}</p>
+                        <p><span className="text-muted-foreground">language_code:</span> {techDetails.language}</p>
+                        <p><span className="text-muted-foreground">voice_settings:</span> {JSON.stringify(techDetails.voiceSettings)}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -615,6 +786,7 @@ export default function VoicesManagePage() {
                       <p className="font-semibold text-sm">{voice.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {voice.type === 'recorded' ? '🎙️ הוקלט' : '📁 הועלה'} • {new Date(voice.created_at).toLocaleDateString('he-IL')}
+                        {voice.provider_voice_id && ' • ✓ משוכפל'}
                       </p>
                     </div>
                     <button onClick={() => handleDelete(voice.id)}
