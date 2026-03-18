@@ -28,6 +28,7 @@ interface SavedVoice {
   provider_voice_id?: string | null;
   is_verified?: boolean;
   verification_status?: string;
+  verification_selected_model?: string | null;
 }
 
 interface ScriptScene {
@@ -844,11 +845,14 @@ export function VideoWizardFlow({
 
       if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
+          const preferredModel = selectedVoice.verification_selected_model || 'eleven_v3';
           const cloneResult = await voiceCloneService.cloneAndSpeak({
             providerVoiceId: selectedVoice.provider_voice_id || undefined,
             audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
             scriptText: narrationText,
             language: 'he',
+            modelId: preferredModel,
+            omitLanguageCode: preferredModel === 'eleven_multilingual_v2',
           });
           narrationAudioUrl = cloneResult.audioUrl;
           addDebugLog(runId, 'narration', 'success', 'Voice clone + TTS succeeded', { audioUrl: narrationAudioUrl });
@@ -1141,11 +1145,14 @@ export function VideoWizardFlow({
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
+            const preferredModel = selectedVoice.verification_selected_model || 'eleven_v3';
             const cloneResult = await voiceCloneService.cloneAndSpeak({
               providerVoiceId: selectedVoice.provider_voice_id || undefined,
               audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
               scriptText: narrationText,
               language: 'he',
+              modelId: preferredModel,
+              omitLanguageCode: preferredModel === 'eleven_multilingual_v2',
             });
             narrationAudioUrl = cloneResult.audioUrl;
           } else {

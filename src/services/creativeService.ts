@@ -185,19 +185,40 @@ export const voiceCloneService = {
     providerVoiceId?: string;
     language?: 'he' | 'en' | 'ar';
     voiceSettings?: Record<string, unknown>;
+    modelId?: string;
+    omitLanguageCode?: boolean;
     trainingAudioDurationSec?: number;
     trainingAudioSizeBytes?: number;
     trainingAudioFileName?: string;
-  }): Promise<{ audioUrl: string; voiceId: string; clonedFresh?: boolean; modelId?: string; language?: string; voiceSettings?: Record<string, unknown> }> => {
+    trainingAudioContentType?: string;
+    trainingAudioCodec?: string;
+  }): Promise<{
+    audioUrl: string;
+    voiceId: string;
+    clonedFresh?: boolean;
+    modelId?: string;
+    language?: string | null;
+    voiceSettings?: Record<string, unknown>;
+    warning?: string;
+    trainingAudioUrlUsed?: string | null;
+    trainingAudioDurationSec?: number | null;
+    trainingAudioSizeBytes?: number | null;
+    trainingAudioContentType?: string | null;
+    trainingAudioCodec?: string | null;
+  }> => {
     return withTimeout(
       (async () => {
         const body: Record<string, unknown> = {
           scriptText: params.scriptText,
           language: params.language,
           voiceSettings: params.voiceSettings,
+          modelId: params.modelId,
+          omitLanguageCode: params.omitLanguageCode,
           trainingAudioDurationSec: params.trainingAudioDurationSec,
           trainingAudioSizeBytes: params.trainingAudioSizeBytes,
           trainingAudioFileName: params.trainingAudioFileName,
+          trainingAudioContentType: params.trainingAudioContentType,
+          trainingAudioCodec: params.trainingAudioCodec,
         };
 
         if (params.providerVoiceId) {

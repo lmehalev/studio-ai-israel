@@ -20,6 +20,7 @@ interface SavedVoice {
   verification_status?: string;
   verification_updated_at?: string | null;
   verification_sample_url?: string | null;
+  verification_selected_model?: string | null;
   training_audio_file_name?: string | null;
 }
 
@@ -39,6 +40,20 @@ interface VoiceGeneration {
   language_code_used?: string | null;
   voice_settings_used?: Record<string, unknown> | null;
   is_verification_record?: boolean;
+}
+
+interface TrainingAudioAudit {
+  url: string;
+  sizeBytes: number | null;
+  durationSec: number | null;
+  contentType: string | null;
+  codec: string | null;
+}
+
+interface VerificationABSamples {
+  optionAUrl: string;
+  optionBUrl: string;
+  providerVoiceId: string;
 }
 
 // Vibe/Delivery presets
@@ -98,6 +113,11 @@ export default function VoicesManagePage() {
     modelId: string;
     language: string;
     voiceSettings: Record<string, unknown>;
+    trainingAudioUrlUsed?: string | null;
+    trainingAudioDurationSec?: number | null;
+    trainingAudioSizeBytes?: number | null;
+    trainingAudioContentType?: string | null;
+    trainingAudioCodec?: string | null;
   } | null>(null);
   const [showTechDetails, setShowTechDetails] = useState(false);
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -105,9 +125,12 @@ export default function VoicesManagePage() {
   // Reset / re-clone state
   const [resettingVoiceId, setResettingVoiceId] = useState<string | null>(null);
 
+  // Training-audio audit state
+  const [trainingAuditByVoiceId, setTrainingAuditByVoiceId] = useState<Record<string, TrainingAudioAudit>>({});
+
   // Verification state
   const [verifyingVoiceId, setVerifyingVoiceId] = useState<string | null>(null);
-  const [verificationAudioUrl, setVerificationAudioUrl] = useState<string | null>(null);
+  const [verificationSamples, setVerificationSamples] = useState<VerificationABSamples | null>(null);
   const [verificationCostOpen, setVerificationCostOpen] = useState(false);
   const [pendingVerifyVoiceId, setPendingVerifyVoiceId] = useState<string | null>(null);
 
@@ -116,13 +139,100 @@ export default function VoicesManagePage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  const getCodecFromContentType = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const normalized = value.toLowerCase();
+    const codecsMatch = normalized.match(/codecs\s*=\s*"?([^";]+)/);
+    if (codecsMatch?.[1]) return codecsMatch[1].trim();
+    if (normalized.includes('mpeg') || normalized.includes('mp3')) return 'mp3';
+    if (normalized.includes('wav')) return 'wav';
+    if (normalized.includes('ogg')) return 'ogg/opus';
+    if (normalized.includes('webm')) return 'webm/opus';
+    if (normalized.includes('m4a') || normalized.includes('mp4')) return 'aac';
+    return null;
+  };
+
+  const measureAudioDuration = (url: string): Promise<number | null> =>
+    new Promise((resolve) => {
+      const audio = document.createElement('audio');
+      const done = (value: number | null) => {
+        audio.removeAttribute('src');
+        audio.load();
+        resolve(value);
+      };
+
+      audio.preload = 'metadata';
+      audio.onloadedmetadata = () => {
+        const seconds = Number.isFinite(audio.duration) ? audio.duration : null;
+        done(seconds && seconds > 0 ? seconds : null);
+      };
+      audio.onerror = () => done(null);
+      audio.src = url;
+    });
+
+  const fetchTrainingAudioAudit = async (voice: SavedVoice): Promise<TrainingAudioAudit> => {
+    const [durationSec, headResponse] = await Promise.all([
+      measureAudioDuration(voice.audio_url),
+      fetch(voice.audio_url, { method: 'HEAD' }).catch(() => null),
+    ]);
+
+    const contentLength = headResponse?.headers.get('content-length');
+    const contentType = headResponse?.headers.get('content-type') || null;
+
+    return {
+      url: voice.audio_url,
+      durationSec,
+      sizeBytes: contentLength ? Number(contentLength) || null : null,
+      contentType,
+      codec: getCodecFromContentType(contentType),
+    };
+  };
+
+  const hydrateTrainingAudits = async (voiceList: SavedVoice[]) => {
+    const tasks = voiceList.map(async (voice) => {
+      if (!voice.audio_url) return null;
+      try {
+        const audit = await fetchTrainingAudioAudit(voice);
+        return [voice.id, audit] as const;
+      } catch {
+        return [voice.id, {
+          url: voice.audio_url,
+          durationSec: null,
+          sizeBytes: null,
+          contentType: null,
+          codec: null,
+        } satisfies TrainingAudioAudit] as const;
+      }
+    });
+
+    const rows = (await Promise.all(tasks)).filter((row): row is readonly [string, TrainingAudioAudit] => Boolean(row));
+    if (!rows.length) return;
+
+    setTrainingAuditByVoiceId((prev) => ({
+      ...prev,
+      ...Object.fromEntries(rows),
+    }));
+  };
+
+  const getTrainingAuditForVoice = async (voice: SavedVoice): Promise<TrainingAudioAudit> => {
+    const existing = trainingAuditByVoiceId[voice.id];
+    if (existing) return existing;
+    const fresh = await fetchTrainingAudioAudit(voice);
+    setTrainingAuditByVoiceId((prev) => ({ ...prev, [voice.id]: fresh }));
+    return fresh;
+  };
+
   const loadAll = async () => {
     try {
       const [voicesRes, gensRes] = await Promise.all([
         supabase.functions.invoke('voice-manager', { body: { action: 'list' } }),
         supabase.functions.invoke('voice-manager', { body: { action: 'list_generations' } }),
       ]);
-      if (voicesRes.data?.voices) setVoices(voicesRes.data.voices);
+      if (voicesRes.data?.voices) {
+        const loadedVoices = voicesRes.data.voices as SavedVoice[];
+        setVoices(loadedVoices);
+        void hydrateTrainingAudits(loadedVoices);
+      }
       if (gensRes.data?.generations) {
         // Filter out verification records from visible generations
         const visible = (gensRes.data.generations as VoiceGeneration[]).filter(g => !g.is_verification_record);
@@ -144,7 +254,11 @@ export default function VoicesManagePage() {
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      setVoices(prev => [data.voice, ...prev]);
+
+      const savedVoice = data.voice as SavedVoice;
+      setVoices(prev => [savedVoice, ...prev]);
+      void hydrateTrainingAudits([savedVoice]);
+
       setCreating(false);
       setName('');
       toast.success('הקול נשמר בהצלחה!');
@@ -246,60 +360,160 @@ export default function VoicesManagePage() {
   // ══════════════════════════════════════════
   const requestVerification = (voiceId: string) => {
     setPendingVerifyVoiceId(voiceId);
+    setVerificationSamples(null);
+    setVerifyingVoiceId(null);
     setVerificationCostOpen(true);
   };
 
   const executeVerification = async () => {
     setVerificationCostOpen(false);
     const voiceId = pendingVerifyVoiceId;
+    setPendingVerifyVoiceId(null);
     if (!voiceId) return;
 
     const voice = voices.find(v => v.id === voiceId);
-    if (!voice?.provider_voice_id) {
-      toast.error('אין קול משוכפל לאימות. בצע שכפול קודם.');
+    if (!voice) {
+      toast.error('הקול לא נמצא');
       return;
     }
 
     setVerifyingVoiceId(voiceId);
-    setVerificationAudioUrl(null);
+    setVerificationSamples(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
+      const trainingAudit = await getTrainingAuditForVoice(voice);
+      const durationSec = trainingAudit.durationSec;
+
+      if (!durationSec || durationSec <= 0) {
+        throw new Error('לא ניתן למדוד אורך אמיתי של קובץ האימון. בדוק שהקובץ תקין ונגיש.');
+      }
+
+      if (durationSec < 30) {
+        throw new Error(
+          'קובץ האימון קצר מדי (פחות מ-30 שניות) ולכן השכפול נחסם. הקלט 60-120 שניות, דובר אחד, חדר שקט, ללא מוזיקה/רעשים, עדיפות ל-WAV/MP3.'
+        );
+      }
+
+      if (durationSec < 60) {
+        toast.warning('אורך הקלטה קצר מ-60 שניות. אפשר להמשיך, אבל איכות זהות עשויה להיפגע.');
+      }
+
+      console.log('Training audio used for clone verification:', {
+        url: trainingAudit.url,
+        durationSec,
+        sizeBytes: trainingAudit.sizeBytes,
+        contentType: trainingAudit.contentType,
+        codec: trainingAudit.codec,
+      });
+
+      let providerVoiceIdForTest = voice.provider_voice_id || null;
+
+      const optionABody: Record<string, unknown> = {
+        scriptText: VERIFICATION_TEST_SENTENCE,
+        language: 'he',
+        voiceSettings: VIBE_PRESETS.default.settings,
+        modelId: 'eleven_v3',
+      };
+
+      if (providerVoiceIdForTest) {
+        optionABody.providerVoiceId = providerVoiceIdForTest;
+      } else {
+        optionABody.audioUrl = voice.audio_url;
+        optionABody.trainingAudioDurationSec = durationSec;
+        optionABody.trainingAudioSizeBytes = trainingAudit.sizeBytes ?? undefined;
+        optionABody.trainingAudioFileName = voice.training_audio_file_name ?? undefined;
+        optionABody.trainingAudioContentType = trainingAudit.contentType ?? undefined;
+        optionABody.trainingAudioCodec = trainingAudit.codec ?? undefined;
+      }
+
+      const { data: optionAData, error: optionAError } = await supabase.functions.invoke('clone-voice-tts', {
+        body: optionABody,
+      });
+
+      if (optionAError) throw optionAError;
+      if (optionAData?.error) throw new Error(optionAData.error);
+      if (!optionAData?.audioUrl) throw new Error('לא התקבלה דגימת אימות עבור מודל A');
+
+      if (optionAData.voiceId && !providerVoiceIdForTest) {
+        providerVoiceIdForTest = optionAData.voiceId;
+        await supabase.functions.invoke('voice-manager', {
+          body: {
+            action: 'update_provider_voice_id',
+            id: voiceId,
+            provider_voice_id: providerVoiceIdForTest,
+          },
+        });
+      }
+
+      if (!providerVoiceIdForTest) {
+        throw new Error('לא התקבל provider_voice_id עבור בדיקת A/B');
+      }
+
+      const { data: optionBData, error: optionBError } = await supabase.functions.invoke('clone-voice-tts', {
         body: {
-          providerVoiceId: voice.provider_voice_id,
+          providerVoiceId: providerVoiceIdForTest,
           scriptText: VERIFICATION_TEST_SENTENCE,
           language: 'he',
+          modelId: 'eleven_multilingual_v2',
+          omitLanguageCode: true,
           voiceSettings: VIBE_PRESETS.default.settings,
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (!data?.audioUrl) throw new Error('לא התקבל קובץ אודיו לאימות');
+      if (optionBError) throw optionBError;
+      if (optionBData?.error) throw new Error(optionBData.error);
+      if (!optionBData?.audioUrl) throw new Error('לא התקבלה דגימת אימות עבור מודל B');
 
-      setVerificationAudioUrl(data.audioUrl);
-      toast.info('השמע את הדגימה ואשר אם זה נשמע כמוך.');
+      setVoices(prev => prev.map(v =>
+        v.id === voiceId
+          ? {
+              ...v,
+              provider_voice_id: providerVoiceIdForTest,
+              is_verified: false,
+              verification_status: 'pending',
+              verification_selected_model: null,
+            }
+          : v
+      ));
+
+      setVerificationSamples({
+        optionAUrl: optionAData.audioUrl,
+        optionBUrl: optionBData.audioUrl,
+        providerVoiceId: providerVoiceIdForTest,
+      });
+
+      toast.info('האזן לשתי הדגימות ובחר איזו נשמעת כמוך.');
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה ביצירת דגימת אימות');
+      toast.error(e.message || 'שגיאה ביצירת דגימות אימות A/B');
       setVerifyingVoiceId(null);
+      setVerificationSamples(null);
     }
   };
 
-  const confirmVerification = async (approved: boolean) => {
+  const confirmVerification = async (selectedModel: 'eleven_v3' | 'eleven_multilingual_v2' | 'reject') => {
     const voiceId = verifyingVoiceId;
-    if (!voiceId || !verificationAudioUrl) return;
+    const samples = verificationSamples;
+    if (!voiceId || !samples) return;
 
     const voice = voices.find(v => v.id === voiceId);
-    if (!voice?.provider_voice_id) return;
+    const providerVoiceId = samples.providerVoiceId || voice?.provider_voice_id;
+    if (!providerVoiceId) {
+      toast.error('חסר provider_voice_id לשמירת אימות');
+      return;
+    }
+
+    const approved = selectedModel !== 'reject';
+    const sampleUrl = selectedModel === 'eleven_multilingual_v2' ? samples.optionBUrl : samples.optionAUrl;
 
     try {
       await supabase.functions.invoke('voice-manager', {
         body: {
           action: 'save_voice_verification',
           voice_id: voiceId,
-          provider_voice_id: voice.provider_voice_id,
+          provider_voice_id: providerVoiceId,
           status: approved ? 'approved' : 'rejected',
-          sample_audio_url: verificationAudioUrl,
+          sample_audio_url: sampleUrl,
+          selected_model: approved ? selectedModel : null,
         },
       });
 
@@ -307,23 +521,25 @@ export default function VoicesManagePage() {
         v.id === voiceId
           ? {
               ...v,
+              provider_voice_id: providerVoiceId,
               is_verified: approved,
               verification_status: approved ? 'approved' : 'rejected',
-              verification_sample_url: verificationAudioUrl,
+              verification_sample_url: sampleUrl,
+              verification_selected_model: approved ? selectedModel : null,
             }
           : v
       ));
 
       if (approved) {
-        toast.success('✅ הקול אומת בהצלחה! ניתן להשתמש בו בכל הזרימות.');
+        toast.success('✅ הקול אומת ונשמר מודל ברירת מחדל לקול זה.');
       } else {
-        toast.warning('❌ הקול סומן כלא מאומת. בצע איפוס ושכפול מחדש עם הקלטה איכותית יותר.');
+        toast.warning('❌ הקול סומן כלא מאומת. יש לבצע איפוס ושכפול מחדש.');
       }
-    } catch (e: any) {
+    } catch {
       toast.error('שגיאה בשמירת תוצאת האימות');
     } finally {
       setVerifyingVoiceId(null);
-      setVerificationAudioUrl(null);
+      setVerificationSamples(null);
     }
   };
 
@@ -361,34 +577,48 @@ export default function VoicesManagePage() {
   };
 
   const currentVibeSettings = VIBE_PRESETS[vibePreset]?.settings || VIBE_PRESETS.default.settings;
+  const selectedVoiceRequiresVerification = Boolean(selectedVoice && !selectedVoice.is_verified);
 
   const costEstimates: CostEstimate[] = [{
     provider: 'ElevenLabs',
-    model: language === 'he' ? 'eleven_v3' : 'eleven_multilingual_v2',
-    action: selectedVoice?.provider_voice_id ? 'קריינות (קול שמור)' : 'שכפול קול + קריינות',
+    model: selectedVoice?.verification_selected_model || 'model from verification',
+    action: 'קריינות (קול מאומת)',
     estimatedCost: `~${scriptText.length} תווים`,
     details: [
-      selectedVoice?.provider_voice_id ? 'שימוש בקול ששוכפל בעבר — ללא עלות שכפול נוספת' : 'שכפול הקול הנבחר ויצירת קריינות',
+      'קול לא מאומת חסום ליצירת דיבוב',
       `פריסט: ${VIBE_PRESETS[vibePreset]?.label || 'רגיל'}`,
     ],
   }];
 
-  const verificationCostEstimates: CostEstimate[] = [{
-    provider: 'ElevenLabs',
-    action: 'דגימת אימות קול',
-    estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length} תווים`,
-    details: ['משפט בדיקה קצר בעברית לאימות זהות הקול', 'לא תתבצע שמירה — רק האזנה ואישור'],
-  }];
+  const pendingVerifyVoice = voices.find(v => v.id === pendingVerifyVoiceId) || null;
+  const verificationCostEstimates: CostEstimate[] = [
+    {
+      provider: 'ElevenLabs',
+      model: 'eleven_v3 + he',
+      action: pendingVerifyVoice?.provider_voice_id ? 'A/B אימות (ללא שכפול)' : 'A/B אימות + שכפול',
+      estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length * 2} תווים`,
+      details: [
+        pendingVerifyVoice?.provider_voice_id
+          ? 'אפשרות A: eleven_v3 עם language_code=he'
+          : 'אפשרות A: שכפול + eleven_v3 עם language_code=he',
+      ],
+    },
+    {
+      provider: 'ElevenLabs',
+      model: 'eleven_multilingual_v2 (auto)',
+      action: 'A/B אימות קול',
+      estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length} תווים`,
+      details: ['אפשרות B: eleven_multilingual_v2 ללא language_code (auto-detect)'],
+    },
+  ];
 
   const handleRequestGenerate = () => {
     if (!selectedVoiceId) { toast.error('יש לבחור קול'); return; }
     if (!scriptText.trim()) { toast.error('יש להזין תסריט'); return; }
     if (scriptText.length > 4500) { toast.error('התסריט ארוך מדי (מקסימום 4,500 תווים)'); return; }
     if (!scriptTitle.trim()) { toast.error('יש להזין כותרת לדיבוב'); return; }
-
-    // Block unverified voices with a clear message
-    if (selectedVoice?.provider_voice_id && selectedVoice.verification_status === 'rejected') {
-      toast.error('הקול סומן כלא תואם. בצע איפוס ושכפול מחדש עם הקלטה איכותית.');
+    if (!selectedVoice?.provider_voice_id || !selectedVoice.is_verified) {
+      toast.error('הקול לא מאומת. לחץ "אמת את הקול" לפני יצירת דיבוב.');
       return;
     }
 
@@ -400,6 +630,10 @@ export default function VoicesManagePage() {
   const executeGenerate = async () => {
     setCostApprovalOpen(false);
     if (!selectedVoice) return;
+    if (!selectedVoice.provider_voice_id || !selectedVoice.is_verified) {
+      toast.error('הקול לא מאומת. יש להשלים אימות תחילה.');
+      return;
+    }
 
     setGenerating(true);
     setGeneratedAudioUrl(null);
@@ -409,18 +643,16 @@ export default function VoicesManagePage() {
 
     try {
       const processedScript = respectPauses ? preprocessPauses(scriptText) : scriptText;
+      const preferredModel = selectedVoice.verification_selected_model || 'eleven_v3';
 
       const body: Record<string, unknown> = {
         scriptText: processedScript,
         language,
+        providerVoiceId: selectedVoice.provider_voice_id,
         voiceSettings: currentVibeSettings,
+        modelId: preferredModel,
+        omitLanguageCode: preferredModel === 'eleven_multilingual_v2',
       };
-
-      if (selectedVoice.provider_voice_id) {
-        body.providerVoiceId = selectedVoice.provider_voice_id;
-      } else {
-        body.audioUrl = selectedVoice.audio_url;
-      }
 
       const { data, error } = await supabase.functions.invoke('clone-voice-tts', { body });
 
@@ -433,28 +665,21 @@ export default function VoicesManagePage() {
 
       setTechDetails({
         selectedVoiceId: selectedVoice.id,
-        providerVoiceIdSent: selectedVoice.provider_voice_id || '(שוכפל חדש)',
+        providerVoiceIdSent: selectedVoice.provider_voice_id,
         voiceIdReturned: data.voiceId || '',
         clonedFresh: data.clonedFresh || false,
         provider: 'ElevenLabs',
-        modelId: data.modelId || '',
-        language: data.language || '',
+        modelId: data.modelId || preferredModel,
+        language: data.language || '(auto)',
         voiceSettings: data.voiceSettings || currentVibeSettings,
+        trainingAudioUrlUsed: data.trainingAudioUrlUsed ?? null,
+        trainingAudioDurationSec: data.trainingAudioDurationSec ?? null,
+        trainingAudioSizeBytes: data.trainingAudioSizeBytes ?? null,
+        trainingAudioContentType: data.trainingAudioContentType ?? null,
+        trainingAudioCodec: data.trainingAudioCodec ?? null,
       });
 
-      if (data.clonedFresh && data.voiceId) {
-        try {
-          await supabase.functions.invoke('voice-manager', {
-            body: { action: 'update_provider_voice_id', id: selectedVoice.id, provider_voice_id: data.voiceId },
-          });
-          setVoices(prev => prev.map(v =>
-            v.id === selectedVoice.id ? { ...v, provider_voice_id: data.voiceId, is_verified: false, verification_status: 'pending' } : v
-          ));
-        } catch (e) {
-          console.warn('Failed to save provider_voice_id:', e);
-        }
-      }
-
+      if (data.warning) toast.warning(data.warning);
       toast.success('הדיבוב נוצר בהצלחה!');
     } catch (e: any) {
       console.error('TTS generation error:', e);
@@ -585,14 +810,11 @@ export default function VoicesManagePage() {
                   ))}
                 </select>
               )}
-              {selectedVoice?.provider_voice_id && selectedVoice.is_verified && (
-                <p className="text-xs text-green-500 mt-1">✅ קול מאומת — ישתמש בקול המקורי שלך</p>
+              {selectedVoice?.is_verified && (
+                <p className="text-xs text-primary mt-1">✅ קול מאומת — ניתן ליצור דיבוב</p>
               )}
-              {selectedVoice?.provider_voice_id && !selectedVoice.is_verified && (
-                <p className="text-xs text-warning mt-1">⚠️ קול זה טרם אומת. מומלץ לבצע אימות בכרטיס הקול למטה.</p>
-              )}
-              {selectedVoice && !selectedVoice.provider_voice_id && (
-                <p className="text-xs text-muted-foreground mt-1">קול זה ישוכפל בפעם הראשונה (פעולה בתשלום)</p>
+              {selectedVoice && !selectedVoice.is_verified && (
+                <p className="text-xs text-warning mt-1">⚠️ הקול לא מאומת — יצירת דיבוב חסומה עד אימות A/B.</p>
               )}
             </div>
 
@@ -680,7 +902,7 @@ export default function VoicesManagePage() {
 
             {/* Generate button */}
             {!generatedAudioUrl && (
-              <button onClick={handleRequestGenerate} disabled={generating || !selectedVoiceId || !scriptText.trim() || !scriptTitle.trim()}
+              <button onClick={handleRequestGenerate} disabled={generating || !selectedVoiceId || !scriptText.trim() || !scriptTitle.trim() || selectedVoiceRequiresVerification}
                 className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                 {generating ? (<><Loader2 className="w-4 h-4 animate-spin" /> יוצר דיבוב... (עשוי לקחת 30-60 שניות)</>) : (<><DollarSign className="w-4 h-4" /> 💰 צור דיבוב</>)}
               </button>
@@ -890,12 +1112,27 @@ export default function VoicesManagePage() {
                         <div className="bg-background border border-border rounded-lg p-3 text-xs space-y-1 font-mono" dir="ltr">
                           <p><span className="text-muted-foreground">voice_id (DB):</span> {voice.id}</p>
                           <p><span className="text-muted-foreground">provider_voice_id:</span> {voice.provider_voice_id || '(not cloned yet)'}</p>
+                          <p><span className="text-muted-foreground">selected_model:</span> {voice.verification_selected_model || '(not selected yet)'}</p>
                           <p><span className="text-muted-foreground">training_file:</span> {voice.training_audio_file_name || '—'}</p>
+                          <p><span className="text-muted-foreground">training_url:</span> {voice.audio_url}</p>
+                          <p><span className="text-muted-foreground">training_size_bytes:</span> {trainingAuditByVoiceId[voice.id]?.sizeBytes ?? 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_duration_sec:</span> {trainingAuditByVoiceId[voice.id]?.durationSec ? trainingAuditByVoiceId[voice.id].durationSec!.toFixed(2) : 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_content_type:</span> {trainingAuditByVoiceId[voice.id]?.contentType || 'unknown'}</p>
+                          <p><span className="text-muted-foreground">training_codec:</span> {trainingAuditByVoiceId[voice.id]?.codec || 'unknown'}</p>
                           <p><span className="text-muted-foreground">created_at:</span> {voice.created_at}</p>
                           <p><span className="text-muted-foreground">verification:</span> {voice.verification_status || 'unverified'}</p>
                           {voice.verification_updated_at && (
                             <p><span className="text-muted-foreground">verified_at:</span> {voice.verification_updated_at}</p>
                           )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => togglePlay(`training-${voice.id}`, voice.audio_url)}
+                            className="px-3 py-1.5 border border-border rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-muted"
+                          >
+                            <Play className="w-3.5 h-3.5" /> נגן קובץ אימון
+                          </button>
                         </div>
 
                         {/* Verification sample playback */}
@@ -908,7 +1145,6 @@ export default function VoicesManagePage() {
 
                         {/* Action buttons */}
                         <div className="flex flex-wrap gap-2">
-                          {/* Reset / Re-clone */}
                           <button
                             onClick={() => handleResetVoice(voice.id)}
                             disabled={resettingVoiceId === voice.id}
@@ -918,34 +1154,52 @@ export default function VoicesManagePage() {
                             איפוס ושכפול מחדש
                           </button>
 
-                          {/* Verify — only if cloned but not verified */}
-                          {voice.provider_voice_id && !voice.is_verified && (
+                          {!voice.is_verified && (
                             <button
                               onClick={() => requestVerification(voice.id)}
                               disabled={verifyingVoiceId === voice.id}
                               className="px-3 py-1.5 border border-primary/50 text-primary rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-primary/10 disabled:opacity-50"
                             >
                               {verifyingVoiceId === voice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                              💰 אמת את הקול
+                              💰 אמת את הקול (A/B)
                             </button>
                           )}
                         </div>
 
                         {/* Active verification flow */}
-                        {verifyingVoiceId === voice.id && verificationAudioUrl && (
+                        {verifyingVoiceId === voice.id && verificationSamples && (
                           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
-                            <p className="text-sm font-semibold text-primary">🔊 האזן לדגימת האימות:</p>
+                            <p className="text-sm font-semibold text-primary">🔊 אימות A/B — אותו משפט, אותו provider_voice_id</p>
                             <p className="text-xs text-muted-foreground">"{VERIFICATION_TEST_SENTENCE}"</p>
-                            <audio src={verificationAudioUrl} controls className="w-full h-8" autoPlay />
-                            <p className="text-xs font-medium text-foreground">האם הקול נשמע כמוך?</p>
-                            <div className="flex gap-3">
-                              <button onClick={() => confirmVerification(true)}
-                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5">
-                                <ShieldCheck className="w-4 h-4" /> כן, זה נשמע כמוני ✅
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium">A: eleven_v3 + he</p>
+                              <audio src={verificationSamples.optionAUrl} controls className="w-full h-8" />
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium">B: eleven_multilingual_v2 (auto)</p>
+                              <audio src={verificationSamples.optionBUrl} controls className="w-full h-8" />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <button
+                                onClick={() => confirmVerification('eleven_v3')}
+                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                              >
+                                לבחור A (נשמע כמוני)
                               </button>
-                              <button onClick={() => confirmVerification(false)}
-                                className="flex-1 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5">
-                                <X className="w-4 h-4" /> לא, זה לא אני ❌
+                              <button
+                                onClick={() => confirmVerification('eleven_multilingual_v2')}
+                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                              >
+                                לבחור B (נשמע כמוני)
+                              </button>
+                              <button
+                                onClick={() => confirmVerification('reject')}
+                                className="px-3 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-semibold"
+                              >
+                                אף אחד מהם
                               </button>
                             </div>
                           </div>
