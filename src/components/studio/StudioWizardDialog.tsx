@@ -24,6 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { VideoWizardFlow, type VideoWizardSession } from '@/components/studio/VideoWizardFlow';
+import { CostApprovalDialog, buildHighlightEstimates, type CostEstimate } from '@/components/studio/CostApprovalDialog';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
