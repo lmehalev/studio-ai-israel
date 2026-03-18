@@ -38,6 +38,20 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ╔═══════════════════════════════════════════════════════╗
+  // ║  🚫 EMERGENCY KILL SWITCH — ALL RUNWAY CALLS BLOCKED  ║
+  // ║  Activated after credit-burn incident.                 ║
+  // ║  Remove this block ONLY after manual review.           ║
+  // ╚═══════════════════════════════════════════════════════╝
+  const RUNWAY_KILL_SWITCH = true;
+  if (RUNWAY_KILL_SWITCH) {
+    console.warn("🚫 RUNWAY KILL SWITCH ACTIVE — request blocked");
+    return new Response(
+      JSON.stringify({ error: "Runway חסום ידנית (Kill Switch). יש לאשר ידנית הפעלה מחדש." }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const RUNWAY_API_KEY = Deno.env.get("RUNWAY_API_KEY");
     if (!RUNWAY_API_KEY) throw new Error("RUNWAY_API_KEY is not configured");

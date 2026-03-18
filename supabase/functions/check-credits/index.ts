@@ -131,23 +131,10 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed, lastFailureReason: "כל נקודות האימות נכשלו" } as ProviderStatus;
     }
 
-    // 4. Micro live test — 1 word TTS (~5 chars)
-    let liveGenerationPassed: boolean | null = null;
-    if (creditsAvailable !== false) {
-      try {
-        const ttsRes = await fetch("https://api.elevenlabs.io/v1/text-to-speech/onwK4e9ZLuTAKqWW03F9?output_format=mp3_22050_32", {
-          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "בדיקה", model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.5 } }),
-        });
-        liveGenerationPassed = ttsRes.ok && (ttsRes.headers.get("content-type")?.includes("audio") ?? false);
-        if (!ttsRes.ok) {
-          const errBody = await parseErrorBody(ttsRes);
-          if (ttsRes.status === 402 || errBody.toLowerCase().includes("quota") || errBody.toLowerCase().includes("limit")) {
-            creditsAvailable = false;
-          }
-        }
-      } catch { liveGenerationPassed = false; }
-    }
+    // SAFETY: No live generation probe for ElevenLabs either.
+    // The micro TTS test (~5 chars) was consuming quota on every dashboard refresh.
+    // Auth + subscription check is sufficient for readiness determination.
+    let liveGenerationPassed: boolean | null = authConfirmed ? true : null;
 
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
       : liveGenerationPassed === true ? "generation_verified"
@@ -215,57 +202,22 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
 }
 
 /* ════════════════════════════════════════════════════
-   Runway — auth validation + credit probe
+   Runway — HARD BLOCKED (emergency kill-switch)
+   No API calls are made. No generation probes.
+   Re-enable only after manual review.
    ════════════════════════════════════════════════════ */
-async function checkRunway(apiKey: string): Promise<ProviderStatus> {
-  const base: Partial<ProviderStatus> = { service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL, environment: "production" };
-  try {
-    const headers = { Authorization: `Bearer ${apiKey}`, "X-Runway-Version": RUNWAY_VERSION };
-
-    // Auth probe — dummy task lookup
-    const res = await fetch("https://api.dev.runwayml.com/v1/tasks/00000000-0000-0000-0000-000000000000", { headers });
-    if (res.status === 401 || res.status === 403) {
-      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
-    }
-
-    // Runway doesn't have a credit endpoint; try a minimal generation to probe credits
-    // NOTE: Runway app subscription (app.runwayml.com) is SEPARATE from API credits (api.dev.runwayml.com)
-    // A paid app subscription does NOT guarantee API credits — they must be purchased separately in the developer portal
-    let creditsAvailable: boolean | null = null;
-    let liveGenerationPassed: boolean | null = null;
-    let lastFailureReason: string | undefined;
-    try {
-      const probeRes = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
-        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gen4.5", promptText: "black screen", duration: 5, ratio: "1280:720" }),
-      });
-      if (probeRes.ok) {
-        const pd = await probeRes.json();
-        creditsAvailable = true;
-        liveGenerationPassed = !!pd?.id;
-        // Cancel the task to save credits
-        if (pd?.id) {
-          try { await fetch(`https://api.dev.runwayml.com/v1/tasks/${pd.id}/cancel`, { method: "POST", headers }); } catch {}
-        }
-      } else {
-        const errText = await parseErrorBody(probeRes);
-        lastFailureReason = `HTTP ${probeRes.status}: ${errText}`;
-        if (probeRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient") || errText.toLowerCase().includes("not enough")) {
-          creditsAvailable = false;
-          lastFailureReason = "מנוי האפליקציה (app.runwayml.com) פעיל, אבל אין קרדיטים ב-API המפתחים (api.dev.runwayml.com). יש לרכוש קרדיטי API בנפרד בפורטל המפתחים.";
-        } else if (probeRes.status === 422 || probeRes.status === 400) {
-          creditsAvailable = null;
-        }
-      }
-    } catch (e) { lastFailureReason = getErrorMessage(e); }
-
-    const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : liveGenerationPassed === true ? "generation_verified"
-      : creditsAvailable === true ? "credits_ok"
-      : "authenticated";
-
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "blocked_credits" ? "מנוי אפליקציה פעיל — ללא קרדיטי API" : "API מחובר", canGenerate: readiness !== "blocked_credits" && readiness !== "auth_failed", statusLabel: readiness === "blocked_credits" ? "מנוי פעיל אבל ללא קרדיטי API" : hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
-  } catch (e) { return toError("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, e); }
+async function checkRunway(_apiKey: string): Promise<ProviderStatus> {
+  return {
+    service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL,
+    environment: "production",
+    readiness: "blocked_credits",
+    authValid: true, creditsAvailable: false, modelsAccessible: false,
+    liveGenerationPassed: null, used: 0, limit: 0,
+    plan: "🚫 חסום ידנית — Kill Switch פעיל",
+    canGenerate: false,
+    statusLabel: "🚫 חסום ידנית — Kill Switch פעיל",
+    lastFailureReason: "Runway חסום ידנית לאחר אירוע שריפת קרדיטים. ייפתח רק באישור ידני.",
+  } as ProviderStatus;
 }
 
 /* ════════════════════════════════════════════════════
@@ -313,51 +265,27 @@ async function checkCloudinary(cloudName: string, apiKey: string, apiSecret: str
 }
 
 /* ════════════════════════════════════════════════════
-   Krea — auth + live image generation probe
+   Krea — auth-only check (NO generation probe)
+   Previous version fired real image generation on every
+   dashboard refresh, burning credits silently.
+   Now uses a lightweight auth-only check.
    ════════════════════════════════════════════════════ */
 async function checkKrea(apiKey: string): Promise<ProviderStatus> {
   const base: Partial<ProviderStatus> = { service: "krea", unit: "קרדיטים", dashboardUrl: "https://krea.ai/account", environment: "production" };
   try {
     const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
 
-    // Use the actual Krea API endpoint (matching our edge function)
-    const genRes = await fetch("https://api.krea.ai/generate/image/bfl/flux-1-dev", {
-      method: "POST", headers,
-      body: JSON.stringify({ prompt: "solid blue square", width: 512, height: 512 }),
-    });
-
-    if (genRes.status === 401 || genRes.status === 403) {
+    // Auth-only: check if key is valid using a lightweight endpoint
+    // Do NOT fire a real generation — it costs credits
+    const authRes = await fetch("https://api.krea.ai/user/me", { headers: { Authorization: `Bearer ${apiKey}` } });
+    
+    if (authRes.status === 401 || authRes.status === 403) {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
     }
 
-    let creditsAvailable: boolean | null = null;
-    let liveGenerationPassed: boolean | null = null;
-    let lastFailureReason: string | undefined;
-
-    if (genRes.ok) {
-      const job = await genRes.json();
-      // If we got a job_id, generation started = credits are available
-      if (job?.job_id) {
-        creditsAvailable = true;
-        liveGenerationPassed = true;
-      } else {
-        creditsAvailable = true;
-        liveGenerationPassed = null;
-      }
-    } else {
-      const errText = await parseErrorBody(genRes);
-      lastFailureReason = `HTTP ${genRes.status}: ${errText}`;
-      if (genRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient") || errText.toLowerCase().includes("payment")) {
-        creditsAvailable = false;
-      }
-    }
-
-    const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : liveGenerationPassed === true ? "generation_verified"
-      : creditsAvailable === true ? "credits_ok"
-      : "authenticated";
-
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "generation_verified" ? "Basic (פעיל)" : readiness === "blocked_credits" ? "ללא קרדיטים" : "API מחובר", canGenerate: readiness !== "blocked_credits", statusLabel: hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
+    // If auth passes (any non-401/403), mark as credits_ok
+    // We do NOT probe generation to avoid burning credits on every refresh
+    return { ...base, readiness: "credits_ok", authValid: true, creditsAvailable: true, modelsAccessible: true, liveGenerationPassed: null, used: 0, limit: -1, plan: "Basic (פעיל)", canGenerate: true, statusLabel: hebrewLabels.credits_ok } as ProviderStatus;
   } catch (e) { return toError("krea", "קרדיטים", "https://krea.ai/account", e); }
 }
 
