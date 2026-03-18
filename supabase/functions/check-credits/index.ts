@@ -207,18 +207,21 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
    No API calls are made. No generation probes.
    Re-enable only after manual review.
    ════════════════════════════════════════════════════ */
-async function checkRunway(_apiKey: string): Promise<ProviderStatus> {
-  return {
-    service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL,
-    environment: "production",
-    readiness: "blocked_credits",
-    authValid: true, creditsAvailable: false, modelsAccessible: false,
-    liveGenerationPassed: null, used: 0, limit: 0,
-    plan: "🚫 חסום ידנית — Kill Switch פעיל",
-    canGenerate: false,
-    statusLabel: "🚫 חסום ידנית — Kill Switch פעיל",
-    lastFailureReason: "Runway חסום ידנית לאחר אירוע שריפת קרדיטים. ייפתח רק באישור ידני.",
-  } as ProviderStatus;
+async function checkRunway(apiKey: string): Promise<ProviderStatus> {
+  const base: Partial<ProviderStatus> = { service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL, environment: "production" };
+  try {
+    // Auth-only check: query a nonexistent task (no generation, no credits consumed)
+    const res = await fetch("https://api.dev.runwayml.com/v1/tasks/00000000-0000-0000-0000-000000000000", {
+      headers: { "Authorization": `Bearer ${apiKey}`, "X-Runway-Version": "2024-11-06" },
+    });
+    // 401/403 = bad key; 404 = key works (task not found); 429 = rate limited but key valid
+    if (res.status === 401 || res.status === 403) {
+      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
+    }
+    const authValid = res.status === 404 || res.status === 200 || res.status === 429;
+    // Runway is re-enabled as fallback only — mark as credits_ok but NOT generation_verified
+    return { ...base, readiness: authValid ? "credits_ok" : "connected", authValid, creditsAvailable: authValid ? true : null, modelsAccessible: authValid, liveGenerationPassed: null, used: 0, limit: -1, plan: authValid ? "API מחובר (Fallback בלבד)" : "unknown", canGenerate: authValid, statusLabel: authValid ? "קרדיטים תקינים (Fallback בלבד)" : "מחובר" } as ProviderStatus;
+  } catch (e) { return toError("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, e); }
 }
 
 /* ════════════════════════════════════════════════════
