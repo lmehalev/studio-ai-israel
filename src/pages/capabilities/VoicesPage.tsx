@@ -815,7 +815,7 @@ export default function VoicesManagePage() {
               )}
               {selectedVoice && !selectedVoice.is_verified && (
                 <p className="text-xs text-warning mt-1">⚠️ הקול לא מאומת — יצירת דיבוב חסומה עד אימות A/B.</p>
-              )
+              )}
             </div>
 
             {/* Language */}
