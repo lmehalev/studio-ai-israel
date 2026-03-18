@@ -66,8 +66,13 @@ const decodeProviderWithMeta = (
 const parseVerificationPayload = (script: string | null): {
   status: VerificationStatus;
   providerVoiceId: string;
+  selectedModel: string | null;
 } | null => {
-  const parsed = parseJsonSafe<{ status?: string; providerVoiceId?: string }>(script || "");
+  const parsed = parseJsonSafe<{
+    status?: string;
+    providerVoiceId?: string;
+    selectedModel?: string;
+  }>(script || "");
   if (!parsed?.providerVoiceId) return null;
 
   const status = parsed.status;
@@ -76,6 +81,7 @@ const parseVerificationPayload = (script: string | null): {
   return {
     status,
     providerVoiceId: parsed.providerVoiceId,
+    selectedModel: typeof parsed.selectedModel === "string" ? parsed.selectedModel : null,
   };
 };
 
@@ -130,7 +136,7 @@ Deno.serve(async (req) => {
 
       const verificationMap = new Map<
         string,
-        { status: VerificationStatus; created_at: string; sample_url: string }
+        { status: VerificationStatus; created_at: string; sample_url: string; selected_model: string | null }
       >();
 
       for (const row of verificationRows ?? []) {
@@ -143,6 +149,7 @@ Deno.serve(async (req) => {
             status: parsed.status,
             created_at: row.created_at,
             sample_url: row.audio_url,
+            selected_model: parsed.selectedModel,
           });
         }
       }
@@ -163,6 +170,7 @@ Deno.serve(async (req) => {
           verification_status: verification?.status || "unverified",
           verification_updated_at: verification?.created_at || null,
           verification_sample_url: verification?.sample_url || null,
+          verification_selected_model: verification?.selected_model || null,
           training_audio_file_name: extractFileNameFromUrl(voice.audio_url),
         };
       });
