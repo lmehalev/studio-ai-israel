@@ -218,7 +218,7 @@ async function checkRunway(apiKey: string): Promise<ProviderStatus> {
     if (res.status === 401 || res.status === 403) {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
     }
-    const authValid = res.status === 404 || res.status === 200 || res.status === 429;
+    const authValid = res.status !== 401 && res.status !== 403;
     // Runway is re-enabled as fallback only — mark as credits_ok but NOT generation_verified
     return { ...base, readiness: authValid ? "credits_ok" : "connected", authValid, creditsAvailable: authValid ? true : null, modelsAccessible: authValid, liveGenerationPassed: null, used: 0, limit: -1, plan: authValid ? "API מחובר (Fallback בלבד)" : "unknown", canGenerate: authValid, statusLabel: authValid ? "קרדיטים תקינים (Fallback בלבד)" : "מחובר" } as ProviderStatus;
   } catch (e) { return toError("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, e); }
