@@ -316,6 +316,7 @@ Output one final image only.`;
     return new Response(
       JSON.stringify({
         imageUrl: generatedImageUrl,
+        faceDescription,
         text: extracted.text || (strictIdentity ? "האווטאר נוצר במצב דיוק זהות מוגבר" : "האווטאר נוצר בהצלחה"),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
