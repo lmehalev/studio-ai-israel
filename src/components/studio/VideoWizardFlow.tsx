@@ -16,6 +16,7 @@ import {
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
+import { CostApprovalDialog, buildVideoGenerationEstimates, type CostEstimate } from '@/components/studio/CostApprovalDialog';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
