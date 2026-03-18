@@ -1877,7 +1877,7 @@ export function VideoWizardFlow({
               <input
                 value={improvePrompt}
                 onChange={e => setImprovePrompt(e.target.value)}
-                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleImproveVideo(); }}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') requestImproveVideo(); }}
                 placeholder="מה לשפר..."
                 dir="rtl"
                 className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
