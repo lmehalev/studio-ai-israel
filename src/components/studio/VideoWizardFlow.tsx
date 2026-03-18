@@ -715,38 +715,59 @@ export function VideoWizardFlow({
           creditItems
             .filter((c: any) => typeof c?.service === 'string')
             .map((c: any) => [c.service, c])
-        ) as Record<string, { canGenerate?: boolean; error?: string }>;
+        ) as Record<string, { canGenerate?: boolean; readiness?: string; error?: string; statusLabel?: string }>;
 
-        // FIX: If credit check timed out, assume provider is available (don't block on slow checks)
-        const runwayCanGenerate = !creditsMap.runway ? true : (
-          creditsMap.runway.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.runway.error)
-        );
-        const heygenCanGenerate = !creditsMap.heygen ? true : (
-          creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
-        );
-        const kreaCanGenerate = !creditsMap.krea ? true : (
-          creditsMap.krea.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.krea.error)
+        // Use granular readiness levels instead of binary canGenerate
+        const isGenerationReady = (svc: string) => {
+          const s = creditsMap[svc];
+          if (!s) return true; // not configured = assume available
+          const r = s.readiness;
+          // Only allow providers verified at credits_ok or generation_verified level
+          return r === 'generation_verified' || r === 'credits_ok';
+        };
+
+        const isBlocked = (svc: string) => {
+          const s = creditsMap[svc];
+          if (!s) return false;
+          return s.readiness === 'blocked_credits' || s.readiness === 'auth_failed';
+        };
+
+        const getStatusLabel = (svc: string) => creditsMap[svc]?.statusLabel || '';
+
+        const runwayReady = isGenerationReady('runway');
+        const heygenReady = isGenerationReady('heygen');
+        const kreaReady = isGenerationReady('krea');
+        const runwayBlocked = isBlocked('runway');
+        const heygenBlocked = isBlocked('heygen');
+        const kreaBlocked = isBlocked('krea');
+
+        heygenFallbackEnabled = heygenReady;
+        kreaFallbackEnabled = kreaReady;
+
+        addDebugLog(runId, 'provider-routing', 'info',
+          `Readiness: Runway=${creditsMap.runway?.readiness || 'N/A'} | HeyGen=${creditsMap.heygen?.readiness || 'N/A'} | Krea=${creditsMap.krea?.readiness || 'N/A'}`,
+          { runway: creditsMap.runway?.statusLabel, heygen: creditsMap.heygen?.statusLabel, krea: creditsMap.krea?.statusLabel }
         );
 
-        heygenFallbackEnabled = heygenCanGenerate;
-        kreaFallbackEnabled = kreaCanGenerate;
-
-        if (!runwayCanGenerate) {
-          if (heygenCanGenerate) {
+        if (runwayBlocked || !runwayReady) {
+          if (heygenReady) {
             forceDidOnlyMode = true;
-            toast.warning('אין כרגע קרדיטים ל-Runway, עובר אוטומטית למסלול HeyGen.');
-          } else if (kreaCanGenerate) {
+            toast.warning(`Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר אוטומטית למסלול HeyGen.`);
+          } else if (kreaReady) {
             forceKreaOnlyMode = true;
-            toast.warning('אין כרגע קרדיטים ל-Runway, עובר למסלול Krea וידאו אוטומטית.');
+            toast.warning(`Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר למסלול Krea.`);
+          } else if (runwayBlocked && heygenBlocked && kreaBlocked) {
+            throw new Error(`כל ספקי הווידאו חסומים:\n• Runway: ${getStatusLabel('runway')}\n• HeyGen: ${getStatusLabel('heygen')}\n• Krea: ${getStatusLabel('krea')}\nיש לחדש קרדיטים ואז לנסות שוב.`);
           } else {
-            throw new Error('כרגע אין קרדיטים זמינים ליצירת וידאו (Runway/Krea/HeyGen). יש לחדש קרדיטים ואז לנסות שוב.');
+            // Providers are "authenticated" but not verified — try anyway with warning
+            toast.warning('הספקים מחוברים אבל היצירה לא אומתה — מנסה עם מנגנון גיבוי אוטומטי.');
           }
         }
       } catch (creditsErr: any) {
         const msg = creditsErr?.message || '';
-        if (msg.includes('אין קרדיטים')) throw creditsErr;
+        if (msg.includes('חסומים') || msg.includes('אין קרדיטים')) throw creditsErr;
         console.warn('Credit check skipped:', msg);
-        toast.info('בדיקת הקרדיטים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
+        toast.info('בדיקת הספקים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
       }
 
       const shouldGenerateNarration = !forceDidOnlyMode;
