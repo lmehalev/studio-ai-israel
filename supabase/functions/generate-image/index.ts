@@ -57,13 +57,19 @@ Deno.serve(async (req) => {
         role: "system",
         content: hebrewTextGuidelines,
       });
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: imageUrl } },
-        ],
-      });
+      const contentParts: any[] = [
+        { type: "text", text: referenceImages && referenceImages.length > 0
+          ? `ערוך את התמונה הראשית לפי ההוראות הבאות. השתמש בתמונות הרפרנס הנוספות כהשראה לסגנון, קומפוזיציה ואלמנטים ויזואליים — שלב אותם בתוצאה הסופית.\n\nהוראות: ${prompt}`
+          : prompt },
+        { type: "image_url", image_url: { url: imageUrl } },
+      ];
+      // Append reference images for edit+refine
+      if (Array.isArray(referenceImages)) {
+        for (const refUrl of referenceImages) {
+          contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+        }
+      }
+      messages.push({ role: "user", content: contentParts });
     } else if (referenceImages && referenceImages.length > 0) {
       // Generate with reference images
       messages.push({
