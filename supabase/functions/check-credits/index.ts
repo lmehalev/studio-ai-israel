@@ -216,13 +216,15 @@ async function checkRunway(apiKey: string): Promise<ProviderStatus> {
     }
 
     // Runway doesn't have a credit endpoint; try a minimal generation to probe credits
+    // NOTE: Runway app subscription (app.runwayml.com) is SEPARATE from API credits (api.dev.runwayml.com)
+    // A paid app subscription does NOT guarantee API credits — they must be purchased separately in the developer portal
     let creditsAvailable: boolean | null = null;
     let liveGenerationPassed: boolean | null = null;
     let lastFailureReason: string | undefined;
     try {
       const probeRes = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
         method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gen3a_turbo", prompt: "black screen", duration: 5, ratio: "1280:768" }),
+        body: JSON.stringify({ model: "gen4", promptText: "black screen", duration: 5, ratio: "1280:720" }),
       });
       if (probeRes.ok) {
         const pd = await probeRes.json();
@@ -235,10 +237,10 @@ async function checkRunway(apiKey: string): Promise<ProviderStatus> {
       } else {
         const errText = await parseErrorBody(probeRes);
         lastFailureReason = `HTTP ${probeRes.status}: ${errText}`;
-        if (probeRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient")) {
+        if (probeRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient") || errText.toLowerCase().includes("not enough")) {
           creditsAvailable = false;
+          lastFailureReason = "מנוי האפליקציה (app.runwayml.com) פעיל, אבל אין קרדיטים ב-API המפתחים (api.dev.runwayml.com). יש לרכוש קרדיטי API בנפרד בפורטל המפתחים.";
         } else if (probeRes.status === 422 || probeRes.status === 400) {
-          // Endpoint reached, auth valid, can't determine credits
           creditsAvailable = null;
         }
       }
@@ -249,7 +251,7 @@ async function checkRunway(apiKey: string): Promise<ProviderStatus> {
       : creditsAvailable === true ? "credits_ok"
       : "authenticated";
 
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "blocked_credits" ? "ללא קרדיטים" : "API מחובר", canGenerate: readiness !== "blocked_credits" && readiness !== "auth_failed", statusLabel: hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
+    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "blocked_credits" ? "מנוי אפליקציה פעיל — ללא קרדיטי API" : "API מחובר", canGenerate: readiness !== "blocked_credits" && readiness !== "auth_failed", statusLabel: readiness === "blocked_credits" ? "מנוי פעיל אבל ללא קרדיטי API" : hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
   } catch (e) { return toError("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, e); }
 }
 
