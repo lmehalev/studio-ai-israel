@@ -577,34 +577,48 @@ export default function VoicesManagePage() {
   };
 
   const currentVibeSettings = VIBE_PRESETS[vibePreset]?.settings || VIBE_PRESETS.default.settings;
+  const selectedVoiceRequiresVerification = Boolean(selectedVoice && !selectedVoice.is_verified);
 
   const costEstimates: CostEstimate[] = [{
     provider: 'ElevenLabs',
-    model: language === 'he' ? 'eleven_v3' : 'eleven_multilingual_v2',
-    action: selectedVoice?.provider_voice_id ? 'קריינות (קול שמור)' : 'שכפול קול + קריינות',
+    model: selectedVoice?.verification_selected_model || 'model from verification',
+    action: 'קריינות (קול מאומת)',
     estimatedCost: `~${scriptText.length} תווים`,
     details: [
-      selectedVoice?.provider_voice_id ? 'שימוש בקול ששוכפל בעבר — ללא עלות שכפול נוספת' : 'שכפול הקול הנבחר ויצירת קריינות',
+      'קול לא מאומת חסום ליצירת דיבוב',
       `פריסט: ${VIBE_PRESETS[vibePreset]?.label || 'רגיל'}`,
     ],
   }];
 
-  const verificationCostEstimates: CostEstimate[] = [{
-    provider: 'ElevenLabs',
-    action: 'דגימת אימות קול',
-    estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length} תווים`,
-    details: ['משפט בדיקה קצר בעברית לאימות זהות הקול', 'לא תתבצע שמירה — רק האזנה ואישור'],
-  }];
+  const pendingVerifyVoice = voices.find(v => v.id === pendingVerifyVoiceId) || null;
+  const verificationCostEstimates: CostEstimate[] = [
+    {
+      provider: 'ElevenLabs',
+      model: 'eleven_v3 + he',
+      action: pendingVerifyVoice?.provider_voice_id ? 'A/B אימות (ללא שכפול)' : 'A/B אימות + שכפול',
+      estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length * 2} תווים`,
+      details: [
+        pendingVerifyVoice?.provider_voice_id
+          ? 'אפשרות A: eleven_v3 עם language_code=he'
+          : 'אפשרות A: שכפול + eleven_v3 עם language_code=he',
+      ],
+    },
+    {
+      provider: 'ElevenLabs',
+      model: 'eleven_multilingual_v2 (auto)',
+      action: 'A/B אימות קול',
+      estimatedCost: `~${VERIFICATION_TEST_SENTENCE.length} תווים`,
+      details: ['אפשרות B: eleven_multilingual_v2 ללא language_code (auto-detect)'],
+    },
+  ];
 
   const handleRequestGenerate = () => {
     if (!selectedVoiceId) { toast.error('יש לבחור קול'); return; }
     if (!scriptText.trim()) { toast.error('יש להזין תסריט'); return; }
     if (scriptText.length > 4500) { toast.error('התסריט ארוך מדי (מקסימום 4,500 תווים)'); return; }
     if (!scriptTitle.trim()) { toast.error('יש להזין כותרת לדיבוב'); return; }
-
-    // Block unverified voices with a clear message
-    if (selectedVoice?.provider_voice_id && selectedVoice.verification_status === 'rejected') {
-      toast.error('הקול סומן כלא תואם. בצע איפוס ושכפול מחדש עם הקלטה איכותית.');
+    if (!selectedVoice?.provider_voice_id || !selectedVoice.is_verified) {
+      toast.error('הקול לא מאומת. לחץ "אמת את הקול" לפני יצירת דיבוב.');
       return;
     }
 
@@ -616,6 +630,10 @@ export default function VoicesManagePage() {
   const executeGenerate = async () => {
     setCostApprovalOpen(false);
     if (!selectedVoice) return;
+    if (!selectedVoice.provider_voice_id || !selectedVoice.is_verified) {
+      toast.error('הקול לא מאומת. יש להשלים אימות תחילה.');
+      return;
+    }
 
     setGenerating(true);
     setGeneratedAudioUrl(null);
@@ -625,18 +643,16 @@ export default function VoicesManagePage() {
 
     try {
       const processedScript = respectPauses ? preprocessPauses(scriptText) : scriptText;
+      const preferredModel = selectedVoice.verification_selected_model || 'eleven_v3';
 
       const body: Record<string, unknown> = {
         scriptText: processedScript,
         language,
+        providerVoiceId: selectedVoice.provider_voice_id,
         voiceSettings: currentVibeSettings,
+        modelId: preferredModel,
+        omitLanguageCode: preferredModel === 'eleven_multilingual_v2',
       };
-
-      if (selectedVoice.provider_voice_id) {
-        body.providerVoiceId = selectedVoice.provider_voice_id;
-      } else {
-        body.audioUrl = selectedVoice.audio_url;
-      }
 
       const { data, error } = await supabase.functions.invoke('clone-voice-tts', { body });
 
@@ -649,28 +665,21 @@ export default function VoicesManagePage() {
 
       setTechDetails({
         selectedVoiceId: selectedVoice.id,
-        providerVoiceIdSent: selectedVoice.provider_voice_id || '(שוכפל חדש)',
+        providerVoiceIdSent: selectedVoice.provider_voice_id,
         voiceIdReturned: data.voiceId || '',
         clonedFresh: data.clonedFresh || false,
         provider: 'ElevenLabs',
-        modelId: data.modelId || '',
-        language: data.language || '',
+        modelId: data.modelId || preferredModel,
+        language: data.language || '(auto)',
         voiceSettings: data.voiceSettings || currentVibeSettings,
+        trainingAudioUrlUsed: data.trainingAudioUrlUsed ?? null,
+        trainingAudioDurationSec: data.trainingAudioDurationSec ?? null,
+        trainingAudioSizeBytes: data.trainingAudioSizeBytes ?? null,
+        trainingAudioContentType: data.trainingAudioContentType ?? null,
+        trainingAudioCodec: data.trainingAudioCodec ?? null,
       });
 
-      if (data.clonedFresh && data.voiceId) {
-        try {
-          await supabase.functions.invoke('voice-manager', {
-            body: { action: 'update_provider_voice_id', id: selectedVoice.id, provider_voice_id: data.voiceId },
-          });
-          setVoices(prev => prev.map(v =>
-            v.id === selectedVoice.id ? { ...v, provider_voice_id: data.voiceId, is_verified: false, verification_status: 'pending' } : v
-          ));
-        } catch (e) {
-          console.warn('Failed to save provider_voice_id:', e);
-        }
-      }
-
+      if (data.warning) toast.warning(data.warning);
       toast.success('הדיבוב נוצר בהצלחה!');
     } catch (e: any) {
       console.error('TTS generation error:', e);
