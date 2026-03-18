@@ -1780,9 +1780,9 @@ export function VideoWizardFlow({
               className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
               חזור לתסריט
             </button>
-            <button onClick={handleGenerateVideo} disabled={loading}
+            <button onClick={requestGenerateVideo} disabled={loading}
               className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : 'צור סרטון'}
+              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : '💰 צור סרטון (בתשלום)'}
             </button>
           </div>
 
