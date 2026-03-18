@@ -360,60 +360,160 @@ export default function VoicesManagePage() {
   // ══════════════════════════════════════════
   const requestVerification = (voiceId: string) => {
     setPendingVerifyVoiceId(voiceId);
+    setVerificationSamples(null);
+    setVerifyingVoiceId(null);
     setVerificationCostOpen(true);
   };
 
   const executeVerification = async () => {
     setVerificationCostOpen(false);
     const voiceId = pendingVerifyVoiceId;
+    setPendingVerifyVoiceId(null);
     if (!voiceId) return;
 
     const voice = voices.find(v => v.id === voiceId);
-    if (!voice?.provider_voice_id) {
-      toast.error('אין קול משוכפל לאימות. בצע שכפול קודם.');
+    if (!voice) {
+      toast.error('הקול לא נמצא');
       return;
     }
 
     setVerifyingVoiceId(voiceId);
-    setVerificationAudioUrl(null);
+    setVerificationSamples(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
+      const trainingAudit = await getTrainingAuditForVoice(voice);
+      const durationSec = trainingAudit.durationSec;
+
+      if (!durationSec || durationSec <= 0) {
+        throw new Error('לא ניתן למדוד אורך אמיתי של קובץ האימון. בדוק שהקובץ תקין ונגיש.');
+      }
+
+      if (durationSec < 30) {
+        throw new Error(
+          'קובץ האימון קצר מדי (פחות מ-30 שניות) ולכן השכפול נחסם. הקלט 60-120 שניות, דובר אחד, חדר שקט, ללא מוזיקה/רעשים, עדיפות ל-WAV/MP3.'
+        );
+      }
+
+      if (durationSec < 60) {
+        toast.warning('אורך הקלטה קצר מ-60 שניות. אפשר להמשיך, אבל איכות זהות עשויה להיפגע.');
+      }
+
+      console.log('Training audio used for clone verification:', {
+        url: trainingAudit.url,
+        durationSec,
+        sizeBytes: trainingAudit.sizeBytes,
+        contentType: trainingAudit.contentType,
+        codec: trainingAudit.codec,
+      });
+
+      let providerVoiceIdForTest = voice.provider_voice_id || null;
+
+      const optionABody: Record<string, unknown> = {
+        scriptText: VERIFICATION_TEST_SENTENCE,
+        language: 'he',
+        voiceSettings: VIBE_PRESETS.default.settings,
+        modelId: 'eleven_v3',
+      };
+
+      if (providerVoiceIdForTest) {
+        optionABody.providerVoiceId = providerVoiceIdForTest;
+      } else {
+        optionABody.audioUrl = voice.audio_url;
+        optionABody.trainingAudioDurationSec = durationSec;
+        optionABody.trainingAudioSizeBytes = trainingAudit.sizeBytes ?? undefined;
+        optionABody.trainingAudioFileName = voice.training_audio_file_name ?? undefined;
+        optionABody.trainingAudioContentType = trainingAudit.contentType ?? undefined;
+        optionABody.trainingAudioCodec = trainingAudit.codec ?? undefined;
+      }
+
+      const { data: optionAData, error: optionAError } = await supabase.functions.invoke('clone-voice-tts', {
+        body: optionABody,
+      });
+
+      if (optionAError) throw optionAError;
+      if (optionAData?.error) throw new Error(optionAData.error);
+      if (!optionAData?.audioUrl) throw new Error('לא התקבלה דגימת אימות עבור מודל A');
+
+      if (optionAData.voiceId && !providerVoiceIdForTest) {
+        providerVoiceIdForTest = optionAData.voiceId;
+        await supabase.functions.invoke('voice-manager', {
+          body: {
+            action: 'update_provider_voice_id',
+            id: voiceId,
+            provider_voice_id: providerVoiceIdForTest,
+          },
+        });
+      }
+
+      if (!providerVoiceIdForTest) {
+        throw new Error('לא התקבל provider_voice_id עבור בדיקת A/B');
+      }
+
+      const { data: optionBData, error: optionBError } = await supabase.functions.invoke('clone-voice-tts', {
         body: {
-          providerVoiceId: voice.provider_voice_id,
+          providerVoiceId: providerVoiceIdForTest,
           scriptText: VERIFICATION_TEST_SENTENCE,
           language: 'he',
+          modelId: 'eleven_multilingual_v2',
+          omitLanguageCode: true,
           voiceSettings: VIBE_PRESETS.default.settings,
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (!data?.audioUrl) throw new Error('לא התקבל קובץ אודיו לאימות');
+      if (optionBError) throw optionBError;
+      if (optionBData?.error) throw new Error(optionBData.error);
+      if (!optionBData?.audioUrl) throw new Error('לא התקבלה דגימת אימות עבור מודל B');
 
-      setVerificationAudioUrl(data.audioUrl);
-      toast.info('השמע את הדגימה ואשר אם זה נשמע כמוך.');
+      setVoices(prev => prev.map(v =>
+        v.id === voiceId
+          ? {
+              ...v,
+              provider_voice_id: providerVoiceIdForTest,
+              is_verified: false,
+              verification_status: 'pending',
+              verification_selected_model: null,
+            }
+          : v
+      ));
+
+      setVerificationSamples({
+        optionAUrl: optionAData.audioUrl,
+        optionBUrl: optionBData.audioUrl,
+        providerVoiceId: providerVoiceIdForTest,
+      });
+
+      toast.info('האזן לשתי הדגימות ובחר איזו נשמעת כמוך.');
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה ביצירת דגימת אימות');
+      toast.error(e.message || 'שגיאה ביצירת דגימות אימות A/B');
       setVerifyingVoiceId(null);
+      setVerificationSamples(null);
     }
   };
 
-  const confirmVerification = async (approved: boolean) => {
+  const confirmVerification = async (selectedModel: 'eleven_v3' | 'eleven_multilingual_v2' | 'reject') => {
     const voiceId = verifyingVoiceId;
-    if (!voiceId || !verificationAudioUrl) return;
+    const samples = verificationSamples;
+    if (!voiceId || !samples) return;
 
     const voice = voices.find(v => v.id === voiceId);
-    if (!voice?.provider_voice_id) return;
+    const providerVoiceId = samples.providerVoiceId || voice?.provider_voice_id;
+    if (!providerVoiceId) {
+      toast.error('חסר provider_voice_id לשמירת אימות');
+      return;
+    }
+
+    const approved = selectedModel !== 'reject';
+    const sampleUrl = selectedModel === 'eleven_multilingual_v2' ? samples.optionBUrl : samples.optionAUrl;
 
     try {
       await supabase.functions.invoke('voice-manager', {
         body: {
           action: 'save_voice_verification',
           voice_id: voiceId,
-          provider_voice_id: voice.provider_voice_id,
+          provider_voice_id: providerVoiceId,
           status: approved ? 'approved' : 'rejected',
-          sample_audio_url: verificationAudioUrl,
+          sample_audio_url: sampleUrl,
+          selected_model: approved ? selectedModel : null,
         },
       });
 
@@ -421,23 +521,25 @@ export default function VoicesManagePage() {
         v.id === voiceId
           ? {
               ...v,
+              provider_voice_id: providerVoiceId,
               is_verified: approved,
               verification_status: approved ? 'approved' : 'rejected',
-              verification_sample_url: verificationAudioUrl,
+              verification_sample_url: sampleUrl,
+              verification_selected_model: approved ? selectedModel : null,
             }
           : v
       ));
 
       if (approved) {
-        toast.success('✅ הקול אומת בהצלחה! ניתן להשתמש בו בכל הזרימות.');
+        toast.success('✅ הקול אומת ונשמר מודל ברירת מחדל לקול זה.');
       } else {
-        toast.warning('❌ הקול סומן כלא מאומת. בצע איפוס ושכפול מחדש עם הקלטה איכותית יותר.');
+        toast.warning('❌ הקול סומן כלא מאומת. יש לבצע איפוס ושכפול מחדש.');
       }
-    } catch (e: any) {
+    } catch {
       toast.error('שגיאה בשמירת תוצאת האימות');
     } finally {
       setVerifyingVoiceId(null);
-      setVerificationAudioUrl(null);
+      setVerificationSamples(null);
     }
   };
 
