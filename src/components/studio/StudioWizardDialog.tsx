@@ -1110,8 +1110,20 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             </div>
 
             <button
-              onClick={async () => {
+              onClick={() => {
                 if (!prompt.trim()) { toast.error('יש לתאר את הסרטון הרצוי'); return; }
+                setShowHighlightCostApproval(true);
+              }}
+              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+            >
+              💰 צור סרטון (בתשלום)
+            </button>
+          </div>
+        );
+      }
+
+      // Actual highlight generation (called after cost approval)
+      const executeHighlightGeneration = async () => {
                 setStep(step + 1);
                 setLoading(true);
                 setHighlightProgress(0);
