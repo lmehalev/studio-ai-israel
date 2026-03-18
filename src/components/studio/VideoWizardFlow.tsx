@@ -1609,9 +1609,10 @@ export function VideoWizardFlow({
           <p className="text-xs text-muted-foreground">{Math.round(runwayProgress)}% הושלם</p>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             {[
-              { label: 'שכפול קול', done: runwayProgress > 25 },
+              { label: 'בדיקת ספקים', done: runwayProgress > 5 },
+              { label: 'שכפול קול', done: runwayProgress > 15 },
               { label: 'יצירת וידאו', done: runwayProgress > 65 },
-              { label: 'כתוביות ולוגו', done: runwayProgress > 95 },
+              { label: 'הרכבה סופית', done: runwayProgress > 95 },
             ].map(s => (
               <span key={s.label} className={cn(
                 'text-[10px] px-2 py-0.5 rounded-full border',
@@ -1621,6 +1622,12 @@ export function VideoWizardFlow({
               </span>
             ))}
           </div>
+          {/* Debug: current stage detail */}
+          {progressStage && (
+            <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono" dir="ltr">
+              {progressStage}
+            </p>
+          )}
         </div>
       )}
 
