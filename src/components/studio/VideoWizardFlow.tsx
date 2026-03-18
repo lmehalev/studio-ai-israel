@@ -84,7 +84,41 @@ const RUNWAY_STATUS_POLL_MS = 5000;
 const COMPOSE_STATUS_POLL_MS = 3000;
 const RUNWAY_MAX_POLL_ATTEMPTS = 240;
 const HEYGEN_MAX_POLL_ATTEMPTS = 180;
-const CREDITS_CHECK_TIMEOUT_MS = 8000;
+const CREDITS_CHECK_TIMEOUT_MS = 10000;
+const KREA_GENERATION_TIMEOUT_MS = 360000;
+const HEYGEN_GENERATION_TIMEOUT_MS = 900000;
+
+const DUMMY_RUNWAY_TASK_ID = '00000000-0000-0000-0000-000000000000';
+const DUMMY_COMPOSE_RENDER_ID = '00000000-0000-0000-0000-000000000000';
+
+type DebugLogStatus = 'info' | 'success' | 'warn' | 'error';
+
+interface GenerationDebugLog {
+  timestamp: string;
+  runId: string;
+  step: string;
+  status: DebugLogStatus;
+  message: string;
+  meta?: Record<string, unknown>;
+}
+
+interface ProviderHealth {
+  runway: 'healthy' | 'degraded' | 'unavailable';
+  heygen: 'healthy' | 'degraded' | 'unavailable';
+  krea: 'healthy' | 'degraded' | 'unavailable';
+  compose: 'healthy' | 'degraded' | 'unavailable';
+  credits: 'healthy' | 'degraded' | 'unavailable';
+}
+
+interface PreflightResult {
+  ok: boolean;
+  runId: string;
+  checkedAt: string;
+  errors: string[];
+  warnings: string[];
+  providerHealth: ProviderHealth;
+  payloadPreview: Record<string, unknown>;
+}
 
 const toRunwayPrompt = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, RUNWAY_PROMPT_MAX_CHARS);
 const toNarrationText = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, NARRATION_MAX_CHARS);
@@ -250,6 +284,13 @@ export function VideoWizardFlow({
   const [websiteUrl, setWebsiteUrl] = useState(restoredSession?.websiteUrl ?? '');
   const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
   const [scrapingWebsite, setScrapingWebsite] = useState(false);
+
+  // Reliability/observability
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [debugLogs, setDebugLogs] = useState<GenerationDebugLog[]>([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [dryRunMode, setDryRunMode] = useState(false);
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
 
   // Emit session changes to parent for persistence
   useEffect(() => {
