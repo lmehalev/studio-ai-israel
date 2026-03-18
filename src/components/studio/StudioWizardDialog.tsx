@@ -73,8 +73,12 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   // Image generation - reference images & iterative editing
   const [imageRefPhotos, setImageRefPhotos] = useState<string[]>([]);
-  const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string }[]>([]);
+  const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string; refineRefs?: string[] }[]>([]);
   const [editPrompt, setEditPrompt] = useState('');
+  const [editRefPhotos, setEditRefPhotos] = useState<string[]>([]);
+  const [uploadingEditRef, setUploadingEditRef] = useState(false);
+  const editRefInputRef = useRef<HTMLInputElement | null>(null);
+  const MAX_EDIT_REFS = 5;
 
   // Import/Edit
   const [importUrl, setImportUrl] = useState('');
