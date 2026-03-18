@@ -582,9 +582,94 @@ export function VideoWizardFlow({
     return kreaResult.videoUrl;
   };
 
+  // ===== Debug log helper =====
+  const addDebugLog = (runId: string, step: string, status: DebugLogStatus, message: string, meta?: Record<string, unknown>) => {
+    const entry: GenerationDebugLog = { timestamp: new Date().toISOString(), runId, step, status, message, meta };
+    setDebugLogs(prev => [...prev, entry]);
+    if (status === 'error') console.error(`[${runId}] ${step}: ${message}`, meta);
+    else console.log(`[${runId}] ${step}: ${message}`);
+  };
+
+  // ===== Preflight validation =====
+  const runPreflight = async (): Promise<PreflightResult> => {
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const health: ProviderHealth = { runway: 'unavailable', heygen: 'unavailable', krea: 'unavailable', compose: 'unavailable', credits: 'unavailable' };
+
+    // Validate required fields
+    if (!generatedScript) errors.push('אין תסריט');
+    const scenes = generatedScript?.scenes || [];
+    if (scenes.length === 0) warnings.push('אין סצנות בתסריט — ייווצרו אוטומטית');
+    if (!prompt.trim()) warnings.push('אין פרומפט מקורי');
+
+    // Check provider health in parallel
+    try {
+      const [heygenRes, creditsRes] = await Promise.allSettled([
+        withTimeout(supabase.functions.invoke('heygen-video', { body: { action: 'health_check' } }), 8000, 'HeyGen timeout'),
+        withTimeout(supabase.functions.invoke('check-credits', { body: {} }), 10000, 'Credits timeout'),
+      ]);
+      if (heygenRes.status === 'fulfilled' && heygenRes.value?.data?.ok) health.heygen = 'healthy';
+      else health.heygen = 'degraded';
+      if (creditsRes.status === 'fulfilled') {
+        health.credits = 'healthy';
+        const items = (creditsRes.value?.data as any)?.credits || [];
+        for (const c of items) {
+          if (c.service === 'runway' && c.canGenerate) health.runway = 'healthy';
+          if (c.service === 'krea' && c.canGenerate) health.krea = 'healthy';
+        }
+      }
+      // Shotstack is always available if key exists
+      health.compose = 'healthy';
+    } catch { /* partial health is fine */ }
+
+    if (health.runway === 'unavailable' && health.heygen === 'unavailable' && health.krea === 'unavailable') {
+      errors.push('אף ספק וידאו לא זמין');
+    }
+
+    // Validate media references
+    if (selectedAvatars[0]?.image_url) {
+      try {
+        const res = await fetch(selectedAvatars[0].image_url, { method: 'HEAD' });
+        if (!res.ok) warnings.push('קישור לתמונת אווטאר לא נגיש');
+      } catch { warnings.push('לא ניתן לבדוק קישור אווטאר'); }
+    }
+
+    const payloadPreview: Record<string, unknown> = {
+      scenes: scenes.length,
+      avatars: selectedAvatars.map(a => a.name),
+      voices: selectedVoices.map(v => v.name),
+      videoStyle,
+      promptLength: prompt.length,
+      imagesCount: uploadedImages.length,
+    };
+
+    return { ok: errors.length === 0, runId, checkedAt: new Date().toISOString(), errors, warnings, providerHealth: health, payloadPreview };
+  };
+
   // ===== Step 3: Generate video (full pipeline) =====
   const handleGenerateVideo = async () => {
     if (!generatedScript) return;
+
+    // Run preflight
+    const preflight = await runPreflight();
+    setPreflightResult(preflight);
+    const runId = preflight.runId;
+    setActiveRunId(runId);
+    setDebugLogs([]);
+    addDebugLog(runId, 'preflight', preflight.ok ? 'success' : 'error', preflight.ok ? 'Preflight passed' : `Preflight failed: ${preflight.errors.join(', ')}`, { health: preflight.providerHealth, warnings: preflight.warnings });
+
+    if (dryRunMode) {
+      toast.info('מצב בדיקה מוקדמת — לא מתבצעת יצירה. בדוק את הלוג בפאנל הדיבאג.');
+      setShowDebugPanel(true);
+      return;
+    }
+
+    if (!preflight.ok) {
+      toast.error(`לא ניתן להתחיל: ${preflight.errors.join(', ')}`);
+      return;
+    }
+
     setLoading(true);
     setStep(3);
     setRunwayPolling(true);
