@@ -86,6 +86,7 @@ const withTimeout = (service: string, unit: string, dash: string, p: Promise<Pro
 async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
   const base: Partial<ProviderStatus> = { service: "elevenlabs", unit: "תווים", dashboardUrl: ELEVENLABS_DASHBOARD_URL, environment: "production" };
   try {
+    // ElevenLabs connector may provide a key that works differently — try multiple auth methods
     const headers = { "xi-api-key": apiKey };
 
     // 1. Auth + subscription
