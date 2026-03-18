@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface AvatarFolder {
   id: string;
   name: string;
+  user_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -10,20 +11,29 @@ export interface AvatarFolder {
 // Use raw client to avoid type constraints since avatar_folders table is new
 const db = supabase as any;
 
+async function getUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('לא מחובר — נדרשת התחברות');
+  return user.id;
+}
+
 export const avatarFolderService = {
   async list(): Promise<AvatarFolder[]> {
+    const userId = await getUserId();
     const { data, error } = await db
       .from('avatar_folders')
       .select('*')
+      .eq('user_id', userId)
       .order('name', { ascending: true });
     if (error) throw error;
     return data || [];
   },
 
   async create(name: string): Promise<AvatarFolder> {
+    const userId = await getUserId();
     const { data, error } = await db
       .from('avatar_folders')
-      .insert({ name })
+      .insert({ name, user_id: userId })
       .select()
       .single();
     if (error) throw error;
@@ -42,12 +52,10 @@ export const avatarFolderService = {
   },
 
   async remove(id: string): Promise<void> {
-    // First unfile all avatars in this folder (set folder_id to null)
     await db
       .from('avatars')
       .update({ folder_id: null })
       .eq('folder_id', id);
-    // Then delete folder
     const { error } = await db
       .from('avatar_folders')
       .delete()
