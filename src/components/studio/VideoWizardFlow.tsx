@@ -28,6 +28,7 @@ interface SavedVoice {
   provider_voice_id?: string | null;
   is_verified?: boolean;
   verification_status?: string;
+  verification_selected_model?: string | null;
 }
 
 interface ScriptScene {
