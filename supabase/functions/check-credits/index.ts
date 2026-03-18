@@ -203,9 +203,8 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
 }
 
 /* ════════════════════════════════════════════════════
-   Runway — HARD BLOCKED (emergency kill-switch)
-   No API calls are made. No generation probes.
-   Re-enable only after manual review.
+   Runway — Controlled Fallback (re-enabled 2026-03-18)
+   Auth-only check, no generation probe. Credits validated via task endpoint.
    ════════════════════════════════════════════════════ */
 async function checkRunway(apiKey: string): Promise<ProviderStatus> {
   const base: Partial<ProviderStatus> = { service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL, environment: "production" };
