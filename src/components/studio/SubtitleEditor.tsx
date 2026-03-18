@@ -647,12 +647,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </button>
       ) : (
         <button
-          onClick={handleRenderVideo}
+          onClick={() => setShowCostApproval(true)}
           disabled={rendering || subtitleSegments.length === 0}
           className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
         >
           {rendering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-          {rendering ? `מרכיב... ${Math.round(renderProgress)}%` : 'הרכב סרטון סופי 🎬'}
+          {rendering ? `מרכיב... ${Math.round(renderProgress)}%` : '💰 הרכב סרטון סופי (בתשלום) 🎬'}
         </button>
       )}
     </div>
