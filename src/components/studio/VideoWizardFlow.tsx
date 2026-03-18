@@ -968,7 +968,13 @@ export function VideoWizardFlow({
 
       setProgressStage('מייצר סצנות משופרות...');
       const avatarImage = selectedAvatars[0]?.image_url;
+      const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
       const sceneVideoUrls: string[] = [];
+
+      // FIX: Use the same fallback chain as main generation instead of Runway-only
+      let heygenFallbackEnabled = true;
+      let kreaFallbackEnabled = true;
+      let runwayBlocked = false;
 
       for (let i = 0; i < totalScenes; i++) {
         const scene = workingScenes[i];
@@ -980,21 +986,77 @@ export function VideoWizardFlow({
           activeBrand?.name ? `Brand: ${activeBrand.name}` : '',
         ].filter(Boolean).join('. ');
 
-        const runwayPrompt = toRunwayPrompt(improveContext);
+        const scenePrompt = toRunwayPrompt(improveContext);
+        const sceneDuration = Math.max(5, Math.min(10, Number(scene.duration) || 10));
+        const errors: string[] = [];
 
-        try {
-          let clipUrl: string;
-          if (avatarImage && i === 0) {
-            const normalizedUrl = await normalizeAvatarForVideo(avatarImage);
-            const taskData = await runwayService.imageToVideo(normalizedUrl, runwayPrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
-          } else {
-            const taskData = await runwayService.textToVideo(runwayPrompt, undefined, 10);
-            clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+        let clipUrl: string | null = null;
+
+        // Provider 1: Runway
+        if (!runwayBlocked) {
+          try {
+            if (normalizedAvatarUrl && i === 0) {
+              const taskData = await withTimeout(
+                runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration),
+                30000, 'Runway timeout'
+              );
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+            } else {
+              const taskData = await withTimeout(
+                runwayService.textToVideo(scenePrompt, undefined, sceneDuration),
+                30000, 'Runway timeout'
+              );
+              clipUrl = await waitForRunwayResult(taskData.taskId, (p) => setRunwayProgress(15 + (i / totalScenes) * 50 + (p / 100) * (50 / totalScenes)));
+            }
+          } catch (runwayErr: any) {
+            const msg = runwayErr?.message || '';
+            errors.push(`Runway: ${msg}`);
+            if (isRunwayCreditsErrorMessage(msg)) runwayBlocked = true;
           }
+        }
+
+        // Provider 2: HeyGen
+        if (!clipUrl && heygenFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createHeygenSceneClip(scene.spokenText || scene.title, i, narrationAudioUrl),
+              120000, 'HeyGen timeout'
+            );
+          } catch (heygenErr: any) {
+            errors.push(`HeyGen: ${heygenErr?.message || ''}`);
+            if (isHeygenUnavailableErrorMessage(heygenErr?.message)) heygenFallbackEnabled = false;
+          }
+        }
+
+        // Provider 3: Krea
+        if (!clipUrl && kreaFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createKreaSceneClip(scenePrompt, i, sceneDuration),
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
+            );
+          } catch (kreaErr: any) {
+            errors.push(`Krea: ${kreaErr?.message || ''}`);
+            if (isKreaCreditsErrorMessage(kreaErr?.message)) kreaFallbackEnabled = false;
+          }
+        }
+
+        // Provider 4: AI Image (last resort)
+        if (!clipUrl) {
+          try {
+            clipUrl = await withTimeout(
+              createAIImageToVideoClip(scenePrompt, i, sceneDuration),
+              60000, 'AI Image timeout'
+            );
+          } catch (aiErr: any) {
+            errors.push(`AI Image: ${aiErr?.message || ''}`);
+          }
+        }
+
+        if (clipUrl) {
           sceneVideoUrls.push(clipUrl);
-        } catch {
-          // Skip failed scene
+        } else {
+          console.error(`Improve scene ${i + 1} all providers failed:`, errors.join(' | '));
         }
       }
 
