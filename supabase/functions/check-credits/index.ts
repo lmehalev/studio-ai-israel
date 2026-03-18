@@ -10,7 +10,7 @@ const ELEVENLABS_DASHBOARD_URL = "https://elevenlabs.io/subscription";
 const RUNWAY_DASHBOARD_URL = "https://app.runwayml.com/settings/billing";
 const RUNWAY_VERSION = "2024-11-06";
 const RUNWAY_VALIDATION_TASK_ID = "00000000-0000-0000-0000-000000000000";
-const SERVICE_CHECK_TIMEOUT_MS = 9000;
+const SERVICE_CHECK_TIMEOUT_MS = 20000;
 
 interface ServiceCredits {
   service: string;
