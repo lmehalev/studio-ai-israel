@@ -1,5 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -8,7 +6,7 @@ const corsHeaders = {
 
 const HEYGEN_API = "https://api.heygen.com";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -37,14 +35,14 @@ serve(async (req) => {
       const videoInput: any = {
         character: {
           type: "avatar",
-          avatar_id: avatarId || "default",
+          avatar_id: avatarId && avatarId !== "default" ? avatarId : "Abigail_expressive_2024112501",
           avatar_style: avatarStyle || "normal",
         },
         voice: voiceId
           ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
           : audioUrl
             ? { type: "audio", audio_url: audioUrl }
-            : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 },
+            : { type: "text", input_text: script, voice_id: "f38a635bee7a4d1f9b0a654a31d050d2", speed: 1.0 },
       };
 
       const dimension = aspectRatio === "9:16"
@@ -130,7 +128,7 @@ serve(async (req) => {
         ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
         : audioUrl
           ? { type: "audio", audio_url: audioUrl }
-          : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 };
+          : { type: "text", input_text: script, voice_id: "f38a635bee7a4d1f9b0a654a31d050d2", speed: 1.0 };
 
       const characterConfig: any = talkingPhotoId
         ? { type: "talking_photo", talking_photo_id: talkingPhotoId }
