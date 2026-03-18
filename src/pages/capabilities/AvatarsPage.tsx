@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useState, useEffect, useRef } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare, Shield, ShieldOff, Columns2, AlertTriangle } from 'lucide-react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare, Shield, ShieldOff, Columns2, AlertTriangle, Star, StarOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService, storageService } from '@/services/creativeService';
@@ -72,18 +72,21 @@ export default function AvatarsManagePage() {
   // Storage picker
   const [storagePickerOpen, setStoragePickerOpen] = useState(false);
 
-  // NEW: Identity fidelity toggle (default ON)
+  // Identity fidelity toggle (default ON)
   const [identityFidelity, setIdentityFidelity] = useState(true);
 
-  // NEW: Cached face description for Pass 1 reuse
+  // Cached face description for Pass 1 reuse
   const [cachedFaceDescription, setCachedFaceDescription] = useState<string | null>(null);
 
-  // NEW: Cost approval gate
+  // Cost approval gate
   const [costApprovalOpen, setCostApprovalOpen] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
-  // NEW: Compare variants view
+  // Compare variants view
   const [compareMode, setCompareMode] = useState(false);
+
+  // Variant deletion confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'variant' | 'avatar'; index?: number; id?: string } | null>(null);
 
   // === Draft persistence (sessionStorage) ===
   const DRAFT_KEY = 'avatar-creation-draft';
@@ -151,6 +154,10 @@ export default function AvatarsManagePage() {
   const getEstimatedCost = (isExpressionOnly: boolean) => {
     if (creationMode === 'prompt') return { passes: 'Pass 2 בלבד (Gemini Image)', cost: 'נמוך', calls: 1 };
     if (isExpressionOnly && cachedFaceDescription) return { passes: 'Pass 2 בלבד (שימוש חוזר ב-Pass 1)', cost: 'נמוך', calls: 1 };
+    const isStyledNonRealistic = style !== 'professional headshot';
+    if (isStyledNonRealistic && identityFidelity) {
+      return { passes: 'Pass 1 (ניתוח) + Pass 2 (עוגן) + Pass 3 (סגנון)', cost: 'בינוני-גבוה', calls: 3 };
+    }
     return { passes: 'Pass 1 (ניתוח פנים) + Pass 2 (יצירה)', cost: 'בינוני', calls: 2 };
   };
 
@@ -185,7 +192,7 @@ export default function AvatarsManagePage() {
         const expLabel = EXPRESSION_OPTIONS.find(e => e.value === expression)?.desc || expression;
         const fullPrompt = `Create a portrait/avatar of a character: ${textPrompt}. Style: ${styleLabel}. Expression: ${expLabel}. High quality, detailed face, centered composition, clean background.`;
         const result = await imageService.generate(fullPrompt);
-        if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
+        if (!result.imageUrl) { toast.error('לא התקבלה תמונה מהמודל. נסה שוב או שנה סגנון.'); return; }
         setPreviewUrl(result.imageUrl);
         setPreviewHistory(prev => [...prev, result.imageUrl]);
         toast.success('האווטאר נוצר!');
@@ -198,7 +205,14 @@ export default function AvatarsManagePage() {
           skipAnalysis: useCache,
           cachedFaceDescription: useCache ? cachedFaceDescription! : undefined,
         });
-        if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
+        if (!result.imageUrl) {
+          toast.error('לא התקבלה תמונה מהמודל. ודא שתמונות הרפרנס תקינות ונסה שוב.');
+          return;
+        }
+        // Check for identity drift warning
+        if (result.identityDrift) {
+          toast.warning('⚠️ סטייה בזהות — התוצר עלול שלא להיראות כמו האדם המקורי. מומלץ לייצר מחדש עם הגדרות חזקות יותר.', { duration: 8000 });
+        }
         // Cache the face description for future expression-only regeneration
         if (result.faceDescription) {
           setCachedFaceDescription(result.faceDescription);
@@ -207,7 +221,10 @@ export default function AvatarsManagePage() {
         setPreviewHistory(prev => [...prev, result.imageUrl]);
         toast.success(useCache ? 'הבעה חדשה נוצרה (ניתוח פנים מהמטמון)' : 'האווטאר נוצר!');
       }
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) {
+      console.error('Avatar generation error:', e);
+      toast.error(e.message || 'שגיאה ביצירת אווטאר — נסה שוב');
+    }
     finally { setGenerating(false); }
   };
 
@@ -217,7 +234,6 @@ export default function AvatarsManagePage() {
 
   const handleRegenerateExpressionOnly = () => {
     if (!cachedFaceDescription) {
-      // No cached analysis — need full run
       requestApproval(() => executeGeneration(false));
     } else {
       requestApproval(() => executeGeneration(true));
@@ -283,11 +299,61 @@ export default function AvatarsManagePage() {
     // Keep photos, style, expression, name, cachedFaceDescription intact
   };
 
-  const handleDelete = async (id: string) => {
+  // === Variant management ===
+  const handleDeleteVariant = (index: number) => {
+    setDeleteConfirm({ type: 'variant', index });
+  };
+
+  const handleSetPrimary = (index: number) => {
+    const selectedUrl = previewHistory[index];
+    setPreviewUrl(selectedUrl);
+    toast.success('הגרסה נבחרה כראשית');
+  };
+
+  const handleKeepOnlyThis = (index: number) => {
+    const selectedUrl = previewHistory[index];
+    // Keep only selected + original (index 0)
+    if (index === 0) {
+      setPreviewHistory([selectedUrl]);
+    } else {
+      setPreviewHistory([previewHistory[0], selectedUrl]);
+    }
+    setPreviewUrl(selectedUrl);
+    toast.success('כל הגרסאות האחרות הוסרו — נותרו המקור והגרסה הנבחרת');
+  };
+
+  const confirmDeleteVariant = () => {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.type === 'variant' && deleteConfirm.index !== undefined) {
+      const idx = deleteConfirm.index;
+      if (idx === 0 && previewHistory.length > 1) {
+        toast.error('לא ניתן למחוק את גרסת המקור כשיש גרסאות נוספות');
+        setDeleteConfirm(null);
+        return;
+      }
+      const removedUrl = previewHistory[idx];
+      const newHistory = previewHistory.filter((_, i) => i !== idx);
+      setPreviewHistory(newHistory);
+      if (previewUrl === removedUrl) {
+        setPreviewUrl(newHistory.length > 0 ? newHistory[newHistory.length - 1] : null);
+      }
+      // Try to remove from storage
+      const match = removedUrl.match(/\/media\/(.+)$/);
+      if (match) {
+        supabase.storage.from('media').remove([match[1]]).catch(() => {});
+      }
+      toast.success('הגרסה הוסרה');
+    } else if (deleteConfirm.type === 'avatar' && deleteConfirm.id) {
+      handleDeleteAvatar(deleteConfirm.id);
+    }
+    setDeleteConfirm(null);
+  };
+
+  const handleDeleteAvatar = async (id: string) => {
     try {
       const avatar = avatars.find(a => a.id === id);
       await avatarDbService.remove(id);
-      // Only delete the generated image, never delete source_photos (reference images are permanent)
+      // Only delete the generated image, never delete source_photos
       if (avatar?.image_url) {
         const match = avatar.image_url.match(/\/media\/(.+)$/);
         if (match) {
@@ -364,14 +430,56 @@ export default function AvatarsManagePage() {
             {/* ===== PREVIEW MODE ===== */}
             {previewUrl ? (
               <div className="space-y-4">
+                {/* Variant thumbnails with delete + primary controls */}
                 {previewHistory.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {previewHistory.map((url, i) => (
-                      <button key={i} onClick={() => setPreviewUrl(url)}
-                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${previewUrl === url ? 'border-primary shadow-[0_0_12px_hsl(var(--primary)/0.4)]' : 'border-border/50 opacity-60 hover:opacity-100'}`}>
-                        <img src={url} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">גרסאות ({previewHistory.length})</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {previewHistory.map((url, i) => (
+                        <div key={i} className="relative flex-shrink-0 group/variant">
+                          <button onClick={() => setPreviewUrl(url)}
+                            className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${previewUrl === url ? 'border-primary shadow-[0_0_12px_hsl(var(--primary)/0.4)]' : 'border-border/50 opacity-60 hover:opacity-100'}`}>
+                            <img src={url} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
+                          </button>
+                          {/* Label: מקור for first */}
+                          <span className={`absolute -bottom-1 inset-x-0 text-center text-[8px] font-medium ${i === 0 ? 'text-primary' : 'text-muted-foreground'}`}>
+                            {i === 0 ? 'מקור' : `v${i + 1}`}
+                          </span>
+                          {/* Delete button (not on original if more exist) */}
+                          {(i > 0 || previewHistory.length === 1) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteVariant(i); }}
+                              className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover/variant:opacity-100 transition-opacity"
+                              title="מחק גרסה"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          {/* Set as primary */}
+                          {previewUrl !== url && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSetPrimary(i); }}
+                              className="absolute -top-1 -left-1 w-4 h-4 bg-primary text-primary-foreground rounded-full flex items-center justify-center opacity-0 group-hover/variant:opacity-100 transition-opacity"
+                              title="קבע כראשי"
+                            >
+                              <Star className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Keep only this */}
+                    {previewHistory.length > 2 && (
+                      <button
+                        onClick={() => {
+                          const currentIdx = previewHistory.indexOf(previewUrl!);
+                          if (currentIdx >= 0) handleKeepOnlyThis(currentIdx);
+                        }}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        שמור רק את הגרסה הנוכחית (מחק שאר)
                       </button>
-                    ))}
+                    )}
                   </div>
                 )}
 
@@ -385,7 +493,7 @@ export default function AvatarsManagePage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-xl overflow-hidden border border-border bg-muted/30">
                         <img src={previewHistory[0]} alt="גרסה 1" className="w-full aspect-square object-cover" />
-                        <p className="text-center text-xs py-1.5 text-muted-foreground">גרסה 1 (מקור)</p>
+                        <p className="text-center text-xs py-1.5 text-muted-foreground">מקור</p>
                       </div>
                       <div className="rounded-xl overflow-hidden border border-primary bg-muted/30">
                         <img src={previewUrl} alt="גרסה נוכחית" className="w-full aspect-square object-cover" />
@@ -698,7 +806,7 @@ export default function AvatarsManagePage() {
                   <button onClick={async () => { try { const res = await fetch(avatar.image_url); const blob = await res.blob(); const blobUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = blobUrl; link.download = `${avatar.name}-avatar.${avatar.image_url.includes('.png') ? 'png' : 'jpg'}`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(blobUrl); toast.success('ההורדה החלה'); } catch { window.open(avatar.image_url, '_blank'); } }} className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
                     <Download className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => handleDelete(avatar.id)} className="w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center" title="מחק">
+                  <button onClick={() => setDeleteConfirm({ type: 'avatar', id: avatar.id })} className="w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center" title="מחק">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -716,6 +824,34 @@ export default function AvatarsManagePage() {
         accept="image/*"
         multiple
       />
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              {deleteConfirm.type === 'avatar' ? 'מחיקת אווטאר' : 'מחיקת גרסה'}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {deleteConfirm.type === 'avatar'
+                ? 'האווטאר, כולל התמונה שנוצרה, יימחק לצמיתות. תמונות הרפרנס לא יימחקו.'
+                : 'הגרסה תימחק מהרשימה ומהאחסון. לא ניתן לשחזר.'
+              }
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">
+                ביטול
+              </button>
+              <button onClick={confirmDeleteVariant}
+                className="flex-1 bg-destructive text-destructive-foreground px-4 py-2.5 rounded-lg font-semibold text-sm">
+                🗑️ מחק
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cost Approval Dialog */}
       {costApprovalOpen && (

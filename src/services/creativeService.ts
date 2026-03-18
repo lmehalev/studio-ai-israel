@@ -138,7 +138,7 @@ export const avatarGenService = {
     imageUrls: string[],
     style?: string,
     options?: { baseAvatarUrl?: string; strictIdentity?: boolean; expression?: string; skipAnalysis?: boolean; cachedFaceDescription?: string }
-  ): Promise<{ imageUrl: string | null; text: string; faceDescription?: string }> => {
+  ): Promise<{ imageUrl: string | null; text: string; faceDescription?: string; identityDrift?: boolean }> => {
     const { data, error } = await supabase.functions.invoke("generate-avatar", {
       body: { imageUrls, style, ...options },
     });
