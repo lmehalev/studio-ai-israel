@@ -604,7 +604,7 @@ export default function AvatarsManagePage() {
               onDragOver={e => handleDragOver(e, null)}
               onDragLeave={handleDragLeave}
               onDrop={e => handleDrop(e, null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${folderFilter === 'unfiled' ? 'bg-primary text-primary-foreground' : dragOverFolder === null && dragOverFolder !== false ? 'bg-muted/50 text-muted-foreground hover:bg-muted' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${folderFilter === 'unfiled' ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}
             >
               ללא תיקייה ({unfiledCount})
             </button>
