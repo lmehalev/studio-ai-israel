@@ -902,7 +902,7 @@ export default function VoicesManagePage() {
 
             {/* Generate button */}
             {!generatedAudioUrl && (
-              <button onClick={handleRequestGenerate} disabled={generating || !selectedVoiceId || !scriptText.trim() || !scriptTitle.trim()}
+              <button onClick={handleRequestGenerate} disabled={generating || !selectedVoiceId || !scriptText.trim() || !scriptTitle.trim() || selectedVoiceRequiresVerification}
                 className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                 {generating ? (<><Loader2 className="w-4 h-4 animate-spin" /> יוצר דיבוב... (עשוי לקחת 30-60 שניות)</>) : (<><DollarSign className="w-4 h-4" /> 💰 צור דיבוב</>)}
               </button>
