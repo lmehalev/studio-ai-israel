@@ -285,6 +285,13 @@ export function VideoWizardFlow({
   const [websiteData, setWebsiteData] = useState<WebsiteScrapeResult | null>(null);
   const [scrapingWebsite, setScrapingWebsite] = useState(false);
 
+  // Reliability/observability
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [debugLogs, setDebugLogs] = useState<GenerationDebugLog[]>([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [dryRunMode, setDryRunMode] = useState(false);
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+
   // Emit session changes to parent for persistence
   useEffect(() => {
     if (!onSessionChange) return;
