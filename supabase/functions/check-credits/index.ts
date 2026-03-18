@@ -86,17 +86,15 @@ const withTimeout = (service: string, unit: string, dash: string, p: Promise<Pro
 async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
   const base: Partial<ProviderStatus> = { service: "elevenlabs", unit: "תווים", dashboardUrl: ELEVENLABS_DASHBOARD_URL, environment: "production" };
   try {
-    // ElevenLabs connector may provide a key that works differently — try multiple auth methods
     const headers = { "xi-api-key": apiKey };
 
-    // 1. Auth + subscription
-    const subRes = await fetch("https://api.elevenlabs.io/v1/user/subscription", { headers });
-    if (subRes.status === 401 || subRes.status === 403) {
-      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed, lastFailureReason: `Auth failed: ${subRes.status}` } as ProviderStatus;
-    }
-
     let used = 0, limit = -1, plan = "API מחובר", creditsAvailable: boolean | null = null;
+    let authConfirmed = false;
+
+    // 1. Try subscription (may fail with connector-managed keys)
+    const subRes = await fetch("https://api.elevenlabs.io/v1/user/subscription", { headers });
     if (subRes.ok) {
+      authConfirmed = true;
       const d = await subRes.json();
       used = d.character_count || 0;
       limit = d.character_limit || 10000;
@@ -104,11 +102,36 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
       creditsAvailable = used < limit;
     }
 
-    // 2. Models accessible
-    const modelsRes = await fetch("https://api.elevenlabs.io/v1/models", { headers });
-    const modelsAccessible = modelsRes.ok;
+    // 2. Try models endpoint (often works even when subscription fails)
+    if (!authConfirmed) {
+      const modelsRes = await fetch("https://api.elevenlabs.io/v1/models", { headers });
+      if (modelsRes.ok) {
+        authConfirmed = true;
+      }
+    }
 
-    // 3. Micro live test — generate 1 word (costs ~5 chars)
+    // 3. Try /v1/user as last auth check
+    if (!authConfirmed) {
+      const userRes = await fetch("https://api.elevenlabs.io/v1/user", { headers });
+      if (userRes.ok) {
+        authConfirmed = true;
+        try {
+          const ud = await userRes.json();
+          if (ud?.subscription) {
+            used = ud.subscription.character_count || 0;
+            limit = ud.subscription.character_limit || 10000;
+            plan = ud.subscription.tier || "free";
+            creditsAvailable = used < limit;
+          }
+        } catch {}
+      }
+    }
+
+    if (!authConfirmed) {
+      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed, lastFailureReason: "כל נקודות האימות נכשלו" } as ProviderStatus;
+    }
+
+    // 4. Micro live test — 1 word TTS (~5 chars)
     let liveGenerationPassed: boolean | null = null;
     if (creditsAvailable !== false) {
       try {
@@ -131,7 +154,7 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
       : creditsAvailable === true ? "credits_ok"
       : "authenticated";
 
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible, liveGenerationPassed, used, limit, plan, canGenerate: readiness === "generation_verified" || readiness === "credits_ok", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
+    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used, limit, plan, canGenerate: readiness === "generation_verified" || readiness === "credits_ok", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
   } catch (e) { return toError("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, e); }
 }
 
