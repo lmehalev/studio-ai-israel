@@ -1950,6 +1950,14 @@ export function VideoWizardFlow({
           )}
         </div>
       )}
+      {/* Cost approval dialog */}
+      <CostApprovalDialog
+        open={showCostApproval}
+        onOpenChange={setShowCostApproval}
+        estimates={costEstimates}
+        onApprove={handleCostApproved}
+        title="אישור יצירת סרטון בתשלום"
+      />
     </div>
   );
 }
