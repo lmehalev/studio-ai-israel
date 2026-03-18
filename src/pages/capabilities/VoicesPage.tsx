@@ -113,6 +113,11 @@ export default function VoicesManagePage() {
     modelId: string;
     language: string;
     voiceSettings: Record<string, unknown>;
+    trainingAudioUrlUsed?: string | null;
+    trainingAudioDurationSec?: number | null;
+    trainingAudioSizeBytes?: number | null;
+    trainingAudioContentType?: string | null;
+    trainingAudioCodec?: string | null;
   } | null>(null);
   const [showTechDetails, setShowTechDetails] = useState(false);
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -120,9 +125,12 @@ export default function VoicesManagePage() {
   // Reset / re-clone state
   const [resettingVoiceId, setResettingVoiceId] = useState<string | null>(null);
 
+  // Training-audio audit state
+  const [trainingAuditByVoiceId, setTrainingAuditByVoiceId] = useState<Record<string, TrainingAudioAudit>>({});
+
   // Verification state
   const [verifyingVoiceId, setVerifyingVoiceId] = useState<string | null>(null);
-  const [verificationAudioUrl, setVerificationAudioUrl] = useState<string | null>(null);
+  const [verificationSamples, setVerificationSamples] = useState<VerificationABSamples | null>(null);
   const [verificationCostOpen, setVerificationCostOpen] = useState(false);
   const [pendingVerifyVoiceId, setPendingVerifyVoiceId] = useState<string | null>(null);
 
