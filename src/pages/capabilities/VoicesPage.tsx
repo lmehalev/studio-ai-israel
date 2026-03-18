@@ -139,13 +139,100 @@ export default function VoicesManagePage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  const getCodecFromContentType = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const normalized = value.toLowerCase();
+    const codecsMatch = normalized.match(/codecs\s*=\s*"?([^";]+)/);
+    if (codecsMatch?.[1]) return codecsMatch[1].trim();
+    if (normalized.includes('mpeg') || normalized.includes('mp3')) return 'mp3';
+    if (normalized.includes('wav')) return 'wav';
+    if (normalized.includes('ogg')) return 'ogg/opus';
+    if (normalized.includes('webm')) return 'webm/opus';
+    if (normalized.includes('m4a') || normalized.includes('mp4')) return 'aac';
+    return null;
+  };
+
+  const measureAudioDuration = (url: string): Promise<number | null> =>
+    new Promise((resolve) => {
+      const audio = document.createElement('audio');
+      const done = (value: number | null) => {
+        audio.removeAttribute('src');
+        audio.load();
+        resolve(value);
+      };
+
+      audio.preload = 'metadata';
+      audio.onloadedmetadata = () => {
+        const seconds = Number.isFinite(audio.duration) ? audio.duration : null;
+        done(seconds && seconds > 0 ? seconds : null);
+      };
+      audio.onerror = () => done(null);
+      audio.src = url;
+    });
+
+  const fetchTrainingAudioAudit = async (voice: SavedVoice): Promise<TrainingAudioAudit> => {
+    const [durationSec, headResponse] = await Promise.all([
+      measureAudioDuration(voice.audio_url),
+      fetch(voice.audio_url, { method: 'HEAD' }).catch(() => null),
+    ]);
+
+    const contentLength = headResponse?.headers.get('content-length');
+    const contentType = headResponse?.headers.get('content-type') || null;
+
+    return {
+      url: voice.audio_url,
+      durationSec,
+      sizeBytes: contentLength ? Number(contentLength) || null : null,
+      contentType,
+      codec: getCodecFromContentType(contentType),
+    };
+  };
+
+  const hydrateTrainingAudits = async (voiceList: SavedVoice[]) => {
+    const tasks = voiceList.map(async (voice) => {
+      if (!voice.audio_url) return null;
+      try {
+        const audit = await fetchTrainingAudioAudit(voice);
+        return [voice.id, audit] as const;
+      } catch {
+        return [voice.id, {
+          url: voice.audio_url,
+          durationSec: null,
+          sizeBytes: null,
+          contentType: null,
+          codec: null,
+        } satisfies TrainingAudioAudit] as const;
+      }
+    });
+
+    const rows = (await Promise.all(tasks)).filter((row): row is readonly [string, TrainingAudioAudit] => Boolean(row));
+    if (!rows.length) return;
+
+    setTrainingAuditByVoiceId((prev) => ({
+      ...prev,
+      ...Object.fromEntries(rows),
+    }));
+  };
+
+  const getTrainingAuditForVoice = async (voice: SavedVoice): Promise<TrainingAudioAudit> => {
+    const existing = trainingAuditByVoiceId[voice.id];
+    if (existing) return existing;
+    const fresh = await fetchTrainingAudioAudit(voice);
+    setTrainingAuditByVoiceId((prev) => ({ ...prev, [voice.id]: fresh }));
+    return fresh;
+  };
+
   const loadAll = async () => {
     try {
       const [voicesRes, gensRes] = await Promise.all([
         supabase.functions.invoke('voice-manager', { body: { action: 'list' } }),
         supabase.functions.invoke('voice-manager', { body: { action: 'list_generations' } }),
       ]);
-      if (voicesRes.data?.voices) setVoices(voicesRes.data.voices);
+      if (voicesRes.data?.voices) {
+        const loadedVoices = voicesRes.data.voices as SavedVoice[];
+        setVoices(loadedVoices);
+        void hydrateTrainingAudits(loadedVoices);
+      }
       if (gensRes.data?.generations) {
         // Filter out verification records from visible generations
         const visible = (gensRes.data.generations as VoiceGeneration[]).filter(g => !g.is_verification_record);
