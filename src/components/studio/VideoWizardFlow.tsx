@@ -755,6 +755,8 @@ export function VideoWizardFlow({
       setProgressStage(shouldGenerateNarration ? 'מייצר קריינות בעברית...' : 'מכין מסלול אווטאר חלופי...');
       setRunwayProgress(5);
 
+      addDebugLog(runId, 'narration', 'info', `Generating narration: voice=${selectedVoice?.name || 'AI'}, textLen=${narrationText.length}`);
+
       if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
@@ -762,9 +764,11 @@ export function VideoWizardFlow({
             narrationText
           );
           narrationAudioUrl = cloneResult.audioUrl;
+          addDebugLog(runId, 'narration', 'success', 'Voice clone + TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('הקריינות בקול שלך מוכנה!');
         } catch (cloneErr: any) {
           const msg = cloneErr?.message || '';
+          addDebugLog(runId, 'narration', 'warn', `Voice clone failed: ${msg}`);
           console.warn('Voice clone failed, falling back to AI TTS:', msg);
           if (msg.includes('קובץ הקול לא נמצא')) {
             toast.error('קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
