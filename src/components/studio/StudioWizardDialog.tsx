@@ -113,6 +113,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
+
+  // Cost approval gate for highlight flow
+  const [showHighlightCostApproval, setShowHighlightCostApproval] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState<string>('');
 
