@@ -838,15 +838,52 @@ export function VideoWizardFlow({
       let runwayBlocked = !runwayFallbackEnabled;
 
       // Universal fallback function — tries all available providers in order
+      // Order: HeyGen (primary) → Krea → Runway (fallback only) → AI Image (last resort)
       const generateSceneWithFallbacks = async (
         scene: ScriptScene, sceneIdx: number, sceneDuration: number, scenePrompt: string
       ): Promise<string> => {
         const errors: string[] = [];
 
-        // Provider 1: Runway (if not blocked)
+        // Provider 1: HeyGen (primary avatar-based video)
+        if (heygenFallbackEnabled) {
+          try {
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם HeyGen...`);
+            return await withTimeout(
+              createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl),
+              120000, 'HeyGen timeout'
+            );
+          } catch (heygenErr: any) {
+            const msg = heygenErr?.message || '';
+            errors.push(`HeyGen: ${msg}`);
+            console.warn(`Scene ${sceneIdx + 1} HeyGen failed:`, msg);
+            if (isHeygenUnavailableErrorMessage(msg) || hasTimeoutErrorMessage(msg)) {
+              heygenFallbackEnabled = false;
+            }
+          }
+        }
+
+        // Provider 2: Krea (direct video generation)
+        if (kreaFallbackEnabled) {
+          try {
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Krea...`);
+            return await withTimeout(
+              createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration),
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
+            );
+          } catch (kreaErr: any) {
+            const msg = kreaErr?.message || '';
+            errors.push(`Krea: ${msg}`);
+            console.warn(`Scene ${sceneIdx + 1} Krea failed:`, msg);
+            if (isKreaCreditsErrorMessage(msg)) {
+              kreaFallbackEnabled = false;
+            }
+          }
+        }
+
+        // Provider 3: Runway (fallback only — not primary)
         if (!runwayBlocked) {
           try {
-            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Runway...`);
+            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Runway (גיבוי)...`);
             if (normalizedAvatarUrl && sceneIdx === 0) {
               const taskData = await withTimeout(
                 runwayService.imageToVideo(normalizedAvatarUrl, scenePrompt, undefined, sceneDuration),
@@ -867,42 +904,6 @@ export function VideoWizardFlow({
             if (isRunwayCreditsErrorMessage(msg)) {
               runwayBlocked = true;
               toast.warning('Runway לא זמין, עובר לספק חלופי...');
-            }
-          }
-        }
-
-        // Provider 2: HeyGen (avatar-based video)
-        if (heygenFallbackEnabled) {
-          try {
-            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם HeyGen...`);
-            return await withTimeout(
-              createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl),
-              120000, 'HeyGen timeout'
-            );
-          } catch (heygenErr: any) {
-            const msg = heygenErr?.message || '';
-            errors.push(`HeyGen: ${msg}`);
-            console.warn(`Scene ${sceneIdx + 1} HeyGen failed:`, msg);
-            if (isHeygenUnavailableErrorMessage(msg) || hasTimeoutErrorMessage(msg)) {
-              heygenFallbackEnabled = false;
-            }
-          }
-        }
-
-        // Provider 3: Krea (direct video generation)
-        if (kreaFallbackEnabled) {
-          try {
-            setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Krea...`);
-            return await withTimeout(
-              createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration),
-              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
-            );
-          } catch (kreaErr: any) {
-            const msg = kreaErr?.message || '';
-            errors.push(`Krea: ${msg}`);
-            console.warn(`Scene ${sceneIdx + 1} Krea failed:`, msg);
-            if (isKreaCreditsErrorMessage(msg)) {
-              kreaFallbackEnabled = false;
             }
           }
         }
