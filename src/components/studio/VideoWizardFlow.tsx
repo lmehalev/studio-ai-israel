@@ -653,6 +653,39 @@ export function VideoWizardFlow({
     return { ok: errors.length === 0, runId, checkedAt: new Date().toISOString(), errors, warnings, providerHealth: health, payloadPreview };
   };
 
+  // Cost approval gate for video generation
+  const requestGenerateVideo = () => {
+    if (!generatedScript) return;
+    if (dryRunMode) {
+      // Dry run doesn't cost credits — proceed directly
+      handleGenerateVideo();
+      return;
+    }
+    const sceneCount = generatedScript.scenes?.length || 3;
+    const hasVoice = selectedVoices.length > 0 || useAiVoice;
+    const hasAvatar = selectedAvatars.length > 0;
+    setCostEstimates(buildVideoGenerationEstimates(sceneCount, hasVoice, hasAvatar));
+    setPendingAction('generate');
+    setShowCostApproval(true);
+  };
+
+  const requestImproveVideo = () => {
+    if (!improvePrompt.trim()) { toast.error('תאר מה לשפר בסרטון'); return; }
+    const sceneCount = generatedScript?.scenes?.length || 3;
+    const hasVoice = selectedVoices.length > 0 || useAiVoice;
+    const hasAvatar = selectedAvatars.length > 0;
+    setCostEstimates(buildVideoGenerationEstimates(sceneCount, hasVoice, hasAvatar));
+    setPendingAction('improve');
+    setShowCostApproval(true);
+  };
+
+  const handleCostApproved = () => {
+    setShowCostApproval(false);
+    if (pendingAction === 'generate') handleGenerateVideo();
+    else if (pendingAction === 'improve') handleImproveVideo();
+    setPendingAction(null);
+  };
+
   // ===== Step 3: Generate video (full pipeline) =====
   const handleGenerateVideo = async () => {
     if (!generatedScript) return;
