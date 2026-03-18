@@ -12,7 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
-  avatarDbService, storageService, composeService, soundEffectService,
+  avatarDbService, storageService, composeService, soundEffectService, kreaService,
   type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -1166,24 +1166,20 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
                 // Use first video or generate from images
                 let baseVideoUrl = videoFiles[0] || '';
                 if (!baseVideoUrl && imageFiles.length > 0) {
-                  // Generate video from first image
-                  const { data: rvData } = await supabase.functions.invoke('runway-video', {
-                    body: { action: 'image_to_video', promptImage: imageFiles[0], promptText: prompt.slice(0, 500), duration: 10 },
-                  });
-                  if (rvData?.taskId) {
-                    // Poll for result
-                    for (let i = 0; i < 60; i++) {
-                      await new Promise(r => setTimeout(r, 5000));
-                      setHighlightProgress(50 + Math.min(20, i));
-                      const { data: status } = await supabase.functions.invoke('runway-video', {
-                        body: { action: 'check_status', taskId: rvData.taskId },
-                      });
-                      if (status?.status === 'SUCCEEDED' && status?.resultUrl) {
-                        baseVideoUrl = status.resultUrl;
-                        break;
-                      }
-                      if (status?.status === 'FAILED') break;
+                  // SAFETY: Use Krea (verified provider) instead of Runway (blocked).
+                  // Never call runway-video directly — it has a kill switch.
+                  try {
+                    const kreaResult = await kreaService.generateVideo(
+                      prompt.slice(0, 500),
+                      { model: 'kling-2.5', width: 1280, height: 720, duration: 10, imageUrl: imageFiles[0] }
+                    );
+                    if (kreaResult?.videoUrl) {
+                      baseVideoUrl = kreaResult.videoUrl;
                     }
+                  } catch (kreaErr: any) {
+                    console.warn('Krea video generation failed for highlight:', kreaErr?.message);
+                    // Fall back to using image as static clip — no credit-burning retry
+                    baseVideoUrl = imageFiles[0];
                   }
                 }
 
