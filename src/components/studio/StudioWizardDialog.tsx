@@ -106,7 +106,15 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [highlightStage, setHighlightStage] = useState('');
   const [highlightOutputType, setHighlightOutputType] = useState<string>('viral_short');
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-  interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
+  interface SavedVoice {
+    id: string;
+    name: string;
+    audio_url: string;
+    type: string;
+    provider_voice_id?: string | null;
+    is_verified?: boolean;
+    verification_status?: string;
+  }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
   const [availableVoices, setAvailableVoices] = useState<SavedVoice[]>([]);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
