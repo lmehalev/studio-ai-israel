@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       const videoInput: any = {
         character: {
           type: "avatar",
-          avatar_id: avatarId || "default",
+          avatar_id: avatarId && avatarId !== "default" ? avatarId : "Abigail_expressive_2024112501",
           avatar_style: avatarStyle || "normal",
         },
         voice: voiceId
