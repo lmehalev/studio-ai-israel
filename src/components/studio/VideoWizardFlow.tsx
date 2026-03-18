@@ -1844,6 +1844,28 @@ export function VideoWizardFlow({
             className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-1">
             <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
           </button>
+
+          {/* Debug log for completed run */}
+          {debugLogs.length > 0 && (
+            <div className="pt-2">
+              <button onClick={() => setShowDebugPanel(!showDebugPanel)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                {showDebugPanel ? 'הסתר לוג דיבאג' : `הצג לוג דיבאג (${debugLogs.length} שלבים)`}
+              </button>
+              {activeRunId && <p className="text-[10px] text-muted-foreground/40 font-mono" dir="ltr">Run: {activeRunId}</p>}
+              {showDebugPanel && (
+                <div className="bg-muted/20 border border-border rounded-lg p-2 max-h-[200px] overflow-y-auto text-right mt-1" dir="rtl">
+                  {debugLogs.map((log, i) => (
+                    <div key={i} className={cn('text-[10px] font-mono py-0.5 border-b border-border/30 last:border-0',
+                      log.status === 'error' ? 'text-destructive' : log.status === 'warn' ? 'text-amber-500' : log.status === 'success' ? 'text-primary' : 'text-muted-foreground')}>
+                      <span className="opacity-50">{log.timestamp.split('T')[1]?.slice(0, 8)}</span>{' '}
+                      [{log.step}] {log.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
