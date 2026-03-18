@@ -399,37 +399,54 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
 - subtitleText — כתובית בעברית של 6-10 מילים שמסכמת את הנאמר
 - הכתוביות יוצגו על הסרטון — חייבות להיות קריאות וברורות`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
+    // Try models in order: cheapest first
+    const modelsToTry = [
+      "google/gemini-2.5-flash",
+      "google/gemini-2.5-pro",
+      "openai/gpt-5-mini",
+    ];
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    let response: Response | null = null;
+    let lastErrorText = "";
+
+    for (const model of modelsToTry) {
+      console.log(`Trying script model: ${model}`);
+      const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+
+      if (attempt.ok) {
+        response = attempt;
+        break;
+      }
+
+      lastErrorText = await attempt.text();
+      console.warn(`Script model ${model} failed: ${attempt.status} ${lastErrorText.slice(0, 200)}`);
+
+      if (attempt.status === 429) {
         return new Response(JSON.stringify({ error: "יותר מדי בקשות, נסה שוב בעוד רגע" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "נדרש טעינת קרדיטים" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error("שגיאה בשירות ה-AI");
+
+      // Continue to next model on 402/5xx
+      if (attempt.status !== 402 && attempt.status < 500) break;
+    }
+
+    if (!response) {
+      console.error("All script models failed. Last error:", lastErrorText.slice(0, 300));
+      throw new Error("שגיאה בשירות ה-AI — כל המודלים נכשלו");
     }
 
     const data = await response.json();

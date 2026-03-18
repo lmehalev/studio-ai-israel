@@ -155,15 +155,19 @@ Deno.serve(async (req) => {
 
     let faceDescription = "";
     try {
-      const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          temperature: 0.0,
+      const analysisModels = ["google/gemini-2.5-flash", "google/gemini-2.5-pro"];
+      let analysisResponse: Response | null = null;
+
+      for (const model of analysisModels) {
+        const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.0,
           messages: [
             {
               role: "user",
@@ -189,14 +193,23 @@ Keep it under 2200 characters. Prioritize identity-lock details.`
             },
           ],
         }),
-      });
+        });
 
-      if (analysisResponse.ok) {
+        if (attempt.ok) {
+          analysisResponse = attempt;
+          break;
+        }
+        const errText = await attempt.text();
+        console.warn(`Avatar analysis model ${model} failed: ${attempt.status} ${errText.slice(0, 200)}`);
+        if (attempt.status !== 402 && attempt.status < 500) break;
+      }
+
+      if (analysisResponse && analysisResponse.ok) {
         const analysisData = await analysisResponse.json();
         faceDescription = analysisData.choices?.[0]?.message?.content || "";
         console.log("Face analysis complete:", faceDescription.length, "chars");
       } else {
-        console.error("Face analysis failed:", analysisResponse.status);
+        console.error("Face analysis failed: all models exhausted");
       }
     } catch (e) {
       console.error("Face analysis error:", e);
