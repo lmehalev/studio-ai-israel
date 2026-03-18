@@ -782,8 +782,10 @@ export function VideoWizardFlow({
       if (shouldGenerateNarration && !narrationAudioUrl && narrationText) {
         try {
           narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
+          addDebugLog(runId, 'narration', 'success', 'AI TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('קריינות AI בעברית מוכנה!');
         } catch (ttsErr: any) {
+          addDebugLog(runId, 'narration', 'error', `AI TTS failed: ${ttsErr?.message}`);
           console.warn('TTS failed:', ttsErr?.message);
           toast.info('לא הצלחתי ליצור קריינות, ממשיך ללא קול...');
         }
