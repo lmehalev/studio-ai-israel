@@ -9,9 +9,8 @@ const corsHeaders = {
 const HEBREW_WARNING = "הקול שנבחר לא תומך בעברית בצורה טובה. בחר קול אחר או שנה הגדרות.";
 
 // ── Validation thresholds ──
-const MIN_TRAINING_BYTES = 50_000;        // ~50KB hard minimum
-const MIN_TRAINING_DURATION_SEC = 30;     // 30s hard block
-const RECOMMENDED_DURATION_SEC = 60;      // 60s recommended
+const MIN_TRAINING_DURATION_SEC = 30; // hard block
+const RECOMMENDED_DURATION_SEC = 60; // warning only
 
 const scriptToSafeNarration = (value: string) => value.slice(0, 4800);
 
@@ -19,9 +18,27 @@ const extFromMime = (contentType: string, fallbackFromUrl = "webm") => {
   if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) return "mp3";
   if (contentType.includes("audio/wav") || contentType.includes("audio/x-wav")) return "wav";
   if (contentType.includes("audio/ogg")) return "ogg";
-  if (contentType.includes("audio/mp4") || contentType.includes("audio/x-m4a") || contentType.includes("audio/m4a")) return "m4a";
+  if (
+    contentType.includes("audio/mp4") ||
+    contentType.includes("audio/x-m4a") ||
+    contentType.includes("audio/m4a")
+  )
+    return "m4a";
   if (contentType.includes("audio/webm")) return "webm";
   return fallbackFromUrl;
+};
+
+const codecFromContentType = (contentType: string | null | undefined): string | null => {
+  if (!contentType) return null;
+  const normalized = contentType.toLowerCase();
+  const codecsMatch = normalized.match(/codecs\s*=\s*"?([^";]+)/);
+  if (codecsMatch?.[1]) return codecsMatch[1].trim();
+  if (normalized.includes("mpeg") || normalized.includes("mp3")) return "mp3";
+  if (normalized.includes("wav")) return "wav";
+  if (normalized.includes("ogg")) return "ogg/opus";
+  if (normalized.includes("webm")) return "webm/opus";
+  if (normalized.includes("m4a") || normalized.includes("mp4")) return "aac";
+  return null;
 };
 
 const extractStoragePathFromUrl = (audioUrl: string): string | null => {
@@ -37,7 +54,11 @@ const extractStoragePathFromUrl = (audioUrl: string): string | null => {
 };
 
 const parseProviderErrorBody = (raw: string): unknown => {
-  try { return JSON.parse(raw); } catch { return raw; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 };
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -51,7 +72,7 @@ const providerErrorResponse = (params: {
   error: string;
   providerError: unknown;
   modelId?: string;
-  language?: string;
+  language?: string | null;
   voiceIdUsed?: string;
   voiceSettings?: Record<string, unknown>;
 }) =>
@@ -61,7 +82,7 @@ const providerErrorResponse = (params: {
       provider: "ElevenLabs",
       providerStatus: params.status,
       modelId: params.modelId,
-      language: params.language,
+      language: params.language ?? null,
       voiceIdUsed: params.voiceIdUsed,
       voiceSettings: params.voiceSettings,
       error: params.error,
@@ -92,25 +113,6 @@ const downloadVoiceSample = async (
   }
 
   throw new Error("קובץ הקול לא נמצא באחסון. העלה/הקלט קול מחדש ונסה שוב.");
-};
-
-// ── Estimate duration from file size + codec ──
-// Very rough but sufficient for gating; accurate duration requires decoding
-const estimateDurationFromSize = (
-  byteLength: number,
-  contentType: string,
-  clientDurationSec?: number
-): number => {
-  // If client sent measured duration, trust it
-  if (clientDurationSec && clientDurationSec > 0) return clientDurationSec;
-
-  // Rough bitrate estimates (bytes/second)
-  if (contentType.includes("ogg") || contentType.includes("opus")) return byteLength / 4000; // ~32kbps Opus
-  if (contentType.includes("webm")) return byteLength / 6000;
-  if (contentType.includes("mp3") || contentType.includes("mpeg")) return byteLength / 16000; // 128kbps
-  if (contentType.includes("wav")) return byteLength / 88200; // 44.1kHz 16bit mono
-  if (contentType.includes("m4a") || contentType.includes("mp4")) return byteLength / 16000;
-  return byteLength / 8000; // conservative fallback
 };
 
 const languageConfig = {
@@ -173,38 +175,48 @@ Deno.serve(async (req) => {
       language,
       providerVoiceId,
       voiceSettings,
+      modelId,
+      omitLanguageCode,
       trainingAudioDurationSec,
       trainingAudioSizeBytes,
       trainingAudioFileName,
+      trainingAudioContentType,
+      trainingAudioCodec,
     } = await req.json();
 
     if (!scriptText?.trim()) {
       return jsonResponse({ error: "יש לספק טקסט לקריינות" }, 400);
     }
 
-    // providerVoiceId = reuse existing cloned voice. audioUrl = clone fresh.
     if (!providerVoiceId && !audioUrl) {
-      return jsonResponse({ error: "יש לספק קובץ אודיו או מזהה קול ספק. אם אין קובץ אימון — העלה או הקלט קול חדש." }, 400);
+      return jsonResponse(
+        { error: "יש לספק קובץ אודיו או מזהה קול ספק. אם אין קובץ אימון — העלה או הקלט קול חדש." },
+        400
+      );
     }
 
     const safeScript = scriptToSafeNarration(scriptText);
     const selectedLanguage = resolveLanguage(safeScript, language);
     const selectedConfig = languageConfig[selectedLanguage];
 
+    const selectedModelId = typeof modelId === "string" && modelId.trim() ? modelId.trim() : selectedConfig.modelId;
+    const shouldOmitLanguageCode = Boolean(omitLanguageCode);
+    const selectedLanguageCode = shouldOmitLanguageCode ? null : selectedConfig.languageCode;
+
     const mergedSettings = { ...DEFAULT_VOICE_SETTINGS, ...(voiceSettings || {}) };
 
     const modelIds = await fetchAvailableModelIds(ELEVENLABS_API_KEY);
-    if (!modelIds.has(selectedConfig.modelId)) {
+    if (!modelIds.has(selectedModelId)) {
       const message = selectedLanguage === "he" ? HEBREW_WARNING : "המודל שנבחר לא זמין כרגע";
       return providerErrorResponse({
         status: 422,
         error: message,
         providerError: {
           code: "model_not_available",
-          message: `Model ${selectedConfig.modelId} is not available for this account`,
+          message: `Model ${selectedModelId} is not available for this account`,
         },
-        modelId: selectedConfig.modelId,
-        language: selectedConfig.languageCode,
+        modelId: selectedModelId,
+        language: selectedLanguageCode,
         voiceSettings: mergedSettings,
       });
     }
@@ -213,77 +225,89 @@ Deno.serve(async (req) => {
 
     let voice_id: string;
     let clonedFresh = false;
+    let trainingWarning: string | null = null;
+
+    let trainingAudioUrlUsed: string | null = null;
+    let measuredTrainingDurationSec: number | null = null;
+    let measuredTrainingSizeBytes: number | null = null;
+    let measuredTrainingContentType: string | null = null;
+    let measuredTrainingCodec: string | null = null;
 
     if (providerVoiceId) {
       voice_id = providerVoiceId;
       console.log("Reusing stored provider voice_id:", voice_id);
     } else {
-      // ── STRICT PRE-CLONE VALIDATION ──
+      const measuredDuration =
+        typeof trainingAudioDurationSec === "number" && Number.isFinite(trainingAudioDurationSec)
+          ? trainingAudioDurationSec
+          : null;
+
+      if (!measuredDuration || measuredDuration <= 0) {
+        return jsonResponse(
+          {
+            error:
+              "לא התקבלה מדידת אורך אמיתית לקובץ האימון. יש למדוד אורך קובץ בפועל (metadata) לפני שכפול.",
+            validationFailed: true,
+            minimumDurationSec: MIN_TRAINING_DURATION_SEC,
+            recommendedDurationSec: RECOMMENDED_DURATION_SEC,
+          },
+          422
+        );
+      }
+
       console.log("Downloading voice sample from:", audioUrl);
       const sample = await downloadVoiceSample(audioUrl, supabase);
       const sizeBytes = sample.arrayBuffer.byteLength;
-      const estimatedDuration = estimateDurationFromSize(
-        sizeBytes,
-        sample.contentType,
-        trainingAudioDurationSec
-      );
+      const contentType = sample.contentType || trainingAudioContentType || "audio/webm";
+      const codec = trainingAudioCodec || codecFromContentType(contentType) || codecFromContentType(trainingAudioContentType) || null;
+
+      trainingAudioUrlUsed = audioUrl;
+      measuredTrainingDurationSec = measuredDuration;
+      measuredTrainingSizeBytes = sizeBytes;
+      measuredTrainingContentType = contentType;
+      measuredTrainingCodec = codec;
 
       console.log(
-        `Training audio validation: size=${sizeBytes} bytes, estimatedDuration=${estimatedDuration.toFixed(1)}s, ` +
-        `contentType=${sample.contentType}, clientFileName=${trainingAudioFileName || 'unknown'}, ` +
-        `clientDuration=${trainingAudioDurationSec || 'N/A'}s, clientSize=${trainingAudioSizeBytes || 'N/A'}`
+        "Training audio used for cloning:",
+        JSON.stringify({
+          url: trainingAudioUrlUsed,
+          durationSec: measuredTrainingDurationSec,
+          sizeBytes: measuredTrainingSizeBytes,
+          contentType: measuredTrainingContentType,
+          codec: measuredTrainingCodec,
+          clientFileName: trainingAudioFileName || null,
+          clientSizeBytes: trainingAudioSizeBytes || null,
+        })
       );
 
-      // Hard block: too small
-      if (sizeBytes < MIN_TRAINING_BYTES) {
+      if (measuredDuration < MIN_TRAINING_DURATION_SEC) {
         return jsonResponse(
           {
-            error: `קובץ האימון קטן מדי (${(sizeBytes / 1024).toFixed(0)}KB). ` +
-              `נדרש לפחות ${(MIN_TRAINING_BYTES / 1024).toFixed(0)}KB.\n\n` +
-              `💡 הנחיות להקלטה איכותית:\n` +
-              `• הקלט 60-120 שניות בקול ברור ויציב\n` +
-              `• חדר שקט, ללא מוזיקה או רעשי רקע\n` +
-              `• דובר אחד בלבד\n` +
-              `• פורמט מומלץ: WAV או MP3 (לא WhatsApp)\n` +
-              `• דבר בקצב טבעי, ללא לחישות`,
+            error:
+              `קובץ האימון קצר מדי (${Math.round(measuredDuration)} שניות). נדרש לפחות ${MIN_TRAINING_DURATION_SEC} שניות.` +
+              `\n\n💡 הנחיות להקלטה איכותית:` +
+              `\n• הקלט 60-120 שניות בקול ברור ויציב` +
+              `\n• חדר שקט, ללא מוזיקה או רעשי רקע` +
+              `\n• דובר אחד בלבד` +
+              `\n• פורמט מומלץ: WAV או MP3` +
+              `\n• דבר בקצב טבעי, ללא לחישות`,
             validationFailed: true,
-            sizeBytes,
-            estimatedDurationSec: Math.round(estimatedDuration),
-            minimumSizeBytes: MIN_TRAINING_BYTES,
+            trainingAudioUrlUsed,
+            measuredDurationSec: measuredDuration,
+            measuredSizeBytes: sizeBytes,
+            measuredContentType: contentType,
+            measuredCodec: codec,
             minimumDurationSec: MIN_TRAINING_DURATION_SEC,
+            recommendedDurationSec: RECOMMENDED_DURATION_SEC,
           },
           422
         );
       }
 
-      // Hard block: too short
-      if (estimatedDuration < MIN_TRAINING_DURATION_SEC) {
-        return jsonResponse(
-          {
-            error: `קובץ האימון קצר מדי (~${Math.round(estimatedDuration)} שניות). ` +
-              `נדרש לפחות ${MIN_TRAINING_DURATION_SEC} שניות (מומלץ ${RECOMMENDED_DURATION_SEC}+).\n\n` +
-              `💡 הנחיות להקלטה איכותית:\n` +
-              `• הקלט 60-120 שניות בקול ברור ויציב\n` +
-              `• חדר שקט, ללא מוזיקה או רעשי רקע\n` +
-              `• דובר אחד בלבד\n` +
-              `• פורמט מומלץ: WAV או MP3 (לא WhatsApp)\n` +
-              `• דבר בקצב טבעי, ללא לחישות`,
-            validationFailed: true,
-            sizeBytes,
-            estimatedDurationSec: Math.round(estimatedDuration),
-            minimumSizeBytes: MIN_TRAINING_BYTES,
-            minimumDurationSec: MIN_TRAINING_DURATION_SEC,
-          },
-          422
-        );
-      }
-
-      // Warning: short but acceptable
-      if (estimatedDuration < RECOMMENDED_DURATION_SEC) {
-        console.warn(
-          `Training audio is short (~${Math.round(estimatedDuration)}s). ` +
-          `Recommended: ${RECOMMENDED_DURATION_SEC}s+. Proceeding with warning.`
-        );
+      if (measuredDuration < RECOMMENDED_DURATION_SEC) {
+        trainingWarning =
+          `הקלטה קצרה יחסית (${Math.round(measuredDuration)} שניות). מומלץ 60–120 שניות לזיהוי זהות טוב יותר.`;
+        console.warn(trainingWarning);
       }
 
       console.log("Cloning voice via ElevenLabs...");
@@ -309,8 +333,8 @@ Deno.serve(async (req) => {
           status: cloneResponse.status,
           error: "שגיאה בשכפול הקול",
           providerError,
-          modelId: selectedConfig.modelId,
-          language: selectedConfig.languageCode,
+          modelId: selectedModelId,
+          language: selectedLanguageCode,
           voiceSettings: mergedSettings,
         });
       }
@@ -321,14 +345,24 @@ Deno.serve(async (req) => {
       console.log("Voice cloned successfully, voice_id:", voice_id);
     }
 
-    console.log("Generating TTS with voice_id:", voice_id, "model:", selectedConfig.modelId);
+    console.log(
+      "Generating TTS with voice_id:",
+      voice_id,
+      "model:",
+      selectedModelId,
+      "language:",
+      selectedLanguageCode ?? "(auto-detect)"
+    );
 
     const ttsPayload: Record<string, unknown> = {
       text: safeScript,
-      model_id: selectedConfig.modelId,
-      language_code: selectedConfig.languageCode,
+      model_id: selectedModelId,
       voice_settings: mergedSettings,
     };
+
+    if (selectedLanguageCode) {
+      ttsPayload.language_code = selectedLanguageCode;
+    }
 
     const ttsResponse = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`,
@@ -358,8 +392,8 @@ Deno.serve(async (req) => {
         status: ttsResponse.status,
         error: unsupportedLanguage ? HEBREW_WARNING : "שגיאה ביצירת קריינות",
         providerError,
-        modelId: selectedConfig.modelId,
-        language: selectedConfig.languageCode,
+        modelId: selectedModelId,
+        language: selectedLanguageCode,
         voiceIdUsed: voice_id,
         voiceSettings: mergedSettings,
       });
@@ -385,9 +419,15 @@ Deno.serve(async (req) => {
       audioUrl: urlData.publicUrl,
       voiceId: voice_id,
       clonedFresh,
-      modelId: selectedConfig.modelId,
-      language: selectedConfig.languageCode,
+      modelId: selectedModelId,
+      language: selectedLanguageCode,
       voiceSettings: mergedSettings,
+      warning: trainingWarning,
+      trainingAudioUrlUsed,
+      trainingAudioDurationSec: measuredTrainingDurationSec,
+      trainingAudioSizeBytes: measuredTrainingSizeBytes,
+      trainingAudioContentType: measuredTrainingContentType,
+      trainingAudioCodec: measuredTrainingCodec,
     });
   } catch (e) {
     console.error("clone-voice-tts error:", e);
