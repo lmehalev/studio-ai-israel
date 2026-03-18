@@ -1141,7 +1141,12 @@ export function VideoWizardFlow({
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
-            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, narrationText);
+            const cloneResult = await voiceCloneService.cloneAndSpeak({
+              providerVoiceId: selectedVoice.provider_voice_id || undefined,
+              audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
+              scriptText: narrationText,
+              language: 'he',
+            });
             narrationAudioUrl = cloneResult.audioUrl;
           } else {
             narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
