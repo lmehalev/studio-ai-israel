@@ -1240,6 +1240,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const currentStepNum = step + 1;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] md:max-h-[85vh] overflow-y-auto w-[95vw] md:w-full" dir="rtl">
         <DialogHeader>
