@@ -563,10 +563,11 @@ export function VideoWizardFlow({
             .map((c: any) => [c.service, c])
         ) as Record<string, { canGenerate?: boolean; error?: string }>;
 
-        const runwayCanGenerate = !!creditsMap.runway && (
+        // FIX: If credit check timed out, assume provider is available (don't block on slow checks)
+        const runwayCanGenerate = !creditsMap.runway ? true : (
           creditsMap.runway.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.runway.error)
         );
-        const heygenCanGenerate = !!creditsMap.heygen && (
+        const heygenCanGenerate = !creditsMap.heygen ? true : (
           creditsMap.heygen.canGenerate !== false || hasTimeoutErrorMessage(creditsMap.heygen.error)
         );
         const kreaCanGenerate = !!creditsMap.krea && (
