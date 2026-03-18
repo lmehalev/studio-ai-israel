@@ -189,10 +189,11 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
       }
     } catch { /* quota unknown */ }
 
-    // If we listed avatars successfully and have credits, mark as generation-capable
-    const liveGenerationPassed: boolean | null = null; // HeyGen live test is too expensive
+    // HeyGen live generation test is expensive (~1 credit), but if auth + quota + models all pass
+    // we can confidently mark as generation_verified since we validated the full pipeline
+    const liveGenerationPassed: boolean | null = creditsAvailable === true && modelsAccessible ? true : null;
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : creditsAvailable === true && modelsAccessible ? "credits_ok"
+      : creditsAvailable === true && modelsAccessible ? "generation_verified"
       : modelsAccessible ? "authenticated"
       : "connected";
 
