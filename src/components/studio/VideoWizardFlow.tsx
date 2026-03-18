@@ -844,10 +844,12 @@ export function VideoWizardFlow({
 
       if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
-          const cloneResult = await voiceCloneService.cloneAndSpeak(
-            selectedVoice.audio_url,
-            narrationText
-          );
+          const cloneResult = await voiceCloneService.cloneAndSpeak({
+            providerVoiceId: selectedVoice.provider_voice_id || undefined,
+            audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
+            scriptText: narrationText,
+            language: 'he',
+          });
           narrationAudioUrl = cloneResult.audioUrl;
           addDebugLog(runId, 'narration', 'success', 'Voice clone + TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('הקריינות בקול שלך מוכנה!');
