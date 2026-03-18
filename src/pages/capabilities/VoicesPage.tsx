@@ -297,6 +297,20 @@ export default function VoicesManagePage() {
               )}
             </div>
 
+            {/* Language selector */}
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">שפת הדיבוב</label>
+              <select
+                value={language}
+                onChange={e => setLanguage(e.target.value as 'he' | 'en' | 'ar')}
+                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="he">🇮🇱 עברית</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="ar">🇸🇦 عربية</option>
+              </select>
+            </div>
+
             {/* Title */}
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">כותרת הדיבוב</label>
