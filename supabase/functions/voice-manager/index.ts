@@ -400,11 +400,13 @@ Deno.serve(async (req) => {
         provider_voice_id,
         status,
         sample_audio_url,
+        selected_model,
       } = payload as {
         voice_id?: string;
         provider_voice_id?: string;
         status?: VerificationStatus;
         sample_audio_url?: string;
+        selected_model?: string;
       };
 
       if (!voice_id || !provider_voice_id || !status || !sample_audio_url) {
@@ -418,6 +420,7 @@ Deno.serve(async (req) => {
       const payloadScript = JSON.stringify({
         status,
         providerVoiceId: provider_voice_id,
+        selectedModel: typeof selected_model === "string" ? selected_model : null,
         confirmedAt: new Date().toISOString(),
       });
 
@@ -443,6 +446,7 @@ Deno.serve(async (req) => {
           id: data.id,
           status,
           provider_voice_id,
+          selected_model: typeof selected_model === "string" ? selected_model : null,
           created_at: data.created_at,
         },
       });
