@@ -831,10 +831,9 @@ export function VideoWizardFlow({
       const createKreaSceneClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
         createKreaSceneClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
-      // SAFETY: Runway is ALWAYS blocked by default. It can only be unblocked
-      // if the credit check explicitly confirms generation_verified status.
-      // This prevents any Runway calls if credit check times out or fails.
-      let runwayBlocked = true;
+      // Runway starts blocked; only unblocked if credit check confirmed it's ready.
+      // This ensures no Runway calls if credit check times out or fails.
+      let runwayBlocked = !(isGenerationReady?.('runway') ?? false) || (isBlocked?.('runway') ?? true);
 
       // Universal fallback function — tries all available providers in order
       const generateSceneWithFallbacks = async (
