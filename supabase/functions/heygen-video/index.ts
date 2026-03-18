@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
           ? { type: "text", input_text: script, voice_id: voiceId, speed: 1.0 }
           : audioUrl
             ? { type: "audio", audio_url: audioUrl }
-            : { type: "text", input_text: script, voice_id: "he-IL-AvriNeural", speed: 1.0 },
+            : { type: "text", input_text: script, voice_id: "f38a635bee7a4d1f9b0a654a31d050d2", speed: 1.0 },
       };
 
       const dimension = aspectRatio === "9:16"
