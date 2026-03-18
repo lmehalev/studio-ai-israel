@@ -72,7 +72,43 @@ export default function AvatarsManagePage() {
   // Storage picker
   const [storagePickerOpen, setStoragePickerOpen] = useState(false);
 
-  useEffect(() => { loadAvatars(); }, []);
+  // === Draft persistence (sessionStorage) ===
+  const DRAFT_KEY = 'avatar-creation-draft';
+
+  const saveDraft = () => {
+    const draft = { name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt };
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch {}
+  };
+
+  const loadDraft = () => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.name) setName(d.name);
+      if (d.photos?.length) setPhotos(d.photos);
+      if (d.style) setStyle(d.style);
+      if (d.expression) setExpression(d.expression);
+      if (d.creationMode) setCreationMode(d.creationMode);
+      if (d.textPrompt) setTextPrompt(d.textPrompt);
+      if (d.baseAvatarId) setBaseAvatarId(d.baseAvatarId);
+      if (d.previewUrl) setPreviewUrl(d.previewUrl);
+      if (d.previewHistory?.length) setPreviewHistory(d.previewHistory);
+      if (d.refinePrompt) setRefinePrompt(d.refinePrompt);
+      setCreating(true);
+    } catch {}
+  };
+
+  const clearDraft = () => {
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
+  };
+
+  // Auto-save draft whenever creation state changes
+  useEffect(() => {
+    if (creating) saveDraft();
+  }, [name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt, creating]);
+
+  useEffect(() => { loadAvatars(); loadDraft(); }, []);
 
   useEffect(() => {
     setPhotos((prev) => {
@@ -184,6 +220,13 @@ export default function AvatarsManagePage() {
     setName(''); setPhotos([]); setStyle('professional headshot'); setExpression('neutral');
     setBaseAvatarId(''); setPreviewUrl(null); setPreviewHistory([]); setRefinePrompt('');
     setTextPrompt(''); setCreationMode('photo');
+    clearDraft();
+  };
+
+  // Go back from preview to edit form — keeps all references & settings
+  const handleBackToEdit = () => {
+    setPreviewUrl(null);
+    // Keep photos, style, expression, name, etc. intact
   };
 
   const handleDelete = async (id: string) => {
@@ -315,7 +358,11 @@ export default function AvatarsManagePage() {
                   </button>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-2">
+                  <button onClick={handleBackToEdit}
+                    className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
+                    ← חזור לעריכה
+                  </button>
                   <button onClick={handleRegenerate} disabled={generating}
                     className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
                     {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
