@@ -201,10 +201,10 @@ export function ConnectionsTab() {
               <p className="text-xs text-foreground">HeyGen → Krea → תמונת AI סטטית</p>
               <p className="text-[10px] text-muted-foreground">Krea משמש כגיבוי לוידאו ותמונות כשספק ראשי לא זמין</p>
             </div>
-            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-destructive flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> ספקים חסומים</p>
-              <p className="text-xs text-foreground"><strong>RunwayML</strong> — חסום ידנית (Kill Switch פעיל בשרת)</p>
-              <p className="text-[10px] text-muted-foreground">לא ניתן להשתמש ב-Runway ללא אישור ידני מפורש</p>
+            <div className="bg-info/5 border border-info/20 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-info flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> ספק גיבוי</p>
+              <p className="text-xs text-foreground"><strong>RunwayML</strong> — Fallback בלבד (לא ספק ברירת מחדל)</p>
+              <p className="text-[10px] text-muted-foreground">Runway משמש כגיבוי בלבד כאשר HeyGen ו-Krea לא זמינים</p>
             </div>
           </div>
         </div>

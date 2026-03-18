@@ -1094,7 +1094,7 @@ export function VideoWizardFlow({
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
       const sceneVideoUrls: string[] = [];
 
-      // SAFETY: Runway is blocked by kill switch — never attempt it in improve flow.
+      // Runway is fallback only — credit check determines availability.
       // Must run credit check first to determine which providers are available.
       let heygenFallbackEnabled = true;
       let kreaFallbackEnabled = true;
