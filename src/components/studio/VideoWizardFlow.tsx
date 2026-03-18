@@ -1684,6 +1684,15 @@ export function VideoWizardFlow({
             </div>
           )}
 
+          {/* Dry-run / Preflight toggle */}
+          <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2">
+            <input type="checkbox" id="dryRun" checked={dryRunMode} onChange={e => setDryRunMode(e.target.checked)}
+              className="rounded border-border" />
+            <label htmlFor="dryRun" className="text-xs text-muted-foreground cursor-pointer">
+              🔍 מצב בדיקה מוקדמת (Dry Run) — בודק ספקים בלי לבזבז קרדיטים
+            </label>
+          </div>
+
           <div className="flex gap-2">
             <button onClick={() => setStep(1)}
               className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
@@ -1691,9 +1700,29 @@ export function VideoWizardFlow({
             </button>
             <button onClick={handleGenerateVideo} disabled={loading}
               className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-              <Play className="w-4 h-4" /> צור סרטון
+              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : 'צור סרטון'}
             </button>
           </div>
+
+          {/* Preflight result */}
+          {preflightResult && (
+            <div className={cn('border rounded-lg p-3 space-y-1 text-xs', preflightResult.ok ? 'border-primary/30 bg-primary/5' : 'border-destructive/30 bg-destructive/5')}>
+              <p className="font-semibold">{preflightResult.ok ? '✅ בדיקה מוקדמת עברה' : '❌ בדיקה מוקדמת נכשלה'}</p>
+              <p className="text-muted-foreground font-mono text-[10px]">Run ID: {preflightResult.runId}</p>
+              {preflightResult.errors.map((e, i) => <p key={i} className="text-destructive">❌ {e}</p>)}
+              {preflightResult.warnings.map((w, i) => <p key={i} className="text-amber-500">⚠️ {w}</p>)}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {Object.entries(preflightResult.providerHealth).map(([name, status]) => (
+                  <span key={name} className={cn('px-2 py-0.5 rounded-full text-[10px] border',
+                    status === 'healthy' ? 'bg-primary/10 text-primary border-primary/30' :
+                    status === 'degraded' ? 'bg-amber-500/10 text-amber-500 border-amber-500/30' :
+                    'bg-destructive/10 text-destructive border-destructive/30')}>
+                    {status === 'healthy' ? '✓' : status === 'degraded' ? '⚠' : '✗'} {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
