@@ -25,15 +25,20 @@ Deno.serve(async (req) => {
     }
 
     // Use Gemini to transcribe audio
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
+    const modelsToTry = ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"];
+    let response: Response | null = null;
+
+    for (const model of modelsToTry) {
+      console.log(`Trying transcribe model: ${model}`);
+      const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
           {
             role: "system",
               content: `אתה מתמלל מקצועי ברמה הגבוהה ביותר. תמלל את האודיו הבא בצורה מדויקת ביותר.
