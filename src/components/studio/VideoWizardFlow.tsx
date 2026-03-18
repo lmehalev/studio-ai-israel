@@ -943,6 +943,8 @@ export function VideoWizardFlow({
       }
 
       const successfulResults = sceneResults.filter((r): r is NonNullable<typeof r> => r !== null);
+      addDebugLog(runId, 'scenes', successfulResults.length > 0 ? 'success' : 'error',
+        `${successfulResults.length}/${totalScenes} scenes generated`, { errors: sceneErrors });
       
       if (successfulResults.length === 0) {
         throw new Error(
@@ -959,6 +961,7 @@ export function VideoWizardFlow({
       const sceneVideoUrls = successfulResults.map((result) => result.url);
 
       // === Stage 3: Composite all clips with Shotstack ===
+      addDebugLog(runId, 'compose', 'info', `Starting Shotstack render with ${sceneVideoUrls.length} clips`);
       setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
       setRunwayProgress(70);
 
@@ -975,6 +978,8 @@ export function VideoWizardFlow({
           audioUrl: narrationAudioUrl,
         });
 
+        addDebugLog(runId, 'compose', renderResult?.renderId ? 'success' : 'error',
+          renderResult?.renderId ? `Render started: ${renderResult.renderId}` : 'No renderId returned');
         if (!renderResult?.renderId) throw new Error('Shotstack error');
 
         const composeMaxAttempts = Math.max(240, sceneVideoUrls.length * 120);
