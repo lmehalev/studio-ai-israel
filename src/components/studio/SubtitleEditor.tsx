@@ -13,6 +13,7 @@ import {
   subtitleService, type SubtitleSegment, type Brand,
   storageService, composeService,
 } from '@/services/creativeService';
+import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/studio/CostApprovalDialog';
 
 // ── Font presets (YouTube-style, creative) ──
 const fontPresets = [
