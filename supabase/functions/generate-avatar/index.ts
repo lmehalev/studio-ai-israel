@@ -153,30 +153,35 @@ Deno.serve(async (req) => {
       image_url: { url },
     }));
 
-    console.log("Pass 1: Analyzing face from", referenceUrls.length, "photos...");
-
     let faceDescription = "";
-    try {
-      const analysisModels = ["google/gemini-2.5-flash", "google/gemini-2.5-pro"];
-      let analysisResponse: Response | null = null;
 
-      for (const model of analysisModels) {
-        const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.0,
-          messages: [
-            {
-              role: "user",
-              content: [
+    // Reuse cached face analysis if provided (expression-only regeneration)
+    if (body.skipAnalysis && body.cachedFaceDescription) {
+      faceDescription = body.cachedFaceDescription;
+      console.log("Reusing cached face analysis:", faceDescription.length, "chars (Pass 1 skipped)");
+    } else {
+      console.log("Pass 1: Analyzing face from", referenceUrls.length, "photos...");
+      try {
+        const analysisModels = ["google/gemini-2.5-flash", "google/gemini-2.5-pro"];
+        let analysisResponse: Response | null = null;
+
+        for (const model of analysisModels) {
+          const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              temperature: 0.0,
+              messages: [
                 {
-                  type: "text",
-                  text: `You are a forensic facial identification expert. Study these ${referenceUrls.length} photos of the SAME person from different angles and lighting.
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: `You are a forensic facial identification expert. Study these ${referenceUrls.length} photos of the SAME person from different angles and lighting.
 
 Your goal: produce an identity profile so precise that another AI could reproduce THIS EXACT person and no one else.
 
@@ -192,32 +197,33 @@ Return a structured identity profile covering:
 
 Focus ONLY on immutable structural features. Ignore temporary lighting, expression, or angle artifacts.
 Keep under 2500 characters. Be maximally specific — "slightly wide nose with rounded tip" not just "normal nose".`
+                    },
+                    ...imageContentParts,
+                  ],
                 },
-                ...imageContentParts,
               ],
-            },
-          ],
-        }),
-        });
+            }),
+          });
 
-        if (attempt.ok) {
-          analysisResponse = attempt;
-          break;
+          if (attempt.ok) {
+            analysisResponse = attempt;
+            break;
+          }
+          const errText = await attempt.text();
+          console.warn(`Avatar analysis model ${model} failed: ${attempt.status} ${errText.slice(0, 200)}`);
+          if (attempt.status !== 402 && attempt.status < 500) break;
         }
-        const errText = await attempt.text();
-        console.warn(`Avatar analysis model ${model} failed: ${attempt.status} ${errText.slice(0, 200)}`);
-        if (attempt.status !== 402 && attempt.status < 500) break;
-      }
 
-      if (analysisResponse && analysisResponse.ok) {
-        const analysisData = await analysisResponse.json();
-        faceDescription = analysisData.choices?.[0]?.message?.content || "";
-        console.log("Face analysis complete:", faceDescription.length, "chars");
-      } else {
-        console.error("Face analysis failed: all models exhausted");
+        if (analysisResponse && analysisResponse.ok) {
+          const analysisData = await analysisResponse.json();
+          faceDescription = analysisData.choices?.[0]?.message?.content || "";
+          console.log("Face analysis complete:", faceDescription.length, "chars");
+        } else {
+          console.error("Face analysis failed: all models exhausted");
+        }
+      } catch (e) {
+        console.error("Face analysis error:", e);
       }
-    } catch (e) {
-      console.error("Face analysis error:", e);
     }
 
     console.log("Pass 2: Generating portrait...");
