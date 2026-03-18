@@ -54,9 +54,9 @@ export const imageService = {
     return data;
   },
 
-  edit: async (prompt: string, imageUrl: string): Promise<{ imageUrl: string; text: string }> => {
+  edit: async (prompt: string, imageUrl: string, referenceImages?: string[]): Promise<{ imageUrl: string; text: string }> => {
     const { data, error } = await supabase.functions.invoke("generate-image", {
-      body: { prompt, action: "edit", imageUrl },
+      body: { prompt, action: "edit", imageUrl, referenceImages },
     });
     if (error) throw new Error(error.message || "שגיאה בעריכת תמונה");
     if (data?.error) throw new Error(data.error);

@@ -73,8 +73,12 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
   // Image generation - reference images & iterative editing
   const [imageRefPhotos, setImageRefPhotos] = useState<string[]>([]);
-  const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string }[]>([]);
+  const [editHistory, setEditHistory] = useState<{ imageUrl: string; prompt: string; refineRefs?: string[] }[]>([]);
   const [editPrompt, setEditPrompt] = useState('');
+  const [editRefPhotos, setEditRefPhotos] = useState<string[]>([]);
+  const [uploadingEditRef, setUploadingEditRef] = useState(false);
+  const editRefInputRef = useRef<HTMLInputElement | null>(null);
+  const MAX_EDIT_REFS = 5;
 
   // Import/Edit
   const [importUrl, setImportUrl] = useState('');
@@ -301,6 +305,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setImageRefPhotos([]);
         setEditHistory([]);
         setEditPrompt('');
+        setEditRefPhotos([]);
         setImportUrl('');
         setImportType(null);
         setRunwayImageUrl('');
@@ -705,15 +710,93 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
+        {/* Reference images for refinement */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <ImageIcon className="w-3 h-3" /> הוסף תמונות רפרנס (אופציונלי) — {editRefPhotos.length}/{MAX_EDIT_REFS}
+          </p>
+          {editRefPhotos.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {editRefPhotos.map((url, i) => (
+                <div key={i} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-border">
+                  <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                  <button onClick={() => setEditRefPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute top-0.5 right-0.5 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {editRefPhotos.length < MAX_EDIT_REFS && (
+            <div
+              className={cn(
+                'border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors',
+                uploadingEditRef && 'opacity-50 pointer-events-none'
+              )}
+              onClick={() => editRefInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={async e => {
+                e.preventDefault(); e.stopPropagation();
+                const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')).slice(0, MAX_EDIT_REFS - editRefPhotos.length);
+                if (!files.length) return;
+                setUploadingEditRef(true);
+                try {
+                  const urls: string[] = [];
+                  for (const f of files) {
+                    const url = await storageService.upload(f);
+                    urls.push(url);
+                  }
+                  setEditRefPhotos(prev => [...prev, ...urls].slice(0, MAX_EDIT_REFS));
+                } catch (err: any) { toast.error(err.message || 'שגיאה בהעלאה'); }
+                finally { setUploadingEditRef(false); }
+              }}
+            >
+              {uploadingEditRef ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> מעלה...
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5" /> גרור או לחץ להעלאת תמונות (JPG/PNG/WebP)
+                </p>
+              )}
+            </div>
+          )}
+          <input
+            ref={editRefInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={async e => {
+              const files = Array.from(e.target.files || []).slice(0, MAX_EDIT_REFS - editRefPhotos.length);
+              if (!files.length) return;
+              setUploadingEditRef(true);
+              try {
+                const urls: string[] = [];
+                for (const f of files) {
+                  const url = await storageService.upload(f);
+                  urls.push(url);
+                }
+                setEditRefPhotos(prev => [...prev, ...urls].slice(0, MAX_EDIT_REFS));
+              } catch (err: any) { toast.error(err.message || 'שגיאה בהעלאה'); }
+              finally { setUploadingEditRef(false); }
+              e.target.value = '';
+            }}
+          />
+        </div>
         <button
           onClick={async () => {
             if (!editPrompt.trim() || !result?.imageUrl) return;
             setLoading(true);
             try {
-              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl);
-              setEditHistory(prev => [...prev, { imageUrl: data.imageUrl, prompt: editPrompt }]);
+              const refs = editRefPhotos.length > 0 ? editRefPhotos : undefined;
+              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl, refs);
+              setEditHistory(prev => [...prev, { imageUrl: data.imageUrl, prompt: editPrompt, refineRefs: editRefPhotos.length > 0 ? [...editRefPhotos] : undefined }]);
               setResult({ imageUrl: data.imageUrl });
               setEditPrompt('');
+              setEditRefPhotos([]);
               toast.success('התמונה עודכנה!');
             } catch (e: any) { toast.error(e.message); }
             finally { setLoading(false); }
@@ -725,7 +808,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           {loading ? 'מעדכן...' : 'עדכן תמונה'}
         </button>
       </div>
-      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); }}
+      <button onClick={() => { clearSession(); setResult(null); setSelectedAction(null); setStep(0); setPrompt(''); setEditHistory([]); setEditPrompt(''); setImageRefPhotos([]); setEditRefPhotos([]); }}
         className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
         <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
       </button>
