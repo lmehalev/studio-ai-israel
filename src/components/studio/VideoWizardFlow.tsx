@@ -1018,7 +1018,7 @@ export function VideoWizardFlow({
         if (!clipUrl && heygenFallbackEnabled) {
           try {
             clipUrl = await withTimeout(
-              createHeygenSceneClip(scene.spokenText || scene.title, i, narrationAudioUrl),
+              createHeygenSceneClipShared(scene.spokenText || scene.title, i, narrationAudioUrl, normalizedAvatarUrl, () => {}),
               120000, 'HeyGen timeout'
             );
           } catch (heygenErr: any) {
