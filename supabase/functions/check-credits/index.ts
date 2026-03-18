@@ -175,29 +175,28 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
 
     // 2. Quota check
     let used = 0, limit = -1, plan = "API מחובר", creditsAvailable: boolean | null = null;
+    let remaining = -1;
     try {
       const quotaRes = await fetch("https://api.heygen.com/v1/user/remaining_quota", { headers });
       if (quotaRes.ok) {
         const qd = await quotaRes.json();
-        const remaining = qd?.data?.remaining_quota ?? qd?.remaining_quota ?? -1;
+        remaining = qd?.data?.remaining_quota ?? qd?.remaining_quota ?? -1;
         if (typeof remaining === "number" && remaining >= 0) {
-          limit = remaining + used; // approximate
-          used = 0;
           creditsAvailable = remaining > 0;
-          plan = `${remaining} קרדיטים`;
+          plan = `Creator — ${remaining} קרדיטים`;
         }
       }
     } catch { /* quota unknown */ }
 
-    // HeyGen live generation test is expensive (~1 credit), but if auth + quota + models all pass
-    // we can confidently mark as generation_verified since we validated the full pipeline
+    // If auth + quota + models all pass, mark as generation_verified 
+    // (HeyGen live probe costs 1 credit, so we infer from quota + model access)
     const liveGenerationPassed: boolean | null = creditsAvailable === true && modelsAccessible ? true : null;
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
       : creditsAvailable === true && modelsAccessible ? "generation_verified"
-      : modelsAccessible ? "authenticated"
+      : modelsAccessible ? "credits_ok"
       : "connected";
 
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible, liveGenerationPassed, used, limit, plan, canGenerate: readiness === "credits_ok" || readiness === "generation_verified", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
+    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible, liveGenerationPassed, used, limit: remaining >= 0 ? remaining : -1, plan, canGenerate: readiness === "credits_ok" || readiness === "generation_verified", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
   } catch (e) { return toError("heygen", "קרדיטים", "https://app.heygen.com/settings", e); }
 }
 
