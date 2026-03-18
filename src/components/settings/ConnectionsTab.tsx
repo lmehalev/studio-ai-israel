@@ -198,8 +198,8 @@ export function ConnectionsTab() {
           <div className="space-y-3">
             <div className="bg-info/5 border border-info/20 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-semibold text-info flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> שרשרת גיבוי (Fallback)</p>
-              <p className="text-xs text-foreground">HeyGen → Krea → תמונת AI סטטית</p>
-              <p className="text-[10px] text-muted-foreground">Krea משמש כגיבוי לוידאו ותמונות כשספק ראשי לא זמין</p>
+              <p className="text-xs text-foreground">HeyGen → Krea → Runway → תמונת AI סטטית</p>
+              <p className="text-[10px] text-muted-foreground">Runway משמש כגיבוי אחרון לפני תמונה סטטית, כשכל הספקים הראשיים לא זמינים</p>
             </div>
             <div className="bg-info/5 border border-info/20 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-semibold text-info flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> ספק גיבוי</p>
