@@ -6,8 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const scriptToSafeNarration = (value: string) =>
-  value.replace(/\s+/g, " ").trim().slice(0, 4800);
+const HEBREW_WARNING = "הקול שנבחר לא תומך בעברית בצורה טובה. בחר קול אחר או שנה הגדרות.";
+
+const scriptToSafeNarration = (value: string) => value.slice(0, 4800);
 
 const extFromMime = (contentType: string, fallbackFromUrl = "webm") => {
   if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) return "mp3";
@@ -31,11 +32,41 @@ const extractStoragePathFromUrl = (audioUrl: string): string | null => {
   }
 };
 
+const parseProviderErrorBody = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const providerErrorResponse = (params: {
+  status: number;
+  error: string;
+  providerError: unknown;
+  modelId?: string;
+  language?: string;
+}) =>
+  new Response(
+    JSON.stringify({
+      functionName: "clone-voice-tts",
+      provider: "ElevenLabs",
+      providerStatus: params.status,
+      modelId: params.modelId,
+      language: params.language,
+      error: params.error,
+      providerError: params.providerError,
+    }),
+    {
+      status: params.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }
+  );
+
 const downloadVoiceSample = async (
   audioUrl: string,
   supabase: ReturnType<typeof createClient>
 ): Promise<{ arrayBuffer: ArrayBuffer; contentType: string; ext: string }> => {
-  // Try direct public URL first
   const directResponse = await fetch(audioUrl);
   if (directResponse.ok) {
     const contentType = directResponse.headers.get("content-type") || "audio/webm";
@@ -47,7 +78,6 @@ const downloadVoiceSample = async (
     };
   }
 
-  // Fallback: download via service role from storage path
   const storagePath = extractStoragePathFromUrl(audioUrl);
   if (storagePath) {
     const { data, error } = await supabase.storage.from("media").download(storagePath);
@@ -63,6 +93,41 @@ const downloadVoiceSample = async (
   }
 
   throw new Error("קובץ הקול לא נמצא באחסון. העלה/הקלט קול מחדש ונסה שוב.");
+};
+
+const languageConfig = {
+  he: { languageCode: "he", modelId: "eleven_v3" },
+  en: { languageCode: "en", modelId: "eleven_multilingual_v2" },
+  ar: { languageCode: "ar", modelId: "eleven_multilingual_v2" },
+} as const;
+
+type SupportedLanguage = keyof typeof languageConfig;
+
+const resolveLanguage = (script: string, language?: string): SupportedLanguage => {
+  const hasHebrew = /[\u0590-\u05FF]/.test(script);
+  if (hasHebrew) return "he";
+  if (language === "en" || language === "ar" || language === "he") return language;
+  return "en";
+};
+
+const fetchAvailableModelIds = async (apiKey: string): Promise<Set<string>> => {
+  const response = await fetch("https://api.elevenlabs.io/v1/models", {
+    headers: { "xi-api-key": apiKey },
+  });
+
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(`מודלים לא זמינים: ${response.status} ${raw}`);
+  }
+
+  const models = await response.json();
+  const modelIds = new Set<string>();
+  if (Array.isArray(models)) {
+    for (const model of models) {
+      if (typeof model?.model_id === "string") modelIds.add(model.model_id);
+    }
+  }
+  return modelIds;
 };
 
 Deno.serve(async (req) => {
@@ -90,17 +155,31 @@ Deno.serve(async (req) => {
     }
 
     const safeScript = scriptToSafeNarration(scriptText);
+    const selectedLanguage = resolveLanguage(safeScript, language);
+    const selectedConfig = languageConfig[selectedLanguage];
 
-    // Map language to ElevenLabs language_code (ISO 639-1)
-    const langMap: Record<string, string> = { he: "he", en: "en", ar: "ar" };
-    // Auto-detect Hebrew from Unicode if no language specified
-    const hebrewPattern = /[\u0590-\u05FF]/;
-    const detectedLang = language || (hebrewPattern.test(safeScript) ? "he" : "en");
-    const languageCode = langMap[detectedLang] || "he";
-    console.log("Language:", detectedLang, "-> language_code:", languageCode);
+    const modelIds = await fetchAvailableModelIds(ELEVENLABS_API_KEY);
+    if (!modelIds.has(selectedConfig.modelId)) {
+      const message = selectedLanguage === "he" ? HEBREW_WARNING : "המודל שנבחר לא זמין כרגע";
+      return providerErrorResponse({
+        status: 422,
+        error: message,
+        providerError: {
+          code: "model_not_available",
+          message: `Model ${selectedConfig.modelId} is not available for this account`,
+        },
+        modelId: selectedConfig.modelId,
+        language: selectedConfig.languageCode,
+      });
+    }
+
+    console.log(
+      "TTS config:",
+      JSON.stringify({ language: selectedLanguage, modelId: selectedConfig.modelId, forcedHebrew: selectedLanguage === "he" })
+    );
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Step 1: Download the user's recorded audio
     console.log("Downloading voice sample from:", audioUrl);
     const sample = await downloadVoiceSample(audioUrl, supabase);
 
@@ -108,7 +187,6 @@ Deno.serve(async (req) => {
       throw new Error("דגימת הקול קצרה מדי. הקלט לפחות 5-10 שניות ודבר בצורה ברורה.");
     }
 
-    // Step 2: Clone voice via ElevenLabs Instant Voice Cloning
     console.log("Cloning voice via ElevenLabs...");
     const formData = new FormData();
     formData.append("name", `studio-clone-${Date.now()}`);
@@ -125,16 +203,34 @@ Deno.serve(async (req) => {
     });
 
     if (!cloneResponse.ok) {
-      const errText = await cloneResponse.text();
-      console.error("Voice clone error:", cloneResponse.status, errText);
-      throw new Error("שגיאה בשכפול הקול");
+      const raw = await cloneResponse.text();
+      const providerError = parseProviderErrorBody(raw);
+      console.error("Voice clone error:", cloneResponse.status, providerError);
+      return providerErrorResponse({
+        status: cloneResponse.status,
+        error: "שגיאה בשכפול הקול",
+        providerError,
+        modelId: selectedConfig.modelId,
+        language: selectedConfig.languageCode,
+      });
     }
 
     const { voice_id } = await cloneResponse.json();
     console.log("Voice cloned successfully, voice_id:", voice_id);
 
-    // Step 3: Generate TTS with cloned voice
     console.log("Generating TTS narration...");
+    const ttsPayload: Record<string, unknown> = {
+      text: safeScript,
+      model_id: selectedConfig.modelId,
+      language_code: selectedConfig.languageCode,
+      voice_settings: {
+        stability: 0.45,
+        similarity_boost: 0.9,
+        use_speaker_boost: true,
+        speed: 1,
+      },
+    };
+
     const ttsResponse = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`,
       {
@@ -143,30 +239,34 @@ Deno.serve(async (req) => {
           "xi-api-key": ELEVENLABS_API_KEY,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          text: safeScript,
-          model_id: "eleven_multilingual_v2",
-          language_code: languageCode,
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.85,
-            style: 0.3,
-            use_speaker_boost: true,
-          },
-        }),
+        body: JSON.stringify(ttsPayload),
       }
     );
 
     if (!ttsResponse.ok) {
-      const errText = await ttsResponse.text();
-      console.error("TTS error:", ttsResponse.status, errText);
-      throw new Error("שגיאה ביצירת קריינות");
+      const raw = await ttsResponse.text();
+      const providerError = parseProviderErrorBody(raw);
+      console.error("TTS error:", ttsResponse.status, providerError);
+
+      const unsupportedLanguage =
+        typeof providerError === "object" &&
+        providerError !== null &&
+        "detail" in providerError &&
+        typeof (providerError as { detail?: { status?: string } }).detail?.status === "string" &&
+        (providerError as { detail?: { status?: string } }).detail?.status === "unsupported_language";
+
+      return providerErrorResponse({
+        status: ttsResponse.status,
+        error: unsupportedLanguage ? HEBREW_WARNING : "שגיאה ביצירת קריינות",
+        providerError,
+        modelId: selectedConfig.modelId,
+        language: selectedConfig.languageCode,
+      });
     }
 
     const ttsAudioBuffer = await ttsResponse.arrayBuffer();
     console.log("TTS audio generated, size:", ttsAudioBuffer.byteLength);
 
-    // Step 4: Upload generated audio to storage
     const filePath = `uploads/tts-narration-${Date.now()}.mp3`;
     const { error: uploadError } = await supabase.storage.from("media").upload(filePath, ttsAudioBuffer, {
       contentType: "audio/mpeg",
@@ -184,13 +284,18 @@ Deno.serve(async (req) => {
       JSON.stringify({
         audioUrl: urlData.publicUrl,
         voiceId: voice_id,
+        modelId: selectedConfig.modelId,
+        language: selectedConfig.languageCode,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
     console.error("clone-voice-tts error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה בשכפול קול ויצירת קריינות" }),
+      JSON.stringify({
+        functionName: "clone-voice-tts",
+        error: e instanceof Error ? e.message : "שגיאה בשכפול קול ויצירת קריינות",
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -49,6 +49,12 @@ export default function VoicesManagePage() {
   const [costApprovalOpen, setCostApprovalOpen] = useState(false);
   const [savingGeneration, setSavingGeneration] = useState(false);
   const [language, setLanguage] = useState<'he' | 'en' | 'ar'>('he');
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationErrorMeta, setGenerationErrorMeta] = useState<{
+    functionName?: string;
+    status?: number;
+    providerError?: string;
+  } | null>(null);
 
   // Generation detail view
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -145,9 +151,46 @@ export default function VoicesManagePage() {
   // === Script-to-Voice Flow ===
   const selectedVoice = voices.find(v => v.id === selectedVoiceId);
 
+  const parseGenerateError = async (error: any) => {
+    const fallback = error?.message || 'שגיאה ביצירת דיבוב';
+    const response = error?.context;
+
+    if (!response || typeof response.text !== 'function') {
+      return {
+        message: fallback,
+        meta: null,
+      };
+    }
+
+    try {
+      const raw = await response.text();
+      const parsed = raw ? JSON.parse(raw) : null;
+      const providerError = parsed?.providerError
+        ? (typeof parsed.providerError === 'string' ? parsed.providerError : JSON.stringify(parsed.providerError))
+        : undefined;
+
+      return {
+        message: parsed?.warning || parsed?.error || fallback,
+        meta: {
+          functionName: parsed?.functionName,
+          status: typeof response.status === 'number' ? response.status : undefined,
+          providerError,
+        },
+      };
+    } catch {
+      return {
+        message: fallback,
+        meta: {
+          status: typeof response.status === 'number' ? response.status : undefined,
+        },
+      };
+    }
+  };
+
   const openScriptToVoice = () => {
     setShowScriptToVoice(true);
-    // Auto-select first voice
+    setGenerationError(null);
+    setGenerationErrorMeta(null);
     if (!selectedVoiceId && voices.length > 0) {
       setSelectedVoiceId(voices[0].id);
     }
@@ -155,8 +198,8 @@ export default function VoicesManagePage() {
 
   const costEstimates: CostEstimate[] = [{
     provider: 'ElevenLabs',
-    model: 'eleven_multilingual_v2',
-    action: 'שכפול קול + קריינות בעברית',
+    model: language === 'he' ? 'eleven_v3' : 'eleven_multilingual_v2',
+    action: 'שכפול קול + קריינות',
     estimatedCost: `~${scriptText.length} תווים`,
     details: [
       'שכפול הקול הנבחר ויצירת קריינות',
@@ -169,27 +212,37 @@ export default function VoicesManagePage() {
     if (!scriptText.trim()) { toast.error('יש להזין תסריט'); return; }
     if (scriptText.length > 4500) { toast.error('התסריט ארוך מדי (מקסימום 4,500 תווים)'); return; }
     if (!scriptTitle.trim()) { toast.error('יש להזין כותרת לדיבוב'); return; }
+    setGenerationError(null);
+    setGenerationErrorMeta(null);
     setCostApprovalOpen(true);
   };
 
   const executeGenerate = async () => {
     setCostApprovalOpen(false);
     if (!selectedVoice) return;
+
     setGenerating(true);
     setGeneratedAudioUrl(null);
+    setGenerationError(null);
+    setGenerationErrorMeta(null);
+
     try {
       const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
         body: { audioUrl: selectedVoice.audio_url, scriptText, language },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (!data?.audioUrl) throw new Error('לא התקבל קובץ אודיו');
+
       setGeneratedAudioUrl(data.audioUrl);
       setGeneratedVoiceId(data.voiceId || null);
       toast.success('הדיבוב נוצר בהצלחה!');
     } catch (e: any) {
       console.error('TTS generation error:', e);
-      toast.error(e.message || 'שגיאה ביצירת דיבוב');
+      const parsed = await parseGenerateError(e);
+      setGenerationError(parsed.message);
+      setGenerationErrorMeta(parsed.meta);
+      toast.error(parsed.message || 'שגיאה ביצירת דיבוב');
     } finally {
       setGenerating(false);
     }
@@ -222,12 +275,13 @@ export default function VoicesManagePage() {
       if (data?.error) throw new Error(data.error);
       setGenerations(prev => [data.generation, ...prev]);
       toast.success('הדיבוב נשמר בספריית הקולות!');
-      // Reset form
       setShowScriptToVoice(false);
       setScriptText('');
       setScriptTitle('');
       setGeneratedAudioUrl(null);
       setGeneratedVoiceId(null);
+      setGenerationError(null);
+      setGenerationErrorMeta(null);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
@@ -271,7 +325,15 @@ export default function VoicesManagePage() {
                 <FileText className="w-5 h-5 text-primary" />
                 צור דיבוב מתסריט
               </h3>
-              <button onClick={() => { setShowScriptToVoice(false); setGeneratedAudioUrl(null); }} className="p-1 hover:bg-muted rounded-lg">
+              <button
+                onClick={() => {
+                  setShowScriptToVoice(false);
+                  setGeneratedAudioUrl(null);
+                  setGenerationError(null);
+                  setGenerationErrorMeta(null);
+                }}
+                className="p-1 hover:bg-muted rounded-lg"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -347,6 +409,26 @@ export default function VoicesManagePage() {
                 </div>
               </div>
             </div>
+
+            {generationError && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium text-destructive">{generationError}</p>
+                {(generationErrorMeta?.functionName || generationErrorMeta?.status) && (
+                  <p className="text-xs text-muted-foreground">
+                    פונקציה: {generationErrorMeta?.functionName || 'לא ידוע'}
+                    {generationErrorMeta?.status ? ` • סטטוס: ${generationErrorMeta.status}` : ''}
+                  </p>
+                )}
+                {generationErrorMeta?.providerError && (
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">פרטי שגיאה מהספק</summary>
+                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words bg-background/70 border border-border rounded-md p-2">
+                      {generationErrorMeta.providerError}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
 
             {/* Generate button */}
             {!generatedAudioUrl && (
