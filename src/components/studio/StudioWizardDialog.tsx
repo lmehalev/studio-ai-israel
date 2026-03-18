@@ -1161,8 +1161,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   let audioUrl = '';
                   try {
                     const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
-                    if (selectedVoice?.audio_url) {
-                      const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', { body: { audioUrl: selectedVoice.audio_url, scriptText: narrationText.slice(0, 4500) } });
+                    if (selectedVoiceId && selectedVoice && (!selectedVoice.provider_voice_id || !selectedVoice.is_verified)) {
+                      throw new Error('הקול שנבחר לא מאומת עדיין. בצע איפוס/שכפול ואימות בדף הקולות לפני שימוש ב-Video Wizard.');
+                    }
+
+                    if (selectedVoice?.provider_voice_id) {
+                      const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', {
+                        body: {
+                          providerVoiceId: selectedVoice.provider_voice_id,
+                          scriptText: narrationText.slice(0, 4500),
+                          language: 'he',
+                        },
+                      });
                       audioUrl = cloneData?.audioUrl || '';
                     } else {
                       audioUrl = await voiceService.generateAndUpload(narrationText.slice(0, 4500));
