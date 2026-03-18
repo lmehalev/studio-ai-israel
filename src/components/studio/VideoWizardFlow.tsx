@@ -1044,7 +1044,7 @@ export function VideoWizardFlow({
         if (!clipUrl) {
           try {
             clipUrl = await withTimeout(
-              createAIImageToVideoClip(scenePrompt, i, sceneDuration),
+              createAIImageToVideoClipShared(scenePrompt, i, sceneDuration, () => {}),
               60000, 'AI Image timeout'
             );
           } catch (aiErr: any) {
