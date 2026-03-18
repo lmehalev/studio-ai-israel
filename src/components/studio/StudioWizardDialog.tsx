@@ -24,6 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { VideoWizardFlow, type VideoWizardSession } from '@/components/studio/VideoWizardFlow';
+import { CostApprovalDialog, buildHighlightEstimates, type CostEstimate } from '@/components/studio/CostApprovalDialog';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
@@ -112,6 +113,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [showAvatarVoicePanel, setShowAvatarVoicePanel] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
+
+  // Cost approval gate for highlight flow
+  const [showHighlightCostApproval, setShowHighlightCostApproval] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState<string>('');
 
@@ -1106,137 +1110,107 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             </div>
 
             <button
-              onClick={async () => {
+              onClick={() => {
                 if (!prompt.trim()) { toast.error('יש לתאר את הסרטון הרצוי'); return; }
-                setStep(step + 1);
+                setShowHighlightCostApproval(true);
+              }}
+              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+            >
+              💰 צור סרטון (בתשלום)
+            </button>
+          </div>
+        );
+      }
+
+      if (wizardStep === 2 && !loading) {
+        return (
+          <div className="space-y-4 text-center py-4">
+            <p className="text-sm text-muted-foreground">הכל מוכן — לחץ להתחלת עיבוד</p>
+            <button
+              onClick={async () => {
                 setLoading(true);
                 setHighlightProgress(0);
                 setHighlightStage('מנתח תוכן...');
                 try {
                   setHighlightProgress(10);
                   setHighlightStage('מייצר תסריט...');
-
                   const trendData = await supabase.from('saved_trends').select('*').limit(5);
                   const trendKnowledge = trendData.data?.map(t => `${t.title}: ${t.tip}`).join('\n') || '';
-
-                  const outputLabel = outputTypes.find(t => t.id === highlightOutputType)?.label || 'סרטון';
+                  const outputLabel = [
+                    { id: 'viral_short', label: 'סרטון ויראלי קצר' },
+                    { id: 'highlight_reel', label: 'Highlight Reel' },
+                    { id: 'podcast_edit', label: 'עריכת פודקאסט' },
+                    { id: 'trailer', label: 'טריילר / פרומו' },
+                    { id: 'tutorial_cut', label: 'סרטון הדרכה ערוך' },
+                    { id: 'custom', label: 'מותאם אישית' },
+                  ].find(t => t.id === highlightOutputType)?.label || 'סרטון';
                   const { data: scriptData } = await supabase.functions.invoke('generate-script', {
-                    body: {
-                      prompt: `צור תסריט ל${outputLabel} מתוכן קיים.
-סוג פלט: ${highlightOutputType}
-הנחיות המשתמש: ${prompt}
-${trendKnowledge ? `\nטרנדים חזקים כיום:\n${trendKnowledge}` : ''}
-${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.industry || 'כללי'}` : ''}
-
-${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-10 שניות כל אחת), Hook חזק בפתיחה ו-CTA בסיום.' :
-  highlightOutputType === 'podcast_edit' ? 'ארגן את התוכן לפרקים ברורים עם אינטרו ואאוטרו מקצועיים.' :
-  highlightOutputType === 'highlight_reel' ? 'בחר 6-12 רגעים מרכזיים מהתוכן, כל אחד 10-15 שניות, עם מעברים חלקים.' :
-  highlightOutputType === 'trailer' ? 'הפק 4-8 קטעים קצרצרים (2-5 שניות) בקצב מהיר עם טקסטים דינמיים.' :
-  highlightOutputType === 'tutorial_cut' ? 'חלק את התוכן לפרקים עם כותרות ברורות ומבנה לוגי.' :
-  'התאם את התסריט בדיוק לפי הנחיות המשתמש.'}`,
-                      type: 'cinematic',
-                    },
+                    body: { prompt: `צור תסריט ל${outputLabel} מתוכן קיים.\nסוג פלט: ${highlightOutputType}\nהנחיות המשתמש: ${prompt}\n${trendKnowledge ? `\nטרנדים חזקים כיום:\n${trendKnowledge}` : ''}\n${activeBrand ? `\nמותג: ${activeBrand.name}, תעשייה: ${activeBrand.industry || 'כללי'}` : ''}`, type: 'cinematic' },
                   });
-
-                setHighlightProgress(30);
-                setHighlightStage('מכין קריינות...');
-
-                // Step 2: Generate narration
-                const narrationText = scriptData?.script?.scenes?.map((s: any) => s.narration || s.description || '').filter(Boolean).join('. ') || prompt;
-                let audioUrl = '';
-                try {
-                  const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
-                  if (selectedVoice?.audio_url) {
-                    const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', {
-                      body: { audioUrl: selectedVoice.audio_url, scriptText: narrationText.slice(0, 4500) },
-                    });
-                    audioUrl = cloneData?.audioUrl || '';
-                  } else {
-                    audioUrl = await voiceService.generateAndUpload(narrationText.slice(0, 4500));
-                  }
-                } catch { /* continue without narration */ }
-
-                setHighlightProgress(50);
-                setHighlightStage('מייצר סרטון...');
-
-                // Step 3: Use the uploaded files as base clips and compose
-                const videoFiles = highlightFiles.filter(f => f.match(/\.(mp4|mov|webm)/i));
-                const imageFiles = highlightFiles.filter(f => !f.match(/\.(mp4|mov|webm)/i));
-
-                // Use first video or generate from images
-                let baseVideoUrl = videoFiles[0] || '';
-                if (!baseVideoUrl && imageFiles.length > 0) {
-                  // Use Krea as primary for highlight clips (cheaper than Runway fallback).
+                  setHighlightProgress(30);
+                  setHighlightStage('מכין קריינות...');
+                  const narrationText = scriptData?.script?.scenes?.map((s: any) => s.narration || s.description || '').filter(Boolean).join('. ') || prompt;
+                  let audioUrl = '';
                   try {
-                    const kreaResult = await kreaService.generateVideo(
-                      prompt.slice(0, 500),
-                      { model: 'kling-2.5', width: 1280, height: 720, duration: 10, imageUrl: imageFiles[0] }
-                    );
-                    if (kreaResult?.videoUrl) {
-                      baseVideoUrl = kreaResult.videoUrl;
+                    const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
+                    if (selectedVoice?.audio_url) {
+                      const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', { body: { audioUrl: selectedVoice.audio_url, scriptText: narrationText.slice(0, 4500) } });
+                      audioUrl = cloneData?.audioUrl || '';
+                    } else {
+                      audioUrl = await voiceService.generateAndUpload(narrationText.slice(0, 4500));
                     }
-                  } catch (kreaErr: any) {
-                    console.warn('Krea video generation failed for highlight:', kreaErr?.message);
-                    // Fall back to using image as static clip — no credit-burning retry
-                    baseVideoUrl = imageFiles[0];
+                  } catch { /* continue without narration */ }
+                  setHighlightProgress(50);
+                  setHighlightStage('מייצר סרטון...');
+                  const videoFiles = highlightFiles.filter(f => f.match(/\.(mp4|mov|webm)/i));
+                  const imageFiles = highlightFiles.filter(f => !f.match(/\.(mp4|mov|webm)/i));
+                  let baseVideoUrl = videoFiles[0] || '';
+                  if (!baseVideoUrl && imageFiles.length > 0) {
+                    try {
+                      const kreaResult = await kreaService.generateVideo(prompt.slice(0, 500), { model: 'kling-2.5', width: 1280, height: 720, duration: 10, imageUrl: imageFiles[0] });
+                      if (kreaResult?.videoUrl) baseVideoUrl = kreaResult.videoUrl;
+                    } catch (kreaErr: any) {
+                      console.warn('Krea video generation failed for highlight:', kreaErr?.message);
+                      baseVideoUrl = imageFiles[0];
+                    }
                   }
-                }
-
-                setHighlightProgress(75);
-                setHighlightStage('מרכיב סרטון סופי עם מוזיקה...');
-
-                // Step 4: Compose final video with Shotstack
-                const scenes = videoFiles.length > 1
-                  ? videoFiles.map((url, i) => ({ src: url, length: Math.min(10, 60 / videoFiles.length), fit: 'cover' as const }))
-                  : baseVideoUrl ? [{ src: baseVideoUrl, length: 10, fit: 'cover' as const }] : [];
-
-                if (scenes.length > 0) {
-                  const composeResult = await composeService.render({
-                    videoUrl: scenes[0]?.src || baseVideoUrl,
-                    scenes,
-                    audioUrl: audioUrl || undefined,
-                  });
-
-                  if (composeResult?.renderId) {
-                    setHighlightProgress(85);
-                    setHighlightStage('ממתין לרינדור...');
-                    // Poll Shotstack
-                    for (let i = 0; i < 60; i++) {
-                      await new Promise(r => setTimeout(r, 5000));
-                      setHighlightProgress(85 + Math.min(10, i));
-                      const statusResult = await composeService.checkStatus(composeResult.renderId);
-                      if (statusResult?.status === 'done' && statusResult?.url) {
-                        setResult({ videoUrl: statusResult.url });
-                        break;
+                  setHighlightProgress(75);
+                  setHighlightStage('מרכיב סרטון סופי עם מוזיקה...');
+                  const scenes = videoFiles.length > 1
+                    ? videoFiles.map((url) => ({ src: url, length: Math.min(10, 60 / videoFiles.length), fit: 'cover' as const }))
+                    : baseVideoUrl ? [{ src: baseVideoUrl, length: 10, fit: 'cover' as const }] : [];
+                  if (scenes.length > 0) {
+                    const composeResult = await composeService.render({ videoUrl: scenes[0]?.src || baseVideoUrl, scenes, audioUrl: audioUrl || undefined });
+                    if (composeResult?.renderId) {
+                      setHighlightProgress(85);
+                      setHighlightStage('ממתין לרינדור...');
+                      for (let i = 0; i < 60; i++) {
+                        await new Promise(r => setTimeout(r, 5000));
+                        setHighlightProgress(85 + Math.min(10, i));
+                        const statusResult = await composeService.checkStatus(composeResult.renderId);
+                        if (statusResult?.status === 'done' && statusResult?.url) { setResult({ videoUrl: statusResult.url }); break; }
+                        if (statusResult?.status === 'failed') throw new Error('הרינדור נכשל');
                       }
-                      if (statusResult?.status === 'failed') throw new Error('הרינדור נכשל');
                     }
                   }
+                  if (!result?.videoUrl && baseVideoUrl) setResult({ videoUrl: baseVideoUrl });
+                  setHighlightProgress(100);
+                  setHighlightStage('');
+                  setStep(step + 1);
+                  toast.success(highlightOutputType === 'podcast_edit' ? 'הפודקאסט הערוך מוכן! 🎙️' : 'הסרטון מוכן! 🎬');
+                } catch (e: any) {
+                  toast.error(e.message || 'שגיאה ביצירת הסרטון');
+                } finally {
+                  setLoading(false);
                 }
-
-                // Fallback: use first video if composition failed
-                if (!result?.videoUrl && baseVideoUrl) {
-                  setResult({ videoUrl: baseVideoUrl });
-                }
-
-                setHighlightProgress(100);
-                setHighlightStage('');
-                setStep(step + 2); // Jump to result
-                toast.success(highlightOutputType === 'podcast_edit' ? 'הפודקאסט הערוך מוכן! 🎙️' : 'הסרטון מוכן! 🎬');
-              } catch (e: any) {
-                toast.error(e.message || 'שגיאה ביצירת הסרטון');
-                setStep(step - 1); // Go back to prompt
-              } finally {
-                setLoading(false);
-              }
-            }}
-            disabled={loading}
-            className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-            {loading ? 'מעבד...' : highlightOutputType === 'podcast_edit' ? 'ערוך פודקאסט' : 'צור סרטון'}
-          </button>
-        </div>
+              }}
+              disabled={loading}
+              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+              {loading ? 'מעבד...' : 'התחל עיבוד'}
+            </button>
+          </div>
         );
       }
 
@@ -1266,6 +1240,7 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
   const currentStepNum = step + 1;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] md:max-h-[85vh] overflow-y-auto w-[95vw] md:w-full" dir="rtl">
         <DialogHeader>
@@ -1311,5 +1286,18 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Cost approval dialog for highlight flow */}
+    <CostApprovalDialog
+      open={showHighlightCostApproval}
+      onOpenChange={setShowHighlightCostApproval}
+      estimates={buildHighlightEstimates(
+        !!selectedVoiceId,
+        highlightFiles.some(f => f.match(/\.(mp4|mov|webm)/i))
+      )}
+      onApprove={() => { setShowHighlightCostApproval(false); setStep(step + 1); }}
+      title="אישור יצירת סרטון בתשלום"
+    />
+    </>
   );
 }

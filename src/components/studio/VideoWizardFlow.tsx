@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ArrowRight, Loader2, Download, Play, Mic, MicOff,
   Save, Wand2, UserCircle, ChevronDown, ChevronUp,
@@ -16,6 +16,7 @@ import {
 import { projectService } from '@/services/projectService';
 import { supabase } from '@/integrations/supabase/client';
 import { FileUploadZone } from '@/components/FileUploadZone';
+import { CostApprovalDialog, buildVideoGenerationEstimates, type CostEstimate } from '@/components/studio/CostApprovalDialog';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
@@ -292,6 +293,11 @@ export function VideoWizardFlow({
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [dryRunMode, setDryRunMode] = useState(false);
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+
+  // Cost approval gate
+  const [showCostApproval, setShowCostApproval] = useState(false);
+  const [costEstimates, setCostEstimates] = useState<CostEstimate[]>([]);
+  const [pendingAction, setPendingAction] = useState<'generate' | 'improve' | null>(null);
 
   // Emit session changes to parent for persistence
   useEffect(() => {
@@ -645,6 +651,39 @@ export function VideoWizardFlow({
     };
 
     return { ok: errors.length === 0, runId, checkedAt: new Date().toISOString(), errors, warnings, providerHealth: health, payloadPreview };
+  };
+
+  // Cost approval gate for video generation
+  const requestGenerateVideo = () => {
+    if (!generatedScript) return;
+    if (dryRunMode) {
+      // Dry run doesn't cost credits — proceed directly
+      handleGenerateVideo();
+      return;
+    }
+    const sceneCount = generatedScript.scenes?.length || 3;
+    const hasVoice = selectedVoices.length > 0 || useAiVoice;
+    const hasAvatar = selectedAvatars.length > 0;
+    setCostEstimates(buildVideoGenerationEstimates(sceneCount, hasVoice, hasAvatar));
+    setPendingAction('generate');
+    setShowCostApproval(true);
+  };
+
+  const requestImproveVideo = () => {
+    if (!improvePrompt.trim()) { toast.error('תאר מה לשפר בסרטון'); return; }
+    const sceneCount = generatedScript?.scenes?.length || 3;
+    const hasVoice = selectedVoices.length > 0 || useAiVoice;
+    const hasAvatar = selectedAvatars.length > 0;
+    setCostEstimates(buildVideoGenerationEstimates(sceneCount, hasVoice, hasAvatar));
+    setPendingAction('improve');
+    setShowCostApproval(true);
+  };
+
+  const handleCostApproved = () => {
+    setShowCostApproval(false);
+    if (pendingAction === 'generate') handleGenerateVideo();
+    else if (pendingAction === 'improve') handleImproveVideo();
+    setPendingAction(null);
   };
 
   // ===== Step 3: Generate video (full pipeline) =====
@@ -1741,9 +1780,9 @@ export function VideoWizardFlow({
               className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
               חזור לתסריט
             </button>
-            <button onClick={handleGenerateVideo} disabled={loading}
+            <button onClick={requestGenerateVideo} disabled={loading}
               className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : 'צור סרטון'}
+              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : '💰 צור סרטון (בתשלום)'}
             </button>
           </div>
 
@@ -1838,12 +1877,12 @@ export function VideoWizardFlow({
               <input
                 value={improvePrompt}
                 onChange={e => setImprovePrompt(e.target.value)}
-                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleImproveVideo(); }}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') requestImproveVideo(); }}
                 placeholder="מה לשפר..."
                 dir="rtl"
                 className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
-              <button onClick={handleImproveVideo} disabled={isImproving || !improvePrompt.trim()}
+              <button onClick={requestImproveVideo} disabled={isImproving || !improvePrompt.trim()}
                 className="px-4 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5">
                 {isImproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                 שפר
@@ -1911,6 +1950,14 @@ export function VideoWizardFlow({
           )}
         </div>
       )}
+      {/* Cost approval dialog */}
+      <CostApprovalDialog
+        open={showCostApproval}
+        onOpenChange={setShowCostApproval}
+        estimates={costEstimates}
+        onApprove={handleCostApproved}
+        title="אישור יצירת סרטון בתשלום"
+      />
     </div>
   );
 }
