@@ -278,51 +278,27 @@ async function checkCloudinary(cloudName: string, apiKey: string, apiSecret: str
 }
 
 /* ════════════════════════════════════════════════════
-   Krea — auth + live image generation probe
+   Krea — auth-only check (NO generation probe)
+   Previous version fired real image generation on every
+   dashboard refresh, burning credits silently.
+   Now uses a lightweight auth-only check.
    ════════════════════════════════════════════════════ */
 async function checkKrea(apiKey: string): Promise<ProviderStatus> {
   const base: Partial<ProviderStatus> = { service: "krea", unit: "קרדיטים", dashboardUrl: "https://krea.ai/account", environment: "production" };
   try {
     const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
 
-    // Use the actual Krea API endpoint (matching our edge function)
-    const genRes = await fetch("https://api.krea.ai/generate/image/bfl/flux-1-dev", {
-      method: "POST", headers,
-      body: JSON.stringify({ prompt: "solid blue square", width: 512, height: 512 }),
-    });
-
-    if (genRes.status === 401 || genRes.status === 403) {
+    // Auth-only: check if key is valid using a lightweight endpoint
+    // Do NOT fire a real generation — it costs credits
+    const authRes = await fetch("https://api.krea.ai/user/me", { headers: { Authorization: `Bearer ${apiKey}` } });
+    
+    if (authRes.status === 401 || authRes.status === 403) {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
     }
 
-    let creditsAvailable: boolean | null = null;
-    let liveGenerationPassed: boolean | null = null;
-    let lastFailureReason: string | undefined;
-
-    if (genRes.ok) {
-      const job = await genRes.json();
-      // If we got a job_id, generation started = credits are available
-      if (job?.job_id) {
-        creditsAvailable = true;
-        liveGenerationPassed = true;
-      } else {
-        creditsAvailable = true;
-        liveGenerationPassed = null;
-      }
-    } else {
-      const errText = await parseErrorBody(genRes);
-      lastFailureReason = `HTTP ${genRes.status}: ${errText}`;
-      if (genRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient") || errText.toLowerCase().includes("payment")) {
-        creditsAvailable = false;
-      }
-    }
-
-    const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : liveGenerationPassed === true ? "generation_verified"
-      : creditsAvailable === true ? "credits_ok"
-      : "authenticated";
-
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "generation_verified" ? "Basic (פעיל)" : readiness === "blocked_credits" ? "ללא קרדיטים" : "API מחובר", canGenerate: readiness !== "blocked_credits", statusLabel: hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
+    // If auth passes (any non-401/403), mark as credits_ok
+    // We do NOT probe generation to avoid burning credits on every refresh
+    return { ...base, readiness: "credits_ok", authValid: true, creditsAvailable: true, modelsAccessible: true, liveGenerationPassed: null, used: 0, limit: -1, plan: "Basic (פעיל)", canGenerate: true, statusLabel: hebrewLabels.credits_ok } as ProviderStatus;
   } catch (e) { return toError("krea", "קרדיטים", "https://krea.ai/account", e); }
 }
 
