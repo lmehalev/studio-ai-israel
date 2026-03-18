@@ -144,14 +144,29 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { data, error } = await supabase
-        .from("voices")
-        .update({ provider_voice_id })
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
-      return new Response(JSON.stringify({ voice: data }), {
+      // Use raw PostgREST call to avoid schema cache issues with new columns
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const patchRes = await fetch(
+        `${supabaseUrl}/rest/v1/voices?id=eq.${id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+            "Prefer": "return=representation",
+          },
+          body: JSON.stringify({ provider_voice_id }),
+        }
+      );
+      if (!patchRes.ok) {
+        const errText = await patchRes.text();
+        console.error("update_provider_voice_id error:", patchRes.status, errText);
+        throw new Error(`שגיאה בעדכון provider_voice_id: ${patchRes.status}`);
+      }
+      const updated = await patchRes.json();
+      return new Response(JSON.stringify({ voice: updated?.[0] || { id, provider_voice_id } }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
