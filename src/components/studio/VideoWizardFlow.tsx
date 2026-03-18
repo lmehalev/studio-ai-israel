@@ -20,7 +20,15 @@ import { CostApprovalDialog, buildVideoGenerationEstimates, type CostEstimate } 
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
+interface SavedVoice {
+  id: string;
+  name: string;
+  audio_url: string;
+  type: string;
+  provider_voice_id?: string | null;
+  is_verified?: boolean;
+  verification_status?: string;
+}
 
 interface ScriptScene {
   id: number;
