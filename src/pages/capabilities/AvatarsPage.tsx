@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare, Shield, ShieldOff, Columns2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService, storageService } from '@/services/creativeService';
@@ -72,11 +72,24 @@ export default function AvatarsManagePage() {
   // Storage picker
   const [storagePickerOpen, setStoragePickerOpen] = useState(false);
 
+  // NEW: Identity fidelity toggle (default ON)
+  const [identityFidelity, setIdentityFidelity] = useState(true);
+
+  // NEW: Cached face description for Pass 1 reuse
+  const [cachedFaceDescription, setCachedFaceDescription] = useState<string | null>(null);
+
+  // NEW: Cost approval gate
+  const [costApprovalOpen, setCostApprovalOpen] = useState(false);
+  const pendingActionRef = useRef<(() => void) | null>(null);
+
+  // NEW: Compare variants view
+  const [compareMode, setCompareMode] = useState(false);
+
   // === Draft persistence (sessionStorage) ===
   const DRAFT_KEY = 'avatar-creation-draft';
 
   const saveDraft = () => {
-    const draft = { name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt };
+    const draft = { name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt, identityFidelity, cachedFaceDescription };
     try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch {}
   };
 
@@ -95,6 +108,8 @@ export default function AvatarsManagePage() {
       if (d.previewUrl) setPreviewUrl(d.previewUrl);
       if (d.previewHistory?.length) setPreviewHistory(d.previewHistory);
       if (d.refinePrompt) setRefinePrompt(d.refinePrompt);
+      if (d.identityFidelity !== undefined) setIdentityFidelity(d.identityFidelity);
+      if (d.cachedFaceDescription) setCachedFaceDescription(d.cachedFaceDescription);
       setCreating(true);
     } catch {}
   };
@@ -106,7 +121,7 @@ export default function AvatarsManagePage() {
   // Auto-save draft whenever creation state changes
   useEffect(() => {
     if (creating) saveDraft();
-  }, [name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt, creating]);
+  }, [name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt, creating, identityFidelity, cachedFaceDescription]);
 
   useEffect(() => { loadAvatars(); loadDraft(); }, []);
 
@@ -132,44 +147,81 @@ export default function AvatarsManagePage() {
   const mergedReferencePreview = Array.from(new Set([...baseReferences, ...photos])).slice(0, MAX_PHOTOS);
   const remainingPhotoSlots = Math.max(0, MAX_PHOTOS - mergedReferencePreview.length);
 
-  // Generate from photos (allows 1+ photos now)
-  const handleGenerate = async () => {
+  // Cost estimation
+  const getEstimatedCost = (isExpressionOnly: boolean) => {
+    if (creationMode === 'prompt') return { passes: 'Pass 2 בלבד (Gemini Image)', cost: 'נמוך', calls: 1 };
+    if (isExpressionOnly && cachedFaceDescription) return { passes: 'Pass 2 בלבד (שימוש חוזר ב-Pass 1)', cost: 'נמוך', calls: 1 };
+    return { passes: 'Pass 1 (ניתוח פנים) + Pass 2 (יצירה)', cost: 'בינוני', calls: 2 };
+  };
+
+  // Show cost approval before generation
+  const requestApproval = (action: () => void) => {
+    pendingActionRef.current = action;
+    setCostApprovalOpen(true);
+  };
+
+  const confirmCostApproval = () => {
+    setCostApprovalOpen(false);
+    if (pendingActionRef.current) {
+      pendingActionRef.current();
+      pendingActionRef.current = null;
+    }
+  };
+
+  // Generate from photos
+  const executeGeneration = async (expressionOnly = false) => {
     if (!name.trim()) { toast.error('יש להזין שם לאווטאר'); return; }
     if (creationMode === 'photo' && mergedReferencePreview.length < 1) {
-      toast.error('יש להעלות לפחות תמונה אחת');
-      return;
+      toast.error('יש להעלות לפחות תמונה אחת'); return;
     }
     if (creationMode === 'prompt' && !textPrompt.trim()) {
-      toast.error('יש להזין תיאור לדמות');
-      return;
+      toast.error('יש להזין תיאור לדמות'); return;
     }
 
     setGenerating(true);
     try {
       if (creationMode === 'prompt') {
-        // Generate from text description using image generation
         const styleLabel = STYLE_OPTIONS.find(s => s.value === style)?.desc || style;
         const expLabel = EXPRESSION_OPTIONS.find(e => e.value === expression)?.desc || expression;
         const fullPrompt = `Create a portrait/avatar of a character: ${textPrompt}. Style: ${styleLabel}. Expression: ${expLabel}. High quality, detailed face, centered composition, clean background.`;
         const result = await imageService.generate(fullPrompt);
         if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
         setPreviewUrl(result.imageUrl);
-        setPreviewHistory([result.imageUrl]);
-        toast.success('האווטאר נוצר! בדוק את התוצאה ושמור או שפר.');
+        setPreviewHistory(prev => [...prev, result.imageUrl]);
+        toast.success('האווטאר נוצר!');
       } else {
-        // Photo-based generation
+        const useCache = expressionOnly && !!cachedFaceDescription;
         const result = await avatarGenService.generate(mergedReferencePreview, style, {
           baseAvatarUrl: selectedBaseAvatar?.image_url,
-          strictIdentity: mergedReferencePreview.length >= 3,
+          strictIdentity: identityFidelity || mergedReferencePreview.length >= 3,
           expression,
+          skipAnalysis: useCache,
+          cachedFaceDescription: useCache ? cachedFaceDescription! : undefined,
         });
         if (!result.imageUrl) { toast.error('לא התקבלה תמונה'); return; }
+        // Cache the face description for future expression-only regeneration
+        if (result.faceDescription) {
+          setCachedFaceDescription(result.faceDescription);
+        }
         setPreviewUrl(result.imageUrl);
-        setPreviewHistory([result.imageUrl]);
-        toast.success('האווטאר נוצר! בדוק את התוצאה ושמור או שפר.');
+        setPreviewHistory(prev => [...prev, result.imageUrl]);
+        toast.success(useCache ? 'הבעה חדשה נוצרה (ניתוח פנים מהמטמון)' : 'האווטאר נוצר!');
       }
     } catch (e: any) { toast.error(e.message); }
     finally { setGenerating(false); }
+  };
+
+  const handleGenerate = () => {
+    requestApproval(() => executeGeneration(false));
+  };
+
+  const handleRegenerateExpressionOnly = () => {
+    if (!cachedFaceDescription) {
+      // No cached analysis — need full run
+      requestApproval(() => executeGeneration(false));
+    } else {
+      requestApproval(() => executeGeneration(true));
+    }
   };
 
   const handleRefine = async () => {
@@ -189,11 +241,12 @@ export default function AvatarsManagePage() {
     finally { setRefining(false); }
   };
 
-  const handleRegenerate = async () => {
-    setPreviewUrl(null);
-    setPreviewHistory([]);
-    setRefinePrompt('');
-    await handleGenerate();
+  const handleRegenerate = () => {
+    requestApproval(() => {
+      setPreviewUrl(null);
+      setCachedFaceDescription(null);
+      executeGeneration(false);
+    });
   };
 
   const handleSave = async () => {
@@ -220,35 +273,25 @@ export default function AvatarsManagePage() {
     setName(''); setPhotos([]); setStyle('professional headshot'); setExpression('neutral');
     setBaseAvatarId(''); setPreviewUrl(null); setPreviewHistory([]); setRefinePrompt('');
     setTextPrompt(''); setCreationMode('photo');
+    setIdentityFidelity(true); setCachedFaceDescription(null); setCompareMode(false);
     clearDraft();
   };
 
-  // Go back from preview to edit form — keeps all references & settings
   const handleBackToEdit = () => {
     setPreviewUrl(null);
-    // Keep photos, style, expression, name, etc. intact
+    setCompareMode(false);
+    // Keep photos, style, expression, name, cachedFaceDescription intact
   };
 
   const handleDelete = async (id: string) => {
     try {
       const avatar = avatars.find(a => a.id === id);
       await avatarDbService.remove(id);
-      if (avatar) {
-        const filesToDelete: string[] = [];
-        const extractPath = (url: string) => {
-          const match = url.match(/\/media\/(.+)$/);
-          return match ? match[1] : null;
-        };
-        if (avatar.image_url) {
-          const path = extractPath(avatar.image_url);
-          if (path) filesToDelete.push(path);
-        }
-        for (const photo of avatar.source_photos || []) {
-          const path = extractPath(photo);
-          if (path) filesToDelete.push(path);
-        }
-        if (filesToDelete.length > 0) {
-          await supabase.storage.from('media').remove(filesToDelete);
+      // Only delete the generated image, never delete source_photos (reference images are permanent)
+      if (avatar?.image_url) {
+        const match = avatar.image_url.match(/\/media\/(.+)$/);
+        if (match) {
+          await supabase.storage.from('media').remove([match[1]]);
         }
       }
       setAvatars((prev) => prev.filter((a) => a.id !== id));
@@ -265,6 +308,7 @@ export default function AvatarsManagePage() {
     setExpression('neutral');
     setPhotos([]);
     setPreviewUrl(null); setPreviewHistory([]); setRefinePrompt('');
+    setIdentityFidelity(true); setCachedFaceDescription(null); setCompareMode(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -288,6 +332,9 @@ export default function AvatarsManagePage() {
   const canGenerate = creationMode === 'prompt'
     ? name.trim() && textPrompt.trim()
     : name.trim() && mergedReferencePreview.length >= 1;
+
+  const costEstimate = getEstimatedCost(false);
+  const expressionOnlyCost = getEstimatedCost(true);
 
   return (
     <AppLayout>
@@ -328,10 +375,38 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                <div className="rounded-xl overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
-                  <img src={previewUrl} alt="תצוגה מקדימה" className="max-w-full max-h-[400px] object-contain" />
-                </div>
+                {/* Compare Variants View */}
+                {compareMode && previewHistory.length > 1 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">🔍 השוואת וריאנטים — רק ההבעה השתנתה</p>
+                      <button onClick={() => setCompareMode(false)} className="text-xs text-primary hover:underline">סגור השוואה</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl overflow-hidden border border-border bg-muted/30">
+                        <img src={previewHistory[0]} alt="גרסה 1" className="w-full aspect-square object-cover" />
+                        <p className="text-center text-xs py-1.5 text-muted-foreground">גרסה 1 (מקור)</p>
+                      </div>
+                      <div className="rounded-xl overflow-hidden border border-primary bg-muted/30">
+                        <img src={previewUrl} alt="גרסה נוכחית" className="w-full aspect-square object-cover" />
+                        <p className="text-center text-xs py-1.5 text-primary font-medium">גרסה נוכחית</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+                    <img src={previewUrl} alt="תצוגה מקדימה" className="max-w-full max-h-[400px] object-contain" />
+                  </div>
+                )}
 
+                {/* Compare button */}
+                {previewHistory.length > 1 && !compareMode && (
+                  <button onClick={() => setCompareMode(true)} className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted/60 transition-colors text-muted-foreground">
+                    <Columns2 className="w-3.5 h-3.5" /> השווה וריאנטים
+                  </button>
+                )}
+
+                {/* Refine */}
                 <div className="bg-muted/30 rounded-xl border border-border p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -358,15 +433,23 @@ export default function AvatarsManagePage() {
                   </button>
                 </div>
 
-                <div className="flex gap-2">
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2">
                   <button onClick={handleBackToEdit}
                     className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
                     ← חזור לעריכה
                   </button>
+                  {cachedFaceDescription && creationMode === 'photo' && (
+                    <button onClick={handleRegenerateExpressionOnly} disabled={generating}
+                      className="flex-1 px-4 py-2.5 border border-primary/30 bg-primary/5 rounded-lg text-sm hover:bg-primary/10 flex items-center justify-center gap-2 disabled:opacity-50 text-primary">
+                      {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      💰 הבעה חדשה בלבד (Pass 2)
+                    </button>
+                  )}
                   <button onClick={handleRegenerate} disabled={generating}
-                    className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
+                    className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
                     {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {generating ? 'מייצר...' : 'ייצר מחדש'}
+                    💰 ייצר מחדש (מלא)
                   </button>
                   <button onClick={handleSave} disabled={saving}
                     className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
@@ -440,6 +523,35 @@ export default function AvatarsManagePage() {
                     {selectedBaseAvatar && (
                       <p className="text-xs text-primary mt-2">🔁 בסיס נבחר: {selectedBaseAvatar.name} — המערכת תשתמש אוטומטית בתמונות המקור שלו.</p>
                     )}
+                  </div>
+                )}
+
+                {/* Identity Fidelity Toggle */}
+                {creationMode === 'photo' && (
+                  <div className={`flex items-center justify-between p-3 rounded-lg border transition-all ${identityFidelity ? 'border-primary/40 bg-primary/5' : 'border-amber-500/40 bg-amber-500/5'}`}>
+                    <div className="flex items-center gap-2">
+                      {identityFidelity ? <Shield className="w-4 h-4 text-primary" /> : <ShieldOff className="w-4 h-4 text-amber-400" />}
+                      <div>
+                        <p className="text-sm font-medium">{identityFidelity ? '🔒 דיוק זהות מוגבר' : '🎨 סגנון חופשי'}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {identityFidelity ? 'עדיפות לשימור זהות — רק הבעה/מוד ישתנו' : 'אפשרות לסטיילינג חופשי יותר — עלול לשנות מראה'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIdentityFidelity(!identityFidelity)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${identityFidelity ? 'bg-primary' : 'bg-muted'}`}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${identityFidelity ? 'left-0.5' : 'left-[22px]'}`} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Warning when identity fidelity is OFF */}
+                {creationMode === 'photo' && !identityFidelity && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <p>⚠️ מצב סגנון חופשי פעיל — התוצר עלול להיראות שונה מהאדם המקורי. מומלץ להשאיר את דיוק הזהות מופעל אלא אם רוצים אפקט אמנותי מכוון.</p>
                   </div>
                 )}
 
@@ -529,23 +641,27 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                {/* Summary */}
+                {/* Summary + Cost Estimate */}
                 {selectedStyleObj && (
                   <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
                     <div><span className="font-semibold text-foreground">{selectedStyleObj.label}</span> — {selectedStyleObj.desc}</div>
                     <div><span className="font-semibold text-foreground">{selectedExpressionObj?.label}</span> — {selectedExpressionObj?.desc}</div>
-                    {creationMode === 'photo' && mergedReferencePreview.length >= 3 && (
-                      <div className="text-primary">🎯 מצב דיוק זהות פעיל — המערכת תקבע פנים לפי כל תמונות הרפרנס</div>
+                    {creationMode === 'photo' && identityFidelity && (
+                      <div className="text-primary">🔒 דיוק זהות פעיל — המערכת תקבע פנים לפי כל תמונות הרפרנס</div>
                     )}
                     {creationMode === 'prompt' && (
                       <div className="text-primary">✨ יצירה מתיאור טקסט — המערכת תייצר דמות חדשה לפי התיאור שלך</div>
                     )}
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <p className="font-medium text-foreground">💰 עלות משוערת:</p>
+                      <p>{costEstimate.passes} — {costEstimate.calls} קריאות Gemini — רמת עלות: {costEstimate.cost}</p>
+                    </div>
                   </div>
                 )}
 
                 <button onClick={handleGenerate} disabled={generating || !canGenerate} className="w-full gradient-gold text-primary-foreground py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-4 h-4" />}
-                  {generating ? 'מייצר אווטאר...' : 'צור אווטאר'}
+                  {generating ? 'מייצר אווטאר...' : '💰 צור אווטאר'}
                 </button>
               </>
             )}
@@ -600,6 +716,32 @@ export default function AvatarsManagePage() {
         accept="image/*"
         multiple
       />
+
+      {/* Cost Approval Dialog */}
+      {costApprovalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full mx-4 space-y-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">💰 אישור יצירת אווטאר</h3>
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm space-y-2">
+              <p><span className="font-medium">ספק:</span> Lovable AI (Gemini)</p>
+              <p><span className="font-medium">שלבים:</span> {costEstimate.passes}</p>
+              <p><span className="font-medium">קריאות:</span> {costEstimate.calls}</p>
+              <p><span className="font-medium">רמת עלות:</span> {costEstimate.cost}</p>
+              {identityFidelity && <p className="text-primary text-xs">🔒 מצב דיוק זהות פעיל</p>}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setCostApprovalOpen(false); pendingActionRef.current = null; }}
+                className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">
+                ביטול
+              </button>
+              <button onClick={confirmCostApproval}
+                className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm">
+                ✅ אשר ויצר
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
