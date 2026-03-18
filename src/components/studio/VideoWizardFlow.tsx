@@ -780,7 +780,7 @@ export function VideoWizardFlow({
             setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם Krea...`);
             return await withTimeout(
               createKreaSceneClip(scenePrompt, sceneIdx, sceneDuration),
-              60000, 'Krea timeout'
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
             );
           } catch (kreaErr: any) {
             const msg = kreaErr?.message || '';
