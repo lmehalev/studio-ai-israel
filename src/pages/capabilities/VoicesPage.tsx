@@ -179,7 +179,7 @@ export default function VoicesManagePage() {
     setGeneratedAudioUrl(null);
     try {
       const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
-        body: { audioUrl: selectedVoice.audio_url, scriptText },
+        body: { audioUrl: selectedVoice.audio_url, scriptText, language },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
