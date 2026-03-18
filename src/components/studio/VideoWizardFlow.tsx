@@ -582,9 +582,94 @@ export function VideoWizardFlow({
     return kreaResult.videoUrl;
   };
 
+  // ===== Debug log helper =====
+  const addDebugLog = (runId: string, step: string, status: DebugLogStatus, message: string, meta?: Record<string, unknown>) => {
+    const entry: GenerationDebugLog = { timestamp: new Date().toISOString(), runId, step, status, message, meta };
+    setDebugLogs(prev => [...prev, entry]);
+    if (status === 'error') console.error(`[${runId}] ${step}: ${message}`, meta);
+    else console.log(`[${runId}] ${step}: ${message}`);
+  };
+
+  // ===== Preflight validation =====
+  const runPreflight = async (): Promise<PreflightResult> => {
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const health: ProviderHealth = { runway: 'unavailable', heygen: 'unavailable', krea: 'unavailable', compose: 'unavailable', credits: 'unavailable' };
+
+    // Validate required fields
+    if (!generatedScript) errors.push('אין תסריט');
+    const scenes = generatedScript?.scenes || [];
+    if (scenes.length === 0) warnings.push('אין סצנות בתסריט — ייווצרו אוטומטית');
+    if (!prompt.trim()) warnings.push('אין פרומפט מקורי');
+
+    // Check provider health in parallel
+    try {
+      const [heygenRes, creditsRes] = await Promise.allSettled([
+        withTimeout(supabase.functions.invoke('heygen-video', { body: { action: 'health_check' } }), 8000, 'HeyGen timeout'),
+        withTimeout(supabase.functions.invoke('check-credits', { body: {} }), 10000, 'Credits timeout'),
+      ]);
+      if (heygenRes.status === 'fulfilled' && heygenRes.value?.data?.ok) health.heygen = 'healthy';
+      else health.heygen = 'degraded';
+      if (creditsRes.status === 'fulfilled') {
+        health.credits = 'healthy';
+        const items = (creditsRes.value?.data as any)?.credits || [];
+        for (const c of items) {
+          if (c.service === 'runway' && c.canGenerate) health.runway = 'healthy';
+          if (c.service === 'krea' && c.canGenerate) health.krea = 'healthy';
+        }
+      }
+      // Shotstack is always available if key exists
+      health.compose = 'healthy';
+    } catch { /* partial health is fine */ }
+
+    if (health.runway === 'unavailable' && health.heygen === 'unavailable' && health.krea === 'unavailable') {
+      errors.push('אף ספק וידאו לא זמין');
+    }
+
+    // Validate media references
+    if (selectedAvatars[0]?.image_url) {
+      try {
+        const res = await fetch(selectedAvatars[0].image_url, { method: 'HEAD' });
+        if (!res.ok) warnings.push('קישור לתמונת אווטאר לא נגיש');
+      } catch { warnings.push('לא ניתן לבדוק קישור אווטאר'); }
+    }
+
+    const payloadPreview: Record<string, unknown> = {
+      scenes: scenes.length,
+      avatars: selectedAvatars.map(a => a.name),
+      voices: selectedVoices.map(v => v.name),
+      videoStyle,
+      promptLength: prompt.length,
+      imagesCount: uploadedImages.length,
+    };
+
+    return { ok: errors.length === 0, runId, checkedAt: new Date().toISOString(), errors, warnings, providerHealth: health, payloadPreview };
+  };
+
   // ===== Step 3: Generate video (full pipeline) =====
   const handleGenerateVideo = async () => {
     if (!generatedScript) return;
+
+    // Run preflight
+    const preflight = await runPreflight();
+    setPreflightResult(preflight);
+    const runId = preflight.runId;
+    setActiveRunId(runId);
+    setDebugLogs([]);
+    addDebugLog(runId, 'preflight', preflight.ok ? 'success' : 'error', preflight.ok ? 'Preflight passed' : `Preflight failed: ${preflight.errors.join(', ')}`, { health: preflight.providerHealth, warnings: preflight.warnings });
+
+    if (dryRunMode) {
+      toast.info('מצב בדיקה מוקדמת — לא מתבצעת יצירה. בדוק את הלוג בפאנל הדיבאג.');
+      setShowDebugPanel(true);
+      return;
+    }
+
+    if (!preflight.ok) {
+      toast.error(`לא ניתן להתחיל: ${preflight.errors.join(', ')}`);
+      return;
+    }
+
     setLoading(true);
     setStep(3);
     setRunwayPolling(true);
@@ -670,6 +755,8 @@ export function VideoWizardFlow({
       setProgressStage(shouldGenerateNarration ? 'מייצר קריינות בעברית...' : 'מכין מסלול אווטאר חלופי...');
       setRunwayProgress(5);
 
+      addDebugLog(runId, 'narration', 'info', `Generating narration: voice=${selectedVoice?.name || 'AI'}, textLen=${narrationText.length}`);
+
       if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
           const cloneResult = await voiceCloneService.cloneAndSpeak(
@@ -677,9 +764,11 @@ export function VideoWizardFlow({
             narrationText
           );
           narrationAudioUrl = cloneResult.audioUrl;
+          addDebugLog(runId, 'narration', 'success', 'Voice clone + TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('הקריינות בקול שלך מוכנה!');
         } catch (cloneErr: any) {
           const msg = cloneErr?.message || '';
+          addDebugLog(runId, 'narration', 'warn', `Voice clone failed: ${msg}`);
           console.warn('Voice clone failed, falling back to AI TTS:', msg);
           if (msg.includes('קובץ הקול לא נמצא')) {
             toast.error('קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
@@ -693,8 +782,10 @@ export function VideoWizardFlow({
       if (shouldGenerateNarration && !narrationAudioUrl && narrationText) {
         try {
           narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
+          addDebugLog(runId, 'narration', 'success', 'AI TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('קריינות AI בעברית מוכנה!');
         } catch (ttsErr: any) {
+          addDebugLog(runId, 'narration', 'error', `AI TTS failed: ${ttsErr?.message}`);
           console.warn('TTS failed:', ttsErr?.message);
           toast.info('לא הצלחתי ליצור קריינות, ממשיך ללא קול...');
         }
@@ -852,6 +943,8 @@ export function VideoWizardFlow({
       }
 
       const successfulResults = sceneResults.filter((r): r is NonNullable<typeof r> => r !== null);
+      addDebugLog(runId, 'scenes', successfulResults.length > 0 ? 'success' : 'error',
+        `${successfulResults.length}/${totalScenes} scenes generated`, { errors: sceneErrors });
       
       if (successfulResults.length === 0) {
         throw new Error(
@@ -868,6 +961,7 @@ export function VideoWizardFlow({
       const sceneVideoUrls = successfulResults.map((result) => result.url);
 
       // === Stage 3: Composite all clips with Shotstack ===
+      addDebugLog(runId, 'compose', 'info', `Starting Shotstack render with ${sceneVideoUrls.length} clips`);
       setProgressStage('מרכיב סרטון סופי — כתוביות, לוגו ואייקונים...');
       setRunwayProgress(70);
 
@@ -884,6 +978,8 @@ export function VideoWizardFlow({
           audioUrl: narrationAudioUrl,
         });
 
+        addDebugLog(runId, 'compose', renderResult?.renderId ? 'success' : 'error',
+          renderResult?.renderId ? `Render started: ${renderResult.renderId}` : 'No renderId returned');
         if (!renderResult?.renderId) throw new Error('Shotstack error');
 
         const composeMaxAttempts = Math.max(240, sceneVideoUrls.length * 120);
@@ -893,13 +989,17 @@ export function VideoWizardFlow({
           const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
           if (status.status === 'done' && status.url) {
             const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
+            addDebugLog(runId, 'complete', 'success', `Video ready: ${totalDuration}s`, { outputUrl: status.url });
             setResultVideoUrl(status.url);
             setStep(4);
             setProgressStage('');
             toast.success(`🎬 סרטון של ${totalDuration} שניות מוכן!`);
             return;
           }
-          if (status.status === 'failed') throw new Error('Shotstack render failed');
+          if (status.status === 'failed') {
+            addDebugLog(runId, 'compose', 'error', 'Shotstack render failed');
+            throw new Error('Shotstack render failed');
+          }
           setRunwayProgress(70 + (i / composeMaxAttempts) * 28);
           await sleep(COMPOSE_STATUS_POLL_MS);
         }
@@ -1584,6 +1684,15 @@ export function VideoWizardFlow({
             </div>
           )}
 
+          {/* Dry-run / Preflight toggle */}
+          <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2">
+            <input type="checkbox" id="dryRun" checked={dryRunMode} onChange={e => setDryRunMode(e.target.checked)}
+              className="rounded border-border" />
+            <label htmlFor="dryRun" className="text-xs text-muted-foreground cursor-pointer">
+              🔍 מצב בדיקה מוקדמת (Dry Run) — בודק ספקים בלי לבזבז קרדיטים
+            </label>
+          </div>
+
           <div className="flex gap-2">
             <button onClick={() => setStep(1)}
               className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
@@ -1591,9 +1700,29 @@ export function VideoWizardFlow({
             </button>
             <button onClick={handleGenerateVideo} disabled={loading}
               className="flex-1 gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-              <Play className="w-4 h-4" /> צור סרטון
+              <Play className="w-4 h-4" /> {dryRunMode ? 'בדוק מוכנות' : 'צור סרטון'}
             </button>
           </div>
+
+          {/* Preflight result */}
+          {preflightResult && (
+            <div className={cn('border rounded-lg p-3 space-y-1 text-xs', preflightResult.ok ? 'border-primary/30 bg-primary/5' : 'border-destructive/30 bg-destructive/5')}>
+              <p className="font-semibold">{preflightResult.ok ? '✅ בדיקה מוקדמת עברה' : '❌ בדיקה מוקדמת נכשלה'}</p>
+              <p className="text-muted-foreground font-mono text-[10px]">Run ID: {preflightResult.runId}</p>
+              {preflightResult.errors.map((e, i) => <p key={i} className="text-destructive">❌ {e}</p>)}
+              {preflightResult.warnings.map((w, i) => <p key={i} className="text-amber-500">⚠️ {w}</p>)}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {Object.entries(preflightResult.providerHealth).map(([name, status]) => (
+                  <span key={name} className={cn('px-2 py-0.5 rounded-full text-[10px] border',
+                    status === 'healthy' ? 'bg-primary/10 text-primary border-primary/30' :
+                    status === 'degraded' ? 'bg-amber-500/10 text-amber-500 border-amber-500/30' :
+                    'bg-destructive/10 text-destructive border-destructive/30')}>
+                    {status === 'healthy' ? '✓' : status === 'degraded' ? '⚠' : '✗'} {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1626,6 +1755,25 @@ export function VideoWizardFlow({
             <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono" dir="ltr">
               {progressStage}
             </p>
+          )}
+          {activeRunId && (
+            <p className="text-[10px] text-muted-foreground/40 font-mono" dir="ltr">Run: {activeRunId}</p>
+          )}
+          {/* Debug panel toggle */}
+          <button onClick={() => setShowDebugPanel(!showDebugPanel)}
+            className="text-[10px] text-muted-foreground hover:text-foreground underline">
+            {showDebugPanel ? 'הסתר לוג דיבאג' : 'הצג לוג דיבאג'}
+          </button>
+          {showDebugPanel && debugLogs.length > 0 && (
+            <div className="bg-muted/20 border border-border rounded-lg p-2 max-h-[200px] overflow-y-auto text-right" dir="rtl">
+              {debugLogs.map((log, i) => (
+                <div key={i} className={cn('text-[10px] font-mono py-0.5 border-b border-border/30 last:border-0',
+                  log.status === 'error' ? 'text-destructive' : log.status === 'warn' ? 'text-amber-500' : log.status === 'success' ? 'text-primary' : 'text-muted-foreground')}>
+                  <span className="opacity-50">{log.timestamp.split('T')[1]?.slice(0, 8)}</span>{' '}
+                  [{log.step}] {log.message}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -1696,6 +1844,28 @@ export function VideoWizardFlow({
             className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-1">
             <RefreshCw className="w-3.5 h-3.5" /> התחל מחדש
           </button>
+
+          {/* Debug log for completed run */}
+          {debugLogs.length > 0 && (
+            <div className="pt-2">
+              <button onClick={() => setShowDebugPanel(!showDebugPanel)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                {showDebugPanel ? 'הסתר לוג דיבאג' : `הצג לוג דיבאג (${debugLogs.length} שלבים)`}
+              </button>
+              {activeRunId && <p className="text-[10px] text-muted-foreground/40 font-mono" dir="ltr">Run: {activeRunId}</p>}
+              {showDebugPanel && (
+                <div className="bg-muted/20 border border-border rounded-lg p-2 max-h-[200px] overflow-y-auto text-right mt-1" dir="rtl">
+                  {debugLogs.map((log, i) => (
+                    <div key={i} className={cn('text-[10px] font-mono py-0.5 border-b border-border/30 last:border-0',
+                      log.status === 'error' ? 'text-destructive' : log.status === 'warn' ? 'text-amber-500' : log.status === 'success' ? 'text-primary' : 'text-muted-foreground')}>
+                      <span className="opacity-50">{log.timestamp.split('T')[1]?.slice(0, 8)}</span>{' '}
+                      [{log.step}] {log.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
