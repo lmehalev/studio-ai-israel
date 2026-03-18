@@ -42,6 +42,31 @@ async function ensureTable() {
             CREATE POLICY "Allow public delete on voices" ON public.voices FOR DELETE USING (true);
           END IF;
         END $$;
+
+        -- voice_generations table for Script-to-Voice outputs
+        CREATE TABLE IF NOT EXISTS public.voice_generations (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          title text NOT NULL,
+          script text NOT NULL,
+          voice_id uuid REFERENCES public.voices(id) ON DELETE SET NULL,
+          voice_name text NOT NULL DEFAULT '',
+          provider text NOT NULL DEFAULT 'ElevenLabs',
+          audio_url text NOT NULL,
+          duration_seconds numeric,
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
+        ALTER TABLE public.voice_generations ENABLE ROW LEVEL SECURITY;
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voice_generations' AND policyname = 'Allow public select on voice_generations') THEN
+            CREATE POLICY "Allow public select on voice_generations" ON public.voice_generations FOR SELECT USING (true);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voice_generations' AND policyname = 'Allow public insert on voice_generations') THEN
+            CREATE POLICY "Allow public insert on voice_generations" ON public.voice_generations FOR INSERT WITH CHECK (true);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voice_generations' AND policyname = 'Allow public delete on voice_generations') THEN
+            CREATE POLICY "Allow public delete on voice_generations" ON public.voice_generations FOR DELETE USING (true);
+          END IF;
+        END $$;
       `);
     } finally {
       conn.release();
@@ -69,6 +94,7 @@ Deno.serve(async (req) => {
 
     const { action, ...payload } = await req.json();
 
+    // === VOICES CRUD ===
     if (action === "list") {
       const { data, error } = await supabase
         .from("voices")
@@ -108,6 +134,60 @@ Deno.serve(async (req) => {
         });
       }
       const { error } = await supabase.from("voices").delete().eq("id", id);
+      if (error) throw error;
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === VOICE GENERATIONS CRUD ===
+    if (action === "list_generations") {
+      const { data, error } = await supabase
+        .from("voice_generations")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return new Response(JSON.stringify({ generations: data }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "save_generation") {
+      const { title, script, voice_id, voice_name, provider, audio_url, duration_seconds } = payload;
+      if (!title || !script || !audio_url) {
+        return new Response(JSON.stringify({ error: "כותרת, תסריט וקובץ אודיו נדרשים" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data, error } = await supabase
+        .from("voice_generations")
+        .insert({
+          title,
+          script,
+          voice_id: voice_id || null,
+          voice_name: voice_name || '',
+          provider: provider || 'ElevenLabs',
+          audio_url,
+          duration_seconds: duration_seconds || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return new Response(JSON.stringify({ generation: data }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "delete_generation") {
+      const { id } = payload;
+      if (!id) {
+        return new Response(JSON.stringify({ error: "מזהה נדרש" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { error } = await supabase.from("voice_generations").delete().eq("id", id);
       if (error) throw error;
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
