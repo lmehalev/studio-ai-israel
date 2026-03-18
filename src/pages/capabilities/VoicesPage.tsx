@@ -48,6 +48,7 @@ export default function VoicesManagePage() {
   const [generatedVoiceId, setGeneratedVoiceId] = useState<string | null>(null);
   const [costApprovalOpen, setCostApprovalOpen] = useState(false);
   const [savingGeneration, setSavingGeneration] = useState(false);
+  const [language, setLanguage] = useState<'he' | 'en' | 'ar'>('he');
 
   // Generation detail view
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
