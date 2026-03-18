@@ -355,7 +355,16 @@ export function VideoWizardFlow({
   };
 
   const selectedAvatars = avatars.filter(a => selectedAvatarIds.includes(a.id));
-  const selectedVoices = voices.filter(v => selectedVoiceIds.includes(v.id));
+  const eligibleVoices = voices.filter(v => Boolean(v.provider_voice_id && v.is_verified));
+  const selectedVoices = eligibleVoices.filter(v => selectedVoiceIds.includes(v.id));
+
+  useEffect(() => {
+    const eligibleIds = new Set(eligibleVoices.map((v) => v.id));
+    setSelectedVoiceIds((prev) => {
+      const filtered = prev.filter((id) => eligibleIds.has(id));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [eligibleVoices]);
 
   const toggleAvatar = (id: string) => {
     setSelectedAvatarIds(prev =>
@@ -364,6 +373,12 @@ export function VideoWizardFlow({
   };
 
   const toggleVoice = (id: string) => {
+    const voice = voices.find((v) => v.id === id);
+    if (!voice?.provider_voice_id || !voice?.is_verified) {
+      toast.error('הקול לא מאומת עדיין. בצע איפוס/שכפול ואימות בדף הקולות.');
+      return;
+    }
+
     setSelectedVoiceIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
