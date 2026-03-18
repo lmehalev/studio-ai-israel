@@ -278,6 +278,50 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_generations: {
+        Row: {
+          audio_url: string
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          provider: string
+          script: string
+          title: string
+          voice_id: string | null
+          voice_name: string
+        }
+        Insert: {
+          audio_url: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          provider?: string
+          script: string
+          title: string
+          voice_id?: string | null
+          voice_name?: string
+        }
+        Update: {
+          audio_url?: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          provider?: string
+          script?: string
+          title?: string
+          voice_id?: string | null
+          voice_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_generations_voice_id_fkey"
+            columns: ["voice_id"]
+            isOneToOne: false
+            referencedRelation: "voices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voices: {
         Row: {
           audio_url: string

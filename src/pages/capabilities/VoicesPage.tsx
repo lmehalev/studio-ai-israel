@@ -48,6 +48,7 @@ export default function VoicesManagePage() {
   const [generatedVoiceId, setGeneratedVoiceId] = useState<string | null>(null);
   const [costApprovalOpen, setCostApprovalOpen] = useState(false);
   const [savingGeneration, setSavingGeneration] = useState(false);
+  const [language, setLanguage] = useState<'he' | 'en' | 'ar'>('he');
 
   // Generation detail view
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -178,7 +179,7 @@ export default function VoicesManagePage() {
     setGeneratedAudioUrl(null);
     try {
       const { data, error } = await supabase.functions.invoke('clone-voice-tts', {
-        body: { audioUrl: selectedVoice.audio_url, scriptText },
+        body: { audioUrl: selectedVoice.audio_url, scriptText, language },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -294,6 +295,20 @@ export default function VoicesManagePage() {
                   ))}
                 </select>
               )}
+            </div>
+
+            {/* Language selector */}
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">שפת הדיבוב</label>
+              <select
+                value={language}
+                onChange={e => setLanguage(e.target.value as 'he' | 'en' | 'ar')}
+                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="he">🇮🇱 עברית</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="ar">🇸🇦 عربية</option>
+              </select>
             </div>
 
             {/* Title */}

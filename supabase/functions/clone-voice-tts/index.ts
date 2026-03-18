@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       throw new Error("Supabase admin credentials are not configured");
     }
 
-    const { audioUrl, scriptText } = await req.json();
+    const { audioUrl, scriptText, language } = await req.json();
 
     if (!audioUrl || !scriptText?.trim()) {
       return new Response(JSON.stringify({ error: "יש לספק קובץ אודיו וטקסט לקריינות" }), {
@@ -90,6 +90,14 @@ Deno.serve(async (req) => {
     }
 
     const safeScript = scriptToSafeNarration(scriptText);
+
+    // Map language to ElevenLabs language_code (ISO 639-1)
+    const langMap: Record<string, string> = { he: "he", en: "en", ar: "ar" };
+    // Auto-detect Hebrew from Unicode if no language specified
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    const detectedLang = language || (hebrewPattern.test(safeScript) ? "he" : "en");
+    const languageCode = langMap[detectedLang] || "he";
+    console.log("Language:", detectedLang, "-> language_code:", languageCode);
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Step 1: Download the user's recorded audio
@@ -138,6 +146,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           text: safeScript,
           model_id: "eleven_multilingual_v2",
+          language_code: languageCode,
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.85,
