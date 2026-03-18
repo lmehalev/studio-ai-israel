@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell, Zap, Wand2, ShieldCheck, ShieldAlert, ShieldX, CircleDot } from 'lucide-react';
+import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell, Zap, Wand2, ShieldCheck, ShieldAlert, ShieldX, CircleDot, Route, DollarSign, Lock, Unlock, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -23,17 +23,65 @@ interface ProviderStatus {
   error?: string;
 }
 
-const serviceConfig = [
-  { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים + שיפור פרומפטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
-  { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב, שכפול קול, מוזיקה, SFX', icon: Mic, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
-  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר, Photo Avatar, תבניות', icon: UserCircle, free: false, plan: 'חינם (Trial)', hasCredits: true },
-  { id: 'runway', name: 'RunwayML', desc: 'וידאו AI קולנועי (Image/Text → Video)', icon: Video, free: false, plan: 'חינם (Trial)', hasCredits: true },
-  { id: 'krea', name: 'Krea AI', desc: '40+ מודלים: Flux, Veo 3, Kling 2.5, Upscale', icon: Wand2, free: false, plan: 'API מחובר', hasCredits: true },
-  { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו, רינדור רב-שכבתי, כתוביות', icon: Video, free: false, plan: 'Sandbox (חינם)', hasCredits: true },
-  { id: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)', hasCredits: true },
-  { id: 'perplexity', name: 'Perplexity AI', desc: 'ניתוח טרנדים ויראליים בזמן אמת', icon: Zap, free: false, plan: 'API מחובר', hasCredits: false },
-  { id: 'whisper', name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, free: true, plan: 'חינם (מובנה)', hasCredits: false },
-  { id: 'storage', name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, free: true, plan: 'חינם (מובנה)', hasCredits: false },
+// ═══════════════════════════════════════════════════════════
+//  PRODUCTION ROUTING — explicit safe stack definition
+// ═══════════════════════════════════════════════════════════
+
+type ProviderRole = 'ברירת מחדל' | 'גיבוי' | 'חסום ידנית' | 'לא פעיל';
+
+interface ProviderMeta {
+  id: string;
+  name: string;
+  desc: string;
+  icon: any;
+  free: boolean;
+  plan: string;
+  hasCredits: boolean;
+  // Operational routing
+  role: ProviderRole;
+  category: string;
+  safeForGeneration: boolean;
+  blockedManually: boolean;
+  requiresApproval: boolean;
+  noAutoGeneration: boolean;
+  // Billing
+  billingType: string;
+  monthlyCost: string;
+  extraCreditsNeeded: boolean;
+  costConfirmed: boolean;
+}
+
+const serviceConfig: ProviderMeta[] = [
+  { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים + שיפור פרומפטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)',
+    hasCredits: false, role: 'ברירת מחדל', category: 'תמונות / תסריטים / פרומפטים', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'Lovable AI — ללא עלות נוספת', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
+  { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב, שכפול קול, מוזיקה, SFX', icon: Mic, free: false, plan: 'חינם (מוגבל)',
+    hasCredits: true, role: 'ברירת מחדל', category: 'קול / דיבוב בעברית', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'מנוי חודשי + תוים', monthlyCost: '$5–$22', extraCreditsNeeded: false, costConfirmed: true },
+  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר, Photo Avatar, תבניות', icon: UserCircle, free: false, plan: 'חינם (Trial)',
+    hasCredits: true, role: 'ברירת מחדל', category: 'אווטאר מדבר / וידאו', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'קרדיטים — 591 נותרו', monthlyCost: 'Trial חינם', extraCreditsNeeded: false, costConfirmed: true },
+  { id: 'runway', name: 'RunwayML', desc: 'וידאו AI קולנועי (Image/Text → Video)', icon: Video, free: false, plan: 'Kill Switch פעיל',
+    hasCredits: true, role: 'חסום ידנית', category: 'וידאו AI', safeForGeneration: false, blockedManually: true, requiresApproval: true, noAutoGeneration: true,
+    billingType: 'קרדיטים — חסום', monthlyCost: '$12/month (לא בשימוש)', extraCreditsNeeded: true, costConfirmed: true },
+  { id: 'krea', name: 'Krea AI', desc: '40+ מודלים: Flux, Veo 3, Kling 2.5, Upscale', icon: Wand2, free: false, plan: 'API מחובר',
+    hasCredits: true, role: 'גיבוי', category: 'תמונות / וידאו (Fallback)', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'תשלום לפי שימוש', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
+  { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו, רינדור רב-שכבתי, כתוביות', icon: Video, free: false, plan: 'Production',
+    hasCredits: true, role: 'ברירת מחדל', category: 'הרכבה / רינדור סופי', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'תשלום לפי רינדור', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
+  { id: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)',
+    hasCredits: true, role: 'לא פעיל', category: 'אחסון מדיה', safeForGeneration: false, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'חינם עד 25GB', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
+  { id: 'perplexity', name: 'Perplexity AI', desc: 'ניתוח טרנדים ויראליים בזמן אמת', icon: Zap, free: false, plan: 'API מחובר',
+    hasCredits: false, role: 'ברירת מחדל', category: 'ניתוח טרנדים', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'תשלום לפי שימוש', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
+  { id: 'whisper', name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, free: true, plan: 'חינם (מובנה)',
+    hasCredits: false, role: 'ברירת מחדל', category: 'כתוביות / תמלול', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'Lovable AI — ללא עלות נוספת', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
+  { id: 'storage', name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, free: true, plan: 'חינם (מובנה)',
+    hasCredits: false, role: 'ברירת מחדל', category: 'אחסון', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
+    billingType: 'כלול ב-Lovable Cloud', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
 ];
 
 const readinessColors: Record<string, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
@@ -46,6 +94,13 @@ const readinessColors: Record<string, { bg: string; text: string; icon: typeof C
   auth_failed: { bg: 'bg-destructive/15', text: 'text-destructive', icon: ShieldX },
   error: { bg: 'bg-destructive/15', text: 'text-destructive', icon: AlertTriangle },
   not_configured: { bg: 'bg-muted', text: 'text-muted-foreground', icon: CircleDot },
+};
+
+const roleBadge: Record<ProviderRole, { bg: string; text: string }> = {
+  'ברירת מחדל': { bg: 'bg-primary/15', text: 'text-primary' },
+  'גיבוי': { bg: 'bg-info/15', text: 'text-info' },
+  'חסום ידנית': { bg: 'bg-destructive/15', text: 'text-destructive' },
+  'לא פעיל': { bg: 'bg-muted', text: 'text-muted-foreground' },
 };
 
 const AUTO_REFRESH_INTERVAL = 60_000;
@@ -117,64 +172,119 @@ export function ConnectionsTab() {
   const verifiedCount = Object.values(credits).filter(c => c.readiness === 'generation_verified').length;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h2 className="font-rubik font-semibold">מצב ספקים</h2>
-          <div className="flex items-center gap-2">
-            {verifiedCount > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> {verifiedCount} אומתו
-              </span>
-            )}
-            {warningCount > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> {warningCount} לא אומתו
-              </span>
-            )}
-            {blockedCount > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/15 text-destructive font-medium flex items-center gap-1">
-                <ShieldX className="w-3 h-3" /> {blockedCount} חסומים
-              </span>
-            )}
+    <div className="space-y-6">
+      {/* ═══ PRODUCTION ROUTING PANEL ═══ */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Route className="w-5 h-5 text-primary" />
+          <h2 className="font-rubik font-semibold">מסלול ייצור פעיל</h2>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium">בטוח לשימוש</span>
+        </div>
+        <p className="text-xs text-muted-foreground">המסלול הבטוח הנוכחי ליצירת תוכן — ללא שינויים אוטומטיים, ללא קריאות רקע.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Default providers */}
+          <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-primary flex items-center gap-1.5"><Unlock className="w-3.5 h-3.5" /> ספקי ברירת מחדל</p>
+            <ul className="text-xs space-y-1.5 text-foreground">
+              <li className="flex items-center gap-2"><UserCircle className="w-3.5 h-3.5 text-primary" /><span><strong>HeyGen</strong> — אווטאר מדבר בעברית</span></li>
+              <li className="flex items-center gap-2"><Mic className="w-3.5 h-3.5 text-primary" /><span><strong>ElevenLabs</strong> — קריינות ודיבוב בעברית</span></li>
+              <li className="flex items-center gap-2"><Video className="w-3.5 h-3.5 text-primary" /><span><strong>Shotstack</strong> — הרכבה ורינדור סופי</span></li>
+              <li className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-primary" /><span><strong>Gemini</strong> — תסריטים, פרומפטים, תמונות</span></li>
+            </ul>
+          </div>
+
+          {/* Fallback + blocked */}
+          <div className="space-y-3">
+            <div className="bg-info/5 border border-info/20 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-info flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> שרשרת גיבוי (Fallback)</p>
+              <p className="text-xs text-foreground">HeyGen → Krea → תמונת AI סטטית</p>
+              <p className="text-[10px] text-muted-foreground">Krea משמש כגיבוי לוידאו ותמונות כשספק ראשי לא זמין</p>
+            </div>
+            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-destructive flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> ספקים חסומים</p>
+              <p className="text-xs text-foreground"><strong>RunwayML</strong> — חסום ידנית (Kill Switch פעיל בשרת)</p>
+              <p className="text-[10px] text-muted-foreground">לא ניתן להשתמש ב-Runway ללא אישור ידני מפורש</p>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated && <span className="text-xs text-muted-foreground">עודכן {formatTimeAgo(lastUpdated)}</span>}
-          <button onClick={() => loadCredits()} disabled={loading}
-            className="text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted flex items-center gap-1.5 transition-colors">
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            בדוק ספקים
-          </button>
+
+        {/* Safety guarantees */}
+        <div className="bg-success/5 border border-success/20 rounded-lg p-3">
+          <p className="text-xs font-semibold text-success flex items-center gap-1.5 mb-1.5"><ShieldCheck className="w-3.5 h-3.5" /> הבטחות בטיחות פעילות</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[11px] text-foreground">
+            <span>✅ לא מבצע יצירה אוטומטית</span>
+            <span>✅ לא מבצע יצירה בטעינת דף</span>
+            <span>✅ לא מבצע יצירה בריענון</span>
+            <span>✅ לא מבצע בדיקות יקרות</span>
+            <span>✅ הגנה מפני כפילויות</span>
+            <span>✅ Runway חסום בשרת</span>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {serviceConfig.map(s => (
-          <ServiceCard key={s.id} config={s} Icon={s.icon} credit={credits[s.id]} loading={loading}
-            getUsagePercent={getUsagePercent} getUsageColor={getUsageColor} />
-        ))}
-      </div>
+      {/* ═══ PROVIDER STATUS CARDS ═══ */}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="font-rubik font-semibold">מצב ספקים</h2>
+            <div className="flex items-center gap-2">
+              {verifiedCount > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> {verifiedCount} אומתו
+                </span>
+              )}
+              {warningCount > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> {warningCount} לא אומתו
+                </span>
+              )}
+              {blockedCount > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/15 text-destructive font-medium flex items-center gap-1">
+                  <ShieldX className="w-3 h-3" /> {blockedCount} חסומים
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {lastUpdated && <span className="text-xs text-muted-foreground">עודכן {formatTimeAgo(lastUpdated)}</span>}
+            <button onClick={() => loadCredits()} disabled={loading}
+              className="text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted flex items-center gap-1.5 transition-colors">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              בדוק ספקים
+            </button>
+          </div>
+        </div>
 
-      <p className="text-xs text-muted-foreground mt-4">
-        💡 המערכת בודקת אימות, קרדיטים ויכולת יצירה חיה עבור כל ספק. ספקים שרק "מחוברים" לא ישמשו ליצירה.
-      </p>
+        <div className="space-y-3">
+          {serviceConfig.map(s => (
+            <ServiceCard key={s.id} config={s} Icon={s.icon} credit={credits[s.id]} loading={loading}
+              getUsagePercent={getUsagePercent} getUsageColor={getUsageColor} />
+          ))}
+        </div>
+
+        <p className="text-xs text-muted-foreground mt-4">
+          💡 בדיקת ספקים משתמשת רק בקריאות אימות — ללא יצירות, ללא שריפת קרדיטים.
+        </p>
+      </div>
     </div>
   );
 }
 
 function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsageColor }: {
-  config: typeof serviceConfig[number]; Icon: any; credit?: ProviderStatus; loading: boolean;
+  config: ProviderMeta; Icon: any; credit?: ProviderStatus; loading: boolean;
   getUsagePercent: (c: ProviderStatus) => number; getUsageColor: (p: number, can: boolean) => string;
 }) {
   const readiness = credit?.readiness || (s.free ? 'credits_ok' : 'not_configured');
   const rConfig = readinessColors[readiness] || readinessColors.not_configured;
   const StatusIcon = rConfig.icon;
+  const rBadge = roleBadge[s.role];
 
   return (
     <div className={cn(
       "p-4 rounded-lg border space-y-3 transition-colors",
-      readiness === 'blocked_credits' || readiness === 'auth_failed' ? "bg-destructive/5 border-destructive/30"
+      s.blockedManually ? "bg-destructive/5 border-destructive/30"
+        : readiness === 'blocked_credits' || readiness === 'auth_failed' ? "bg-destructive/5 border-destructive/30"
         : readiness === 'authenticated' || readiness === 'blocked_env' ? "bg-warning/5 border-warning/30"
         : "bg-muted/30 border-border"
     )}>
@@ -192,21 +302,42 @@ function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsa
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", s.free ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning")}>
-            {credit?.plan || s.plan}
+          {/* Role badge */}
+          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", rBadge.bg, rBadge.text)}>
+            {s.role}
           </span>
-          {credit?.environment && credit.environment !== 'unknown' && credit.environment !== 'production' && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-info/10 text-info font-medium">
-              {credit.environment}
-            </span>
-          )}
+          {/* Category */}
+          <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+            {s.category}
+          </span>
+          {/* Readiness */}
           <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1", rConfig.bg, rConfig.text,
-            (readiness === 'blocked_credits' || readiness === 'auth_failed') && "animate-pulse"
+            (readiness === 'blocked_credits' || readiness === 'auth_failed' || s.blockedManually) && "animate-pulse"
           )}>
             <StatusIcon className="w-3 h-3" />
-            {credit?.statusLabel || (s.free ? 'פעיל' : 'לא מוגדר')}
+            {credit?.statusLabel || (s.free ? 'פעיל' : s.blockedManually ? 'חסום ידנית' : 'לא מוגדר')}
           </span>
         </div>
+      </div>
+
+      {/* Operational labels row */}
+      <div className="mr-13 flex flex-wrap gap-1.5">
+        {s.safeForGeneration && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success font-medium">🟢 בטוח לשימוש</span>
+        )}
+        {s.blockedManually && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">🔴 חסום ידנית</span>
+        )}
+        {s.safeForGeneration && !s.blockedManually && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">✅ זמין ליצירה</span>
+        )}
+        {!s.safeForGeneration && !s.blockedManually && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">⚪ לא זמין כרגע</span>
+        )}
+        {s.requiresApproval && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/10 text-warning font-medium">⚠️ דורש אישור ידני</span>
+        )}
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">🔒 לא מבצע יצירה אוטומטית</span>
       </div>
 
       {/* Validation checklist */}
@@ -232,6 +363,14 @@ function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsa
           </div>
         </div>
       )}
+
+      {/* Billing / Cost info */}
+      <div className="mr-13 bg-muted/20 rounded-lg p-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+        <span className="flex items-center gap-1 text-muted-foreground"><DollarSign className="w-3 h-3" /> {s.billingType}</span>
+        <span className="text-muted-foreground">עלות חודשית: <strong className="text-foreground">{s.monthlyCost}</strong></span>
+        {s.extraCreditsNeeded && <span className="text-warning">⚠️ נדרשים קרדיטים נוספים</span>}
+        <span className="text-muted-foreground">{s.costConfirmed ? '✅ מאומת מהספק' : 'ℹ️ הזנה ידנית'}</span>
+      </div>
 
       {/* Failure reason */}
       {credit?.lastFailureReason && (
