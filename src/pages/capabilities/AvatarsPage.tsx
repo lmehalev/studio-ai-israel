@@ -220,6 +220,13 @@ export default function AvatarsManagePage() {
     setName(''); setPhotos([]); setStyle('professional headshot'); setExpression('neutral');
     setBaseAvatarId(''); setPreviewUrl(null); setPreviewHistory([]); setRefinePrompt('');
     setTextPrompt(''); setCreationMode('photo');
+    clearDraft();
+  };
+
+  // Go back from preview to edit form — keeps all references & settings
+  const handleBackToEdit = () => {
+    setPreviewUrl(null);
+    // Keep photos, style, expression, name, etc. intact
   };
 
   const handleDelete = async (id: string) => {
