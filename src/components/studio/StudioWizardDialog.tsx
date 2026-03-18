@@ -1166,8 +1166,7 @@ ${highlightOutputType === 'viral_short' ? 'הפק 3-6 סצנות קצרות (5-1
                 // Use first video or generate from images
                 let baseVideoUrl = videoFiles[0] || '';
                 if (!baseVideoUrl && imageFiles.length > 0) {
-                  // SAFETY: Use Krea (verified provider) instead of Runway (blocked).
-                  // Never call runway-video directly — it has a kill switch.
+                  // Use Krea as primary for highlight clips (cheaper than Runway fallback).
                   try {
                     const kreaResult = await kreaService.generateVideo(
                       prompt.slice(0, 500),
