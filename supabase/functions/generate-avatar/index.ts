@@ -109,7 +109,7 @@ const uploadDataUrlToStorage = async (dataUrl: string) => {
   return publicUrlData.publicUrl;
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

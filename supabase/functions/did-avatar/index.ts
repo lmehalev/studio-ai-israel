@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const DID_API_URL = "https://api.d-id.com";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
