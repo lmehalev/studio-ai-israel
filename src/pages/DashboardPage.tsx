@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { mockProjects, mockJobs } from '@/data/mockData';
+import { useState, useEffect } from 'react';
 import {
   Sparkles, FolderOpen, Zap, ImageIcon, Mic, UserCircle, FileText,
-  ArrowLeft
+  ArrowLeft, Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { projectService, type ProjectRow } from '@/services/projectService';
 
 const quickActions = [
   { label: 'יצירת תמונה', icon: ImageIcon, path: '/creative-studio', color: 'from-primary/20 to-primary/5' },
@@ -17,10 +18,20 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
-  const activeJobs = mockJobs.filter(j => j.status === 'בעיבוד' || j.status === 'ממתין').length;
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    projectService.getAll()
+      .then(setProjects)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const activeJobs = projects.filter(p => p.status === 'בעיבוד' || p.status === 'ממתין').length;
 
   const kpis = [
-    { label: 'פרויקטים', value: mockProjects.length, icon: FolderOpen, color: 'text-info' },
+    { label: 'פרויקטים', value: projects.length, icon: FolderOpen, color: 'text-info' },
     { label: 'משימות פעילות', value: activeJobs, icon: Zap, color: 'text-warning' },
   ];
 
@@ -45,7 +56,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{kpi.label}</p>
-                  <p className="text-3xl font-rubik font-bold mt-1">{kpi.value}</p>
+                  <p className="text-3xl font-rubik font-bold mt-1">{loading ? '—' : kpi.value}</p>
                 </div>
                 <div className={cn('w-12 h-12 rounded-xl bg-muted flex items-center justify-center', kpi.color)}>
                   <kpi.icon className="w-6 h-6" />
@@ -83,9 +94,13 @@ export default function DashboardPage() {
               הצג הכל <ArrowLeft className="w-3 h-3" />
             </Link>
           </div>
-          {mockProjects.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+            </div>
+          ) : projects.length > 0 ? (
             <div className="space-y-2">
-              {mockProjects.slice(0, 5).map(project => (
+              {projects.slice(0, 5).map(project => (
                 <Link
                   key={project.id}
                   to={`/projects/${project.id}`}
@@ -93,7 +108,7 @@ export default function DashboardPage() {
                 >
                   <div>
                     <p className="text-sm font-medium">{project.name}</p>
-                    <p className="text-xs text-muted-foreground">{project.avatarName} • {project.videoType}</p>
+                    <p className="text-xs text-muted-foreground">{project.avatar_name || '—'} • {project.video_type}</p>
                   </div>
                   <StatusBadge status={project.status} />
                 </Link>
