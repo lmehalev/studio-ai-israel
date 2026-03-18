@@ -28,8 +28,16 @@ async function ensureTable() {
           name text NOT NULL,
           audio_url text NOT NULL,
           type text NOT NULL DEFAULT 'recorded',
+          provider_voice_id text,
           created_at timestamptz NOT NULL DEFAULT now()
         );
+        -- Add provider_voice_id if missing (idempotent)
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='voices' AND column_name='provider_voice_id') THEN
+            ALTER TABLE public.voices ADD COLUMN provider_voice_id text;
+          END IF;
+        END $$;
+
         ALTER TABLE public.voices ENABLE ROW LEVEL SECURITY;
         DO $$ BEGIN
           IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voices' AND policyname = 'Allow public select on voices') THEN
@@ -40,6 +48,9 @@ async function ensureTable() {
           END IF;
           IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voices' AND policyname = 'Allow public delete on voices') THEN
             CREATE POLICY "Allow public delete on voices" ON public.voices FOR DELETE USING (true);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'voices' AND policyname = 'Allow public update on voices') THEN
+            CREATE POLICY "Allow public update on voices" ON public.voices FOR UPDATE USING (true) WITH CHECK (true);
           END IF;
         END $$;
 
@@ -117,6 +128,26 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from("voices")
         .insert({ name, audio_url, type: type || "recorded" })
+        .select()
+        .single();
+      if (error) throw error;
+      return new Response(JSON.stringify({ voice: data }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update_provider_voice_id") {
+      const { id, provider_voice_id } = payload;
+      if (!id || !provider_voice_id) {
+        return new Response(JSON.stringify({ error: "מזהה קול ו-provider_voice_id נדרשים" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data, error } = await supabase
+        .from("voices")
+        .update({ provider_voice_id })
+        .eq("id", id)
         .select()
         .single();
       if (error) throw error;
