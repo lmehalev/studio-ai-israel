@@ -358,7 +358,11 @@ export default function AvatarsManagePage() {
                   </button>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-2">
+                  <button onClick={handleBackToEdit}
+                    className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
+                    ← חזור לעריכה
+                  </button>
                   <button onClick={handleRegenerate} disabled={generating}
                     className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
                     {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}

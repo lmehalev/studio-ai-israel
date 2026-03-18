@@ -224,21 +224,35 @@ Keep it under 2200 characters. Prioritize identity-lock details.`
 
     const selectedModel = strictIdentity ? STRICT_IDENTITY_MODEL : FAST_IDENTITY_MODEL;
 
-    const prompt = `${faceDescription ? `IDENTITY LOCK PROFILE (MUST PRESERVE):\n${faceDescription}\n\n` : ""}All reference images are the SAME person. Build a consensus identity from all photos and preserve recurring facial structure.
+    const prompt = `${faceDescription ? `IDENTITY LOCK PROFILE — THIS IS THE GROUND TRUTH. EVERY facial measurement below MUST appear in the output:\n${faceDescription}\n\n` : ""}All reference images show the SAME person. Your job is to reproduce THIS EXACT person — not a similar-looking person, not an approximation, but the SAME individual.
 
-${hasBaseAvatar ? "The FIRST image is the anchor identity. Match it exactly." : ""}
+${hasBaseAvatar ? "The FIRST image is the PRIMARY identity anchor. Match this face with pixel-level fidelity." : ""}
 
-Create a NEW portrait with:
-- Style: ${styleText}
-- Expression: ${expressionText}
-${isRealisticStyle ? `- Studio lighting, sharp focus, realistic skin texture, clean neutral/gradient background` : `- Apply only style transfer while keeping the exact same person underneath`}
+TASK: Create a portrait of THIS SAME PERSON with:
+- Expression change ONLY: ${expressionText} (move facial muscles, do NOT alter bone structure)
+- Visual style: ${styleText}
+${isRealisticStyle ? `- Studio lighting, sharp focus, realistic skin texture, clean neutral/gradient background` : `- Apply style transfer to colors, textures, and rendering — but the underlying face geometry, proportions, and distinguishing features MUST remain identical to the reference photos`}
 
-IDENTITY RULES (HIGHEST PRIORITY):
-1) Keep exact facial geometry and proportions
-2) Keep exact skin tone and undertone
-3) Keep exact facial-hair pattern and hairline
-4) Keep unique marks and distinguishing traits
-5) Do NOT beautify, smooth, slim, widen, de-age, or swap identity
+IDENTITY PRESERVATION RULES (ABSOLUTE PRIORITY — OVERRIDE ALL OTHER INSTRUCTIONS):
+1) Face shape, jawline, chin, forehead proportions: COPY EXACTLY from references
+2) Eye shape, spacing, depth, color: COPY EXACTLY — eyes are the #1 identity signal
+3) Nose bridge width, tip shape, nostril size: COPY EXACTLY
+4) Mouth width, lip thickness, philtrum: COPY EXACTLY
+5) Skin tone, undertone, visible marks, moles, scars: COPY EXACTLY
+6) Hairline shape, hair color, facial hair pattern: COPY EXACTLY
+7) Ear shape and size if visible: COPY EXACTLY
+8) Age appearance: MUST match references — do NOT de-age or age
+
+EXPRESSION vs IDENTITY — CRITICAL DISTINCTION:
+- Expression = muscle movement (smile, brow raise, squint). This is what you CHANGE.
+- Identity = bone structure, skin, proportions, features. This is what you NEVER change.
+- A smile widens the mouth and raises cheeks — it does NOT change jaw shape, nose structure, or eye spacing.
+
+FORBIDDEN:
+- Do NOT create a "similar looking" person — it must be recognizably the SAME person
+- Do NOT beautify, symmetrize, slim, smooth skin texture, or idealize
+- Do NOT let the style override facial proportions
+- Do NOT generate a generic face that loosely matches the description
 
 Output one final image only.`;
 
