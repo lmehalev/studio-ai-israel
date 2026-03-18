@@ -106,7 +106,15 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [highlightStage, setHighlightStage] = useState('');
   const [highlightOutputType, setHighlightOutputType] = useState<string>('viral_short');
   interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-  interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
+  interface SavedVoice {
+    id: string;
+    name: string;
+    audio_url: string;
+    type: string;
+    provider_voice_id?: string | null;
+    is_verified?: boolean;
+    verification_status?: string;
+  }
   const [availableAvatars, setAvailableAvatars] = useState<SavedAvatar[]>([]);
   const [availableVoices, setAvailableVoices] = useState<SavedVoice[]>([]);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
@@ -1153,8 +1161,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   let audioUrl = '';
                   try {
                     const selectedVoice = availableVoices.find(v => v.id === selectedVoiceId);
-                    if (selectedVoice?.audio_url) {
-                      const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', { body: { audioUrl: selectedVoice.audio_url, scriptText: narrationText.slice(0, 4500) } });
+                    if (selectedVoiceId && selectedVoice && (!selectedVoice.provider_voice_id || !selectedVoice.is_verified)) {
+                      throw new Error('הקול שנבחר לא מאומת עדיין. בצע איפוס/שכפול ואימות בדף הקולות לפני שימוש ב-Video Wizard.');
+                    }
+
+                    if (selectedVoice?.provider_voice_id) {
+                      const { data: cloneData } = await supabase.functions.invoke('clone-voice-tts', {
+                        body: {
+                          providerVoiceId: selectedVoice.provider_voice_id,
+                          scriptText: narrationText.slice(0, 4500),
+                          language: 'he',
+                        },
+                      });
                       audioUrl = cloneData?.audioUrl || '';
                     } else {
                       audioUrl = await voiceService.generateAndUpload(narrationText.slice(0, 4500));

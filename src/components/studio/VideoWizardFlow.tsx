@@ -20,7 +20,15 @@ import { CostApprovalDialog, buildVideoGenerationEstimates, type CostEstimate } 
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 
 interface SavedAvatar { id: string; name: string; image_url: string; style: string; }
-interface SavedVoice { id: string; name: string; audio_url: string; type: string; }
+interface SavedVoice {
+  id: string;
+  name: string;
+  audio_url: string;
+  type: string;
+  provider_voice_id?: string | null;
+  is_verified?: boolean;
+  verification_status?: string;
+}
 
 interface ScriptScene {
   id: number;
@@ -347,7 +355,16 @@ export function VideoWizardFlow({
   };
 
   const selectedAvatars = avatars.filter(a => selectedAvatarIds.includes(a.id));
-  const selectedVoices = voices.filter(v => selectedVoiceIds.includes(v.id));
+  const eligibleVoices = voices.filter(v => Boolean(v.provider_voice_id && v.is_verified));
+  const selectedVoices = eligibleVoices.filter(v => selectedVoiceIds.includes(v.id));
+
+  useEffect(() => {
+    const eligibleIds = new Set(eligibleVoices.map((v) => v.id));
+    setSelectedVoiceIds((prev) => {
+      const filtered = prev.filter((id) => eligibleIds.has(id));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [eligibleVoices]);
 
   const toggleAvatar = (id: string) => {
     setSelectedAvatarIds(prev =>
@@ -356,6 +373,12 @@ export function VideoWizardFlow({
   };
 
   const toggleVoice = (id: string) => {
+    const voice = voices.find((v) => v.id === id);
+    if (!voice?.provider_voice_id || !voice?.is_verified) {
+      toast.error('הקול לא מאומת עדיין. בצע איפוס/שכפול ואימות בדף הקולות.');
+      return;
+    }
+
     setSelectedVoiceIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
@@ -821,10 +844,12 @@ export function VideoWizardFlow({
 
       if (shouldGenerateNarration && selectedVoice?.audio_url && narrationText) {
         try {
-          const cloneResult = await voiceCloneService.cloneAndSpeak(
-            selectedVoice.audio_url,
-            narrationText
-          );
+          const cloneResult = await voiceCloneService.cloneAndSpeak({
+            providerVoiceId: selectedVoice.provider_voice_id || undefined,
+            audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
+            scriptText: narrationText,
+            language: 'he',
+          });
           narrationAudioUrl = cloneResult.audioUrl;
           addDebugLog(runId, 'narration', 'success', 'Voice clone + TTS succeeded', { audioUrl: narrationAudioUrl });
           toast.success('הקריינות בקול שלך מוכנה!');
@@ -1116,7 +1141,12 @@ export function VideoWizardFlow({
         try {
           const selectedVoice = selectedVoices[0];
           if (selectedVoice?.audio_url) {
-            const cloneResult = await voiceCloneService.cloneAndSpeak(selectedVoice.audio_url, narrationText);
+            const cloneResult = await voiceCloneService.cloneAndSpeak({
+              providerVoiceId: selectedVoice.provider_voice_id || undefined,
+              audioUrl: selectedVoice.provider_voice_id ? undefined : selectedVoice.audio_url,
+              scriptText: narrationText,
+              language: 'he',
+            });
             narrationAudioUrl = cloneResult.audioUrl;
           } else {
             narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
