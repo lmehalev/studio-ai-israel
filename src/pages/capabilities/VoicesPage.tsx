@@ -254,7 +254,11 @@ export default function VoicesManagePage() {
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      setVoices(prev => [data.voice, ...prev]);
+
+      const savedVoice = data.voice as SavedVoice;
+      setVoices(prev => [savedVoice, ...prev]);
+      void hydrateTrainingAudits([savedVoice]);
+
       setCreating(false);
       setName('');
       toast.success('הקול נשמר בהצלחה!');
