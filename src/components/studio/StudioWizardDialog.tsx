@@ -12,7 +12,7 @@ import { useSpeechToText } from '@/hooks/use-speech-to-text';
 import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
-  avatarDbService, storageService, composeService, soundEffectService,
+  avatarDbService, storageService, composeService, soundEffectService, kreaService,
   type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
