@@ -294,6 +294,11 @@ export function VideoWizardFlow({
   const [dryRunMode, setDryRunMode] = useState(false);
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
 
+  // Cost approval gate
+  const [showCostApproval, setShowCostApproval] = useState(false);
+  const [costEstimates, setCostEstimates] = useState<CostEstimate[]>([]);
+  const [pendingAction, setPendingAction] = useState<'generate' | 'improve' | null>(null);
+
   // Emit session changes to parent for persistence
   useEffect(() => {
     if (!onSessionChange) return;
