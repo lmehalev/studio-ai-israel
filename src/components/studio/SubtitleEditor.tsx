@@ -1152,5 +1152,16 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     </div>
   );
 
-  return null;
+  return (
+    <>
+      {null}
+      <CostApprovalDialog
+        open={showCostApproval}
+        onOpenChange={setShowCostApproval}
+        estimates={buildSubtitleRenderEstimates()}
+        onApprove={() => { setShowCostApproval(false); handleRenderVideo(); }}
+        title="אישור הרכבת סרטון בתשלום"
+      />
+    </>
+  );
 }
