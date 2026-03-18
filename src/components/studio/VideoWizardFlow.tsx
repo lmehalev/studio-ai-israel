@@ -699,6 +699,7 @@ export function VideoWizardFlow({
       let forceKreaOnlyMode = false;
       let heygenFallbackEnabled = true;
       let kreaFallbackEnabled = true;
+      let runwayFallbackEnabled = false; // blocked by default — only enabled if credit check confirms
 
       setProgressStage('בודק זמינות ספקים וקרדיטים...');
       setRunwayProgress(2);
