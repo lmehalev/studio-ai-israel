@@ -744,6 +744,7 @@ export function VideoWizardFlow({
 
         heygenFallbackEnabled = heygenReady;
         kreaFallbackEnabled = kreaReady;
+        runwayFallbackEnabled = runwayReady && !runwayBlocked;
 
         addDebugLog(runId, 'provider-routing', 'info',
           `Readiness: Runway=${creditsMap.runway?.readiness || 'N/A'} | HeyGen=${creditsMap.heygen?.readiness || 'N/A'} | Krea=${creditsMap.krea?.readiness || 'N/A'}`,
