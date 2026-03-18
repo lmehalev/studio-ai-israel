@@ -215,57 +215,22 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
 }
 
 /* ════════════════════════════════════════════════════
-   Runway — auth validation + credit probe
+   Runway — HARD BLOCKED (emergency kill-switch)
+   No API calls are made. No generation probes.
+   Re-enable only after manual review.
    ════════════════════════════════════════════════════ */
-async function checkRunway(apiKey: string): Promise<ProviderStatus> {
-  const base: Partial<ProviderStatus> = { service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL, environment: "production" };
-  try {
-    const headers = { Authorization: `Bearer ${apiKey}`, "X-Runway-Version": RUNWAY_VERSION };
-
-    // Auth probe — dummy task lookup
-    const res = await fetch("https://api.dev.runwayml.com/v1/tasks/00000000-0000-0000-0000-000000000000", { headers });
-    if (res.status === 401 || res.status === 403) {
-      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
-    }
-
-    // Runway doesn't have a credit endpoint; try a minimal generation to probe credits
-    // NOTE: Runway app subscription (app.runwayml.com) is SEPARATE from API credits (api.dev.runwayml.com)
-    // A paid app subscription does NOT guarantee API credits — they must be purchased separately in the developer portal
-    let creditsAvailable: boolean | null = null;
-    let liveGenerationPassed: boolean | null = null;
-    let lastFailureReason: string | undefined;
-    try {
-      const probeRes = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
-        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gen4.5", promptText: "black screen", duration: 5, ratio: "1280:720" }),
-      });
-      if (probeRes.ok) {
-        const pd = await probeRes.json();
-        creditsAvailable = true;
-        liveGenerationPassed = !!pd?.id;
-        // Cancel the task to save credits
-        if (pd?.id) {
-          try { await fetch(`https://api.dev.runwayml.com/v1/tasks/${pd.id}/cancel`, { method: "POST", headers }); } catch {}
-        }
-      } else {
-        const errText = await parseErrorBody(probeRes);
-        lastFailureReason = `HTTP ${probeRes.status}: ${errText}`;
-        if (probeRes.status === 402 || errText.toLowerCase().includes("credit") || errText.toLowerCase().includes("insufficient") || errText.toLowerCase().includes("not enough")) {
-          creditsAvailable = false;
-          lastFailureReason = "מנוי האפליקציה (app.runwayml.com) פעיל, אבל אין קרדיטים ב-API המפתחים (api.dev.runwayml.com). יש לרכוש קרדיטי API בנפרד בפורטל המפתחים.";
-        } else if (probeRes.status === 422 || probeRes.status === 400) {
-          creditsAvailable = null;
-        }
-      }
-    } catch (e) { lastFailureReason = getErrorMessage(e); }
-
-    const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : liveGenerationPassed === true ? "generation_verified"
-      : creditsAvailable === true ? "credits_ok"
-      : "authenticated";
-
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used: 0, limit: creditsAvailable === false ? 0 : -1, plan: readiness === "blocked_credits" ? "מנוי אפליקציה פעיל — ללא קרדיטי API" : "API מחובר", canGenerate: readiness !== "blocked_credits" && readiness !== "auth_failed", statusLabel: readiness === "blocked_credits" ? "מנוי פעיל אבל ללא קרדיטי API" : hebrewLabels[readiness], lastFailureReason } as ProviderStatus;
-  } catch (e) { return toError("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, e); }
+async function checkRunway(_apiKey: string): Promise<ProviderStatus> {
+  return {
+    service: "runway", unit: "קרדיטים", dashboardUrl: RUNWAY_DASHBOARD_URL,
+    environment: "production",
+    readiness: "blocked_credits",
+    authValid: true, creditsAvailable: false, modelsAccessible: false,
+    liveGenerationPassed: null, used: 0, limit: 0,
+    plan: "🚫 חסום ידנית — Kill Switch פעיל",
+    canGenerate: false,
+    statusLabel: "🚫 חסום ידנית — Kill Switch פעיל",
+    lastFailureReason: "Runway חסום ידנית לאחר אירוע שריפת קרדיטים. ייפתח רק באישור ידני.",
+  } as ProviderStatus;
 }
 
 /* ════════════════════════════════════════════════════
