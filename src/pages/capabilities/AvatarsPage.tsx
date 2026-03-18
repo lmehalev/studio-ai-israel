@@ -1,6 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useState, useEffect, useRef } from 'react';
-import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare, Shield, ShieldOff, Columns2, AlertTriangle, Star, StarOff } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { UserCircle, Plus, Trash2, X, Loader2, Download, Sparkles, Save, RefreshCw, Wand2, FolderOpen, Camera, MessageSquare, Shield, ShieldOff, Columns2, AlertTriangle, Star, StarOff, FolderPlus, Pencil, FolderX, Check, GripVertical, MoveRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { avatarGenService, avatarDbService, imageService, storageService } from '@/services/creativeService';
@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { StoragePicker } from '@/components/StoragePicker';
 import { CameraCaptureButton } from '@/components/CameraCaptureButton';
+import { avatarFolderService, type AvatarFolder } from '@/services/avatarFolderService';
 
 const MAX_PHOTOS = 7;
 
@@ -18,6 +19,7 @@ interface SavedAvatar {
   style: string;
   source_photos: string[];
   created_at: string;
+  folder_id?: string | null;
 }
 
 const STYLE_OPTIONS = [
@@ -46,6 +48,7 @@ const EXPRESSION_OPTIONS = [
 ];
 
 type CreationMode = 'photo' | 'prompt';
+type FolderFilter = 'all' | 'unfiled' | string; // string = folder id
 
 export default function AvatarsManagePage() {
   const [avatars, setAvatars] = useState<SavedAvatar[]>([]);
@@ -86,7 +89,20 @@ export default function AvatarsManagePage() {
   const [compareMode, setCompareMode] = useState(false);
 
   // Variant deletion confirmation
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'variant' | 'avatar'; index?: number; id?: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'variant' | 'avatar' | 'folder'; index?: number; id?: string } | null>(null);
+
+  // === Folder state ===
+  const [folders, setFolders] = useState<AvatarFolder[]>([]);
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>('all');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [selectedAvatars, setSelectedAvatars] = useState<Set<string>>(new Set());
+  const [bulkMoveTarget, setBulkMoveTarget] = useState<string | null>(null);
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [foldersLoaded, setFoldersLoaded] = useState(false);
 
   // === Draft persistence (sessionStorage) ===
   const DRAFT_KEY = 'avatar-creation-draft';
@@ -126,7 +142,7 @@ export default function AvatarsManagePage() {
     if (creating) saveDraft();
   }, [name, photos, style, expression, creationMode, textPrompt, baseAvatarId, previewUrl, previewHistory, refinePrompt, creating, identityFidelity, cachedFaceDescription]);
 
-  useEffect(() => { loadAvatars(); loadDraft(); }, []);
+  useEffect(() => { loadAvatars(); loadFolders(); loadDraft(); }, []);
 
   useEffect(() => {
     setPhotos((prev) => {
@@ -140,15 +156,141 @@ export default function AvatarsManagePage() {
   }, [baseAvatarId, avatars]);
 
   const loadAvatars = async () => {
-    try { const list = await avatarDbService.list(); setAvatars(list); }
+    try {
+      const list = await avatarDbService.list();
+      // Also fetch folder_id from raw query
+      const db = supabase as any;
+      const { data } = await db.from('avatars').select('id, folder_id');
+      const folderMap: Record<string, string | null> = {};
+      if (data) data.forEach((r: any) => { folderMap[r.id] = r.folder_id; });
+      setAvatars(list.map((a: any) => ({ ...a, folder_id: folderMap[a.id] ?? null })));
+    }
     catch (e) { console.error('Failed to load avatars:', e); }
     finally { setLoading(false); }
+  };
+
+  const loadFolders = async () => {
+    try {
+      const list = await avatarFolderService.list();
+      setFolders(list);
+      setFoldersLoaded(true);
+    } catch (e) {
+      console.error('Failed to load folders (table may not exist yet):', e);
+      setFoldersLoaded(true);
+    }
   };
 
   const selectedBaseAvatar = avatars.find((a) => a.id === baseAvatarId);
   const baseReferences = selectedBaseAvatar ? [selectedBaseAvatar.image_url, ...(selectedBaseAvatar.source_photos ?? [])] : [];
   const mergedReferencePreview = Array.from(new Set([...baseReferences, ...photos])).slice(0, MAX_PHOTOS);
   const remainingPhotoSlots = Math.max(0, MAX_PHOTOS - mergedReferencePreview.length);
+
+  // === Folder management ===
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    try {
+      const folder = await avatarFolderService.create(newFolderName.trim());
+      setFolders(prev => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewFolderName('');
+      setCreatingFolder(false);
+      toast.success(`תיקייה "${folder.name}" נוצרה`);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה ביצירת תיקייה');
+    }
+  };
+
+  const handleRenameFolder = async (id: string) => {
+    if (!renameValue.trim()) return;
+    try {
+      const updated = await avatarFolderService.rename(id, renameValue.trim());
+      setFolders(prev => prev.map(f => f.id === id ? updated : f));
+      setRenamingFolder(null);
+      setRenameValue('');
+      toast.success('שם התיקייה עודכן');
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בשינוי שם');
+    }
+  };
+
+  const handleDeleteFolder = async (id: string) => {
+    try {
+      await avatarFolderService.remove(id);
+      setFolders(prev => prev.filter(f => f.id !== id));
+      // Update avatars that were in this folder
+      setAvatars(prev => prev.map(a => a.folder_id === id ? { ...a, folder_id: null } : a));
+      if (folderFilter === id) setFolderFilter('all');
+      toast.success('התיקייה נמחקה — האווטארים הועברו ל"ללא תיקייה"');
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה במחיקת תיקייה');
+    }
+  };
+
+  const handleMoveAvatar = async (avatarId: string, folderId: string | null) => {
+    try {
+      await avatarFolderService.moveAvatar(avatarId, folderId);
+      setAvatars(prev => prev.map(a => a.id === avatarId ? { ...a, folder_id: folderId } : a));
+      const folderName = folderId ? folders.find(f => f.id === folderId)?.name : 'ללא תיקייה';
+      toast.success(`אווטאר הועבר ל"${folderName}"`);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בהעברת אווטאר');
+    }
+  };
+
+  const handleBulkMove = async (folderId: string | null) => {
+    if (selectedAvatars.size === 0) return;
+    try {
+      const ids = Array.from(selectedAvatars);
+      await avatarFolderService.moveAvatarsBulk(ids, folderId);
+      setAvatars(prev => prev.map(a => ids.includes(a.id) ? { ...a, folder_id: folderId } : a));
+      const folderName = folderId ? folders.find(f => f.id === folderId)?.name : 'ללא תיקייה';
+      toast.success(`${ids.length} אווטארים הועברו ל"${folderName}"`);
+      setSelectedAvatars(new Set());
+      setShowBulkMove(false);
+    } catch (e: any) {
+      toast.error(e.message || 'שגיאה בהעברה');
+    }
+  };
+
+  const toggleSelectAvatar = (id: string) => {
+    setSelectedAvatars(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Drag & drop
+  const handleDragStart = (e: React.DragEvent, avatarId: string) => {
+    e.dataTransfer.setData('avatar-id', avatarId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolder(folderId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverFolder(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    setDragOverFolder(null);
+    const avatarId = e.dataTransfer.getData('avatar-id');
+    if (avatarId) handleMoveAvatar(avatarId, folderId);
+  };
+
+  // Filtered avatars
+  const filteredAvatars = avatars.filter(a => {
+    if (folderFilter === 'all') return true;
+    if (folderFilter === 'unfiled') return !a.folder_id;
+    return a.folder_id === folderFilter;
+  });
+
+  const getFolderCount = (folderId: string) => avatars.filter(a => a.folder_id === folderId).length;
+  const unfiledCount = avatars.filter(a => !a.folder_id).length;
 
   // Cost estimation
   const getEstimatedCost = (isExpressionOnly: boolean) => {
@@ -209,11 +351,9 @@ export default function AvatarsManagePage() {
           toast.error('לא התקבלה תמונה מהמודל. ודא שתמונות הרפרנס תקינות ונסה שוב.');
           return;
         }
-        // Check for identity drift warning
         if (result.identityDrift) {
           toast.warning('⚠️ סטייה בזהות — התוצר עלול שלא להיראות כמו האדם המקורי. מומלץ לייצר מחדש עם הגדרות חזקות יותר.', { duration: 8000 });
         }
-        // Cache the face description for future expression-only regeneration
         if (result.faceDescription) {
           setCachedFaceDescription(result.faceDescription);
         }
@@ -277,7 +417,7 @@ export default function AvatarsManagePage() {
         finalImageUrl = await storageService.upload(file);
       }
       const saved = await avatarDbService.save(name, finalImageUrl, style, mergedReferencePreview);
-      setAvatars((prev) => [saved, ...prev]);
+      setAvatars((prev) => [{ ...saved, folder_id: null }, ...prev]);
       resetForm();
       toast.success('האווטאר נשמר בהצלחה!');
     } catch (e: any) { toast.error(e.message); }
@@ -296,7 +436,6 @@ export default function AvatarsManagePage() {
   const handleBackToEdit = () => {
     setPreviewUrl(null);
     setCompareMode(false);
-    // Keep photos, style, expression, name, cachedFaceDescription intact
   };
 
   // === Variant management ===
@@ -312,7 +451,6 @@ export default function AvatarsManagePage() {
 
   const handleKeepOnlyThis = (index: number) => {
     const selectedUrl = previewHistory[index];
-    // Keep only selected + original (index 0)
     if (index === 0) {
       setPreviewHistory([selectedUrl]);
     } else {
@@ -337,7 +475,6 @@ export default function AvatarsManagePage() {
       if (previewUrl === removedUrl) {
         setPreviewUrl(newHistory.length > 0 ? newHistory[newHistory.length - 1] : null);
       }
-      // Try to remove from storage
       const match = removedUrl.match(/\/media\/(.+)$/);
       if (match) {
         supabase.storage.from('media').remove([match[1]]).catch(() => {});
@@ -345,6 +482,8 @@ export default function AvatarsManagePage() {
       toast.success('הגרסה הוסרה');
     } else if (deleteConfirm.type === 'avatar' && deleteConfirm.id) {
       handleDeleteAvatar(deleteConfirm.id);
+    } else if (deleteConfirm.type === 'folder' && deleteConfirm.id) {
+      handleDeleteFolder(deleteConfirm.id);
     }
     setDeleteConfirm(null);
   };
@@ -353,7 +492,6 @@ export default function AvatarsManagePage() {
     try {
       const avatar = avatars.find(a => a.id === id);
       await avatarDbService.remove(id);
-      // Only delete the generated image, never delete source_photos
       if (avatar?.image_url) {
         const match = avatar.image_url.match(/\/media\/(.+)$/);
         if (match) {
@@ -361,6 +499,7 @@ export default function AvatarsManagePage() {
         }
       }
       setAvatars((prev) => prev.filter((a) => a.id !== id));
+      setSelectedAvatars(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('האווטאר הוסר');
     } catch (e: any) { toast.error(e.message); }
   };
@@ -413,10 +552,113 @@ export default function AvatarsManagePage() {
             </h1>
             <p className="text-muted-foreground text-sm mt-1">צור ונהל אווטארים לשימוש בסרטונים ותמונות</p>
           </div>
-          <button onClick={() => setCreating(true)} className="gradient-gold text-primary-foreground px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" /> צור אווטאר חדש
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedAvatars.size > 0 && (
+              <button onClick={() => setShowBulkMove(true)} className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5">
+                <MoveRight className="w-4 h-4" /> העבר {selectedAvatars.size} נבחרים
+              </button>
+            )}
+            <button onClick={() => setCreatingFolder(true)} className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5">
+              <FolderPlus className="w-4 h-4" /> צור תיקייה
+            </button>
+            <button onClick={() => setCreating(true)} className="gradient-gold text-primary-foreground px-4 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
+              <Plus className="w-4 h-4" /> צור אווטאר חדש
+            </button>
+          </div>
         </div>
+
+        {/* Create folder inline */}
+        {creatingFolder && (
+          <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+            <FolderPlus className="w-5 h-5 text-primary flex-shrink-0" />
+            <input
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); } }}
+              placeholder="שם התיקייה..."
+              autoFocus
+              dir="rtl"
+              className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="px-3 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50">
+              צור
+            </button>
+            <button onClick={() => { setCreatingFolder(false); setNewFolderName(''); }} className="p-2 hover:bg-muted rounded-lg">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Folder tabs / filter bar */}
+        {(folders.length > 0 || foldersLoaded) && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setFolderFilter('all')}
+              onDragOver={e => e.preventDefault()}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${folderFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+            >
+              הכל ({avatars.length})
+            </button>
+            <button
+              onClick={() => setFolderFilter('unfiled')}
+              onDragOver={e => handleDragOver(e, null)}
+              onDragLeave={handleDragLeave}
+              onDrop={e => handleDrop(e, null)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${folderFilter === 'unfiled' ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+            >
+              ללא תיקייה ({unfiledCount})
+            </button>
+            {folders.map(folder => (
+              <div
+                key={folder.id}
+                className={`relative group/folder flex items-center gap-1 flex-shrink-0 ${dragOverFolder === folder.id ? 'ring-2 ring-primary rounded-lg' : ''}`}
+                onDragOver={e => handleDragOver(e, folder.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, folder.id)}
+              >
+                {renamingFolder === folder.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleRenameFolder(folder.id); if (e.key === 'Escape') setRenamingFolder(null); }}
+                      autoFocus
+                      dir="rtl"
+                      className="w-24 bg-muted/50 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                    <button onClick={() => handleRenameFolder(folder.id)} className="p-1 hover:bg-muted rounded">
+                      <Check className="w-3 h-3 text-primary" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setFolderFilter(folder.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${folderFilter === folder.id ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    {folder.name} ({getFolderCount(folder.id)})
+                  </button>
+                )}
+                {/* Folder context actions */}
+                {renamingFolder !== folder.id && (
+                  <div className="absolute -top-1 -left-1 flex gap-0.5 opacity-0 group-hover/folder:opacity-100 transition-opacity z-10">
+                    <button onClick={() => { setRenamingFolder(folder.id); setRenameValue(folder.name); }} className="w-4 h-4 bg-muted border border-border rounded-full flex items-center justify-center" title="שנה שם">
+                      <Pencil className="w-2 h-2" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm({ type: 'folder', id: folder.id })} className="w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center" title="מחק תיקייה">
+                      <X className="w-2 h-2" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Drag hint */}
+        {folders.length > 0 && !creating && avatars.length > 0 && (
+          <p className="text-[10px] text-muted-foreground">💡 גרור אווטאר על תיקייה כדי להעביר אותו, או סמן כמה ולחץ "העבר"</p>
+        )}
 
         {creating && (
           <div className="bg-card border border-border rounded-xl p-6 space-y-5">
@@ -430,7 +672,6 @@ export default function AvatarsManagePage() {
             {/* ===== PREVIEW MODE ===== */}
             {previewUrl ? (
               <div className="space-y-4">
-                {/* Variant thumbnails with delete + primary controls */}
                 {previewHistory.length > 1 && (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">גרסאות ({previewHistory.length})</p>
@@ -441,11 +682,9 @@ export default function AvatarsManagePage() {
                             className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${previewUrl === url ? 'border-primary shadow-[0_0_12px_hsl(var(--primary)/0.4)]' : 'border-border/50 opacity-60 hover:opacity-100'}`}>
                             <img src={url} alt={`גרסה ${i + 1}`} className="w-full h-full object-cover" />
                           </button>
-                          {/* Label: מקור for first */}
                           <span className={`absolute -bottom-1 inset-x-0 text-center text-[8px] font-medium ${i === 0 ? 'text-primary' : 'text-muted-foreground'}`}>
                             {i === 0 ? 'מקור' : `v${i + 1}`}
                           </span>
-                          {/* Delete button (not on original if more exist) */}
                           {(i > 0 || previewHistory.length === 1) && (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteVariant(i); }}
@@ -455,7 +694,6 @@ export default function AvatarsManagePage() {
                               <X className="w-2.5 h-2.5" />
                             </button>
                           )}
-                          {/* Set as primary */}
                           {previewUrl !== url && (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleSetPrimary(i); }}
@@ -468,7 +706,6 @@ export default function AvatarsManagePage() {
                         </div>
                       ))}
                     </div>
-                    {/* Keep only this */}
                     {previewHistory.length > 2 && (
                       <button
                         onClick={() => {
@@ -507,7 +744,6 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                {/* Compare button */}
                 {previewHistory.length > 1 && !compareMode && (
                   <button onClick={() => setCompareMode(true)} className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-border rounded-lg text-xs hover:bg-muted/60 transition-colors text-muted-foreground">
                     <Columns2 className="w-3.5 h-3.5" /> השווה וריאנטים
@@ -655,7 +891,6 @@ export default function AvatarsManagePage() {
                   </div>
                 )}
 
-                {/* Warning when identity fidelity is OFF */}
                 {creationMode === 'photo' && !identityFidelity && (
                   <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -691,7 +926,7 @@ export default function AvatarsManagePage() {
                   </div>
                 </div>
 
-                {/* Photos section - only in photo mode */}
+                {/* Photos section */}
                 {creationMode === 'photo' && (
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -781,37 +1016,65 @@ export default function AvatarsManagePage() {
             <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin opacity-30" />
             <p className="text-sm">טוען אווטארים...</p>
           </div>
-        ) : avatars.length === 0 && !creating ? (
+        ) : filteredAvatars.length === 0 && !creating ? (
           <div className="text-center py-16 text-muted-foreground">
             <UserCircle className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium">אין אווטארים עדיין</p>
-            <p className="text-sm mt-1">צור אווטאר ראשון כדי להשתמש בו בסרטונים</p>
+            <p className="text-lg font-medium">
+              {folderFilter === 'all' ? 'אין אווטארים עדיין' : folderFilter === 'unfiled' ? 'אין אווטארים ללא תיקייה' : 'אין אווטארים בתיקייה זו'}
+            </p>
+            <p className="text-sm mt-1">
+              {folderFilter === 'all' ? 'צור אווטאר ראשון כדי להשתמש בו בסרטונים' : 'גרור אווטארים לכאן או השתמש ב"העבר"'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {avatars.map((avatar) => (
-              <div key={avatar.id} className="bg-card border border-border rounded-xl overflow-hidden group relative">
-                <div className="aspect-square">
-                  <img src={avatar.image_url} alt={avatar.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="p-3">
-                  <p className="font-semibold text-sm">{avatar.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{STYLE_OPTIONS.find((s) => s.value === avatar.style)?.label || avatar.style}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{new Date(avatar.created_at).toLocaleDateString('he-IL')}</p>
-                </div>
-                <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => startVariationFromAvatar(avatar)} className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="צור וריאציה">
-                    <Sparkles className="w-3.5 h-3.5" />
+            {filteredAvatars.map((avatar) => {
+              const isSelected = selectedAvatars.has(avatar.id);
+              const folderName = avatar.folder_id ? folders.find(f => f.id === avatar.folder_id)?.name : null;
+              return (
+                <div
+                  key={avatar.id}
+                  draggable
+                  onDragStart={e => handleDragStart(e, avatar.id)}
+                  className={`bg-card border rounded-xl overflow-hidden group relative cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
+                >
+                  {/* Selection checkbox */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSelectAvatar(avatar.id); }}
+                    className={`absolute top-2 right-2 z-10 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-border/60 bg-background/60 opacity-0 group-hover:opacity-100'}`}
+                  >
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
                   </button>
-                  <button onClick={async () => { try { const res = await fetch(avatar.image_url); const blob = await res.blob(); const blobUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = blobUrl; link.download = `${avatar.name}-avatar.${avatar.image_url.includes('.png') ? 'png' : 'jpg'}`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(blobUrl); toast.success('ההורדה החלה'); } catch { window.open(avatar.image_url, '_blank'); } }} className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => setDeleteConfirm({ type: 'avatar', id: avatar.id })} className="w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center" title="מחק">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+
+                  <div className="aspect-square">
+                    <img src={avatar.image_url} alt={avatar.name} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="p-3">
+                    <p className="font-semibold text-sm">{avatar.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{STYLE_OPTIONS.find((s) => s.value === avatar.style)?.label || avatar.style}</p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-xs text-muted-foreground">{new Date(avatar.created_at).toLocaleDateString('he-IL')}</p>
+                      {folderName && (
+                        <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                          <FolderOpen className="w-2.5 h-2.5" /> {folderName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startVariationFromAvatar(avatar)} className="w-7 h-7 bg-accent text-accent-foreground rounded-full flex items-center justify-center" title="צור וריאציה">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={async () => { try { const res = await fetch(avatar.image_url); const blob = await res.blob(); const blobUrl = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = blobUrl; link.download = `${avatar.name}-avatar.${avatar.image_url.includes('.png') ? 'png' : 'jpg'}`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(blobUrl); toast.success('ההורדה החלה'); } catch { window.open(avatar.image_url, '_blank'); } }} className="w-7 h-7 bg-primary text-primary-foreground rounded-full flex items-center justify-center" title="הורד">
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm({ type: 'avatar', id: avatar.id })} className="w-7 h-7 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center" title="מחק">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -825,17 +1088,48 @@ export default function AvatarsManagePage() {
         multiple
       />
 
+      {/* Bulk move dialog */}
+      {showBulkMove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4" dir="rtl">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <MoveRight className="w-5 h-5 text-primary" />
+              העברת {selectedAvatars.size} אווטארים
+            </h3>
+            <p className="text-sm text-muted-foreground">בחר תיקייה יעד:</p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              <button onClick={() => handleBulkMove(null)}
+                className="w-full text-right px-3 py-2 rounded-lg border border-border hover:bg-muted text-sm">
+                📂 ללא תיקייה
+              </button>
+              {folders.map(f => (
+                <button key={f.id} onClick={() => handleBulkMove(f.id)}
+                  className="w-full text-right px-3 py-2 rounded-lg border border-border hover:bg-muted text-sm flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-primary" /> {f.name} ({getFolderCount(f.id)})
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { setShowBulkMove(false); setSelectedAvatars(new Set()); }}
+              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4" dir="rtl">
             <h3 className="font-semibold text-lg flex items-center gap-2">
               <Trash2 className="w-5 h-5 text-destructive" />
-              {deleteConfirm.type === 'avatar' ? 'מחיקת אווטאר' : 'מחיקת גרסה'}
+              {deleteConfirm.type === 'avatar' ? 'מחיקת אווטאר' : deleteConfirm.type === 'folder' ? 'מחיקת תיקייה' : 'מחיקת גרסה'}
             </h3>
             <p className="text-sm text-muted-foreground">
               {deleteConfirm.type === 'avatar'
                 ? 'האווטאר, כולל התמונה שנוצרה, יימחק לצמיתות. תמונות הרפרנס לא יימחקו.'
+                : deleteConfirm.type === 'folder'
+                ? 'התיקייה תימחק. האווטארים שבתוכה יועברו ל"ללא תיקייה" ולא יימחקו.'
                 : 'הגרסה תימחק מהרשימה ומהאחסון. לא ניתן לשחזר.'
               }
             </p>
@@ -856,7 +1150,7 @@ export default function AvatarsManagePage() {
       {/* Cost Approval Dialog */}
       {costApprovalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full mx-4 space-y-4">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full mx-4 space-y-4" dir="rtl">
             <h3 className="font-semibold text-lg flex items-center gap-2">💰 אישור יצירת אווטאר</h3>
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm space-y-2">
               <p><span className="font-medium">ספק:</span> Lovable AI (Gemini)</p>
