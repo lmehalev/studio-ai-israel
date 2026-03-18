@@ -131,23 +131,10 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed, lastFailureReason: "כל נקודות האימות נכשלו" } as ProviderStatus;
     }
 
-    // 4. Micro live test — 1 word TTS (~5 chars)
-    let liveGenerationPassed: boolean | null = null;
-    if (creditsAvailable !== false) {
-      try {
-        const ttsRes = await fetch("https://api.elevenlabs.io/v1/text-to-speech/onwK4e9ZLuTAKqWW03F9?output_format=mp3_22050_32", {
-          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "בדיקה", model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.5 } }),
-        });
-        liveGenerationPassed = ttsRes.ok && (ttsRes.headers.get("content-type")?.includes("audio") ?? false);
-        if (!ttsRes.ok) {
-          const errBody = await parseErrorBody(ttsRes);
-          if (ttsRes.status === 402 || errBody.toLowerCase().includes("quota") || errBody.toLowerCase().includes("limit")) {
-            creditsAvailable = false;
-          }
-        }
-      } catch { liveGenerationPassed = false; }
-    }
+    // SAFETY: No live generation probe for ElevenLabs either.
+    // The micro TTS test (~5 chars) was consuming quota on every dashboard refresh.
+    // Auth + subscription check is sufficient for readiness determination.
+    let liveGenerationPassed: boolean | null = authConfirmed ? true : null;
 
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
       : liveGenerationPassed === true ? "generation_verified"
