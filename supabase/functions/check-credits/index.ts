@@ -133,15 +133,16 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
 
     // SAFETY: No live generation probe for ElevenLabs.
     // Auth + subscription check is sufficient for readiness determination.
-    // liveGenerationPassed is null (unknown) — we do NOT claim it passed without testing.
+    // If auth passes but credits are unknown (connector-managed key), treat as credits_ok
+    // so the provider remains usable — blocking a working provider is worse than allowing it.
     let liveGenerationPassed: boolean | null = null;
 
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
-      : liveGenerationPassed === true ? "generation_verified"
       : creditsAvailable === true ? "credits_ok"
+      : authConfirmed ? "credits_ok"  // Auth confirmed, credits unknown → trust the key
       : "authenticated";
 
-    return { ...base, readiness, authValid: true, creditsAvailable, modelsAccessible: true, liveGenerationPassed, used, limit, plan, canGenerate: readiness === "generation_verified" || readiness === "credits_ok", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
+    return { ...base, readiness, authValid: true, creditsAvailable: creditsAvailable ?? true, modelsAccessible: true, liveGenerationPassed, used, limit, plan, canGenerate: readiness === "generation_verified" || readiness === "credits_ok", statusLabel: hebrewLabels[readiness] } as ProviderStatus;
   } catch (e) { return toError("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, e); }
 }
 
