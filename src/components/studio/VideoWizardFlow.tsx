@@ -1091,10 +1091,27 @@ export function VideoWizardFlow({
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
       const sceneVideoUrls: string[] = [];
 
-      // FIX: Use the same fallback chain as main generation instead of Runway-only
+      // SAFETY: Runway is blocked by kill switch — never attempt it in improve flow.
+      // Must run credit check first to determine which providers are available.
       let heygenFallbackEnabled = true;
       let kreaFallbackEnabled = true;
-      let runwayBlocked = false;
+      let runwayBlocked = true; // Default blocked — only enable if credit check confirms available
+
+      try {
+        const { data: creditsData } = await withTimeout(
+          supabase.functions.invoke('check-credits', { body: {} }),
+          CREDITS_CHECK_TIMEOUT_MS,
+          'בדיקת קרדיטים timeout'
+        );
+        const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
+        for (const c of creditItems) {
+          if (c.service === 'runway' && c.canGenerate && c.readiness === 'generation_verified') runwayBlocked = false;
+          if (c.service === 'heygen' && !c.canGenerate) heygenFallbackEnabled = false;
+          if (c.service === 'krea' && !c.canGenerate) kreaFallbackEnabled = false;
+        }
+      } catch {
+        // Credit check failed — keep runway blocked, allow others
+      }
 
       for (let i = 0; i < totalScenes; i++) {
         const scene = workingScenes[i];

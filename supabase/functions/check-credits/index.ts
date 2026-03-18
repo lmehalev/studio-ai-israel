@@ -131,10 +131,10 @@ async function checkElevenLabs(apiKey: string): Promise<ProviderStatus> {
       return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed, lastFailureReason: "כל נקודות האימות נכשלו" } as ProviderStatus;
     }
 
-    // SAFETY: No live generation probe for ElevenLabs either.
-    // The micro TTS test (~5 chars) was consuming quota on every dashboard refresh.
+    // SAFETY: No live generation probe for ElevenLabs.
     // Auth + subscription check is sufficient for readiness determination.
-    let liveGenerationPassed: boolean | null = authConfirmed ? true : null;
+    // liveGenerationPassed is null (unknown) — we do NOT claim it passed without testing.
+    let liveGenerationPassed: boolean | null = null;
 
     const readiness: ReadinessLevel = creditsAvailable === false ? "blocked_credits"
       : liveGenerationPassed === true ? "generation_verified"
