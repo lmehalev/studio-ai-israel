@@ -193,14 +193,23 @@ Keep it under 2200 characters. Prioritize identity-lock details.`
             },
           ],
         }),
-      });
+        });
 
-      if (analysisResponse.ok) {
+        if (attempt.ok) {
+          analysisResponse = attempt;
+          break;
+        }
+        const errText = await attempt.text();
+        console.warn(`Avatar analysis model ${model} failed: ${attempt.status} ${errText.slice(0, 200)}`);
+        if (attempt.status !== 402 && attempt.status < 500) break;
+      }
+
+      if (analysisResponse && analysisResponse.ok) {
         const analysisData = await analysisResponse.json();
         faceDescription = analysisData.choices?.[0]?.message?.content || "";
         console.log("Face analysis complete:", faceDescription.length, "chars");
       } else {
-        console.error("Face analysis failed:", analysisResponse.status);
+        console.error("Face analysis failed: all models exhausted");
       }
     } catch (e) {
       console.error("Face analysis error:", e);
