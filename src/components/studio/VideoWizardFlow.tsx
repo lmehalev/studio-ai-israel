@@ -1108,7 +1108,7 @@ export function VideoWizardFlow({
         );
         const creditItems = Array.isArray((creditsData as any)?.credits) ? (creditsData as any).credits : [];
         for (const c of creditItems) {
-          if (c.service === 'runway' && c.canGenerate && c.readiness === 'generation_verified') runwayBlocked = false;
+          if (c.service === 'runway' && c.canGenerate && (c.readiness === 'generation_verified' || c.readiness === 'credits_ok')) runwayBlocked = false;
           if (c.service === 'heygen' && !c.canGenerate) heygenFallbackEnabled = false;
           if (c.service === 'krea' && !c.canGenerate) kreaFallbackEnabled = false;
         }
