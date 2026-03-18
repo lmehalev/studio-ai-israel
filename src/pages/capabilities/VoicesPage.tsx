@@ -20,6 +20,7 @@ interface SavedVoice {
   verification_status?: string;
   verification_updated_at?: string | null;
   verification_sample_url?: string | null;
+  verification_selected_model?: string | null;
   training_audio_file_name?: string | null;
 }
 
@@ -39,6 +40,20 @@ interface VoiceGeneration {
   language_code_used?: string | null;
   voice_settings_used?: Record<string, unknown> | null;
   is_verification_record?: boolean;
+}
+
+interface TrainingAudioAudit {
+  url: string;
+  sizeBytes: number | null;
+  durationSec: number | null;
+  contentType: string | null;
+  codec: string | null;
+}
+
+interface VerificationABSamples {
+  optionAUrl: string;
+  optionBUrl: string;
+  providerVoiceId: string;
 }
 
 // Vibe/Delivery presets
