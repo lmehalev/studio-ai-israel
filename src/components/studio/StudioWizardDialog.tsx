@@ -305,6 +305,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setImageRefPhotos([]);
         setEditHistory([]);
         setEditPrompt('');
+        setEditRefPhotos([]);
         setImportUrl('');
         setImportType(null);
         setRunwayImageUrl('');
