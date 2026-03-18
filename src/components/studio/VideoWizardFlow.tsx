@@ -1882,7 +1882,7 @@ export function VideoWizardFlow({
                 dir="rtl"
                 className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
-              <button onClick={handleImproveVideo} disabled={isImproving || !improvePrompt.trim()}
+              <button onClick={requestImproveVideo} disabled={isImproving || !improvePrompt.trim()}
                 className="px-4 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5">
                 {isImproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                 שפר
