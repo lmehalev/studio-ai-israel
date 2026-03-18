@@ -198,7 +198,7 @@ async function checkRunway(apiKey: string): Promise<ProviderStatus> {
     try {
       const probeRes = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
         method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gen4_turbo", prompt: "black screen", duration: 5, ratio: "1280:768" }),
+        body: JSON.stringify({ model: "gen3a_turbo", prompt: "black screen", duration: 5, ratio: "1280:768" }),
       });
       if (probeRes.ok) {
         const pd = await probeRes.json();
