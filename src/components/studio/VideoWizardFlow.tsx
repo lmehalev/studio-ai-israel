@@ -835,7 +835,7 @@ export function VideoWizardFlow({
 
       // Runway starts blocked; only unblocked if credit check confirmed it's ready.
       // This ensures no Runway calls if credit check times out or fails.
-      let runwayBlocked = !(isGenerationReady?.('runway') ?? false) || (isBlocked?.('runway') ?? true);
+      let runwayBlocked = !runwayFallbackEnabled;
 
       // Universal fallback function — tries all available providers in order
       const generateSceneWithFallbacks = async (
