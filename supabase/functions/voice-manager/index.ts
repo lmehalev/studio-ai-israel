@@ -13,8 +13,13 @@ function getSupabase() {
   );
 }
 
-// Tables already exist in DB — no ensureTable needed
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
+  try {
+    const supabase = getSupabase();
     const { action, ...payload } = await req.json();
 
     // === VOICES CRUD ===
