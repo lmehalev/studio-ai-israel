@@ -709,85 +709,15 @@ export function VideoWizardFlow({
 
       const normalizedAvatarUrl = avatarImage ? await normalizeAvatarForVideo(avatarImage) : null;
 
-      // HeyGen: prefer talking_photo with user's avatar image (stock avatar IDs are unreliable)
-      const createHeygenSceneClip = async (sceneText: string, sceneIdx: number, audioUrl?: string): Promise<string> => {
-        const createFromPhoto = async (photoUrl: string, includeAudio: boolean): Promise<string> => {
-          const result = await heygenExtendedService.createPhotoAvatarVideo(
-            photoUrl,
-            sceneText,
-            undefined,
-            includeAudio ? audioUrl : undefined,
-          );
-          if (!result?.videoId) throw new Error('HeyGen לא החזיר מזהה וידאו');
-          return waitForHeygenResult(result.videoId, (p) => updateSceneProgress(sceneIdx, p));
-        };
+      // Wrap shared helpers with local progress tracking
+      const createHeygenSceneClip = (sceneText: string, sceneIdx: number, audioUrl?: string) =>
+        createHeygenSceneClipShared(sceneText, sceneIdx, audioUrl, normalizedAvatarUrl, (p) => updateSceneProgress(sceneIdx, p));
 
-        const primaryPhotoUrl = normalizedAvatarUrl || (await (async () => {
-          const { data: imgData } = await supabase.functions.invoke('generate-image', {
-            body: { prompt: 'Professional presenter headshot, studio lighting, looking at camera, neutral background' },
-          });
-          return imgData?.imageUrl as string | undefined;
-        })());
+      const createAIImageToVideoClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
+        createAIImageToVideoClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
-        if (!primaryPhotoUrl) {
-          throw new Error('אין תמונת אווטאר זמינה עבור HeyGen');
-        }
-
-        try {
-          return await createFromPhoto(primaryPhotoUrl, Boolean(audioUrl));
-        } catch (firstErr) {
-          if (!audioUrl) throw firstErr;
-          return createFromPhoto(primaryPhotoUrl, false);
-        }
-      };
-
-      // Generate a scene image via AI, then animate it with Krea image-to-video
-      const createAIImageToVideoClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
-        updateSceneProgress(sceneIdx, 5);
-        // Enhanced prompt for cinematic still image
-        const imagePrompt = `Ultra high quality cinematic still frame, 8K resolution, professional photography. ${scenePrompt}. Photorealistic, dramatic lighting, shallow depth of field, movie-quality composition. NO text, NO watermarks, NO UI elements.`;
-        
-        // Step 1: Generate a still image via Lovable AI (Gemini image)
-        const { data: imgData, error: imgError } = await supabase.functions.invoke('generate-image', {
-          body: { prompt: imagePrompt },
-        });
-        if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
-        updateSceneProgress(sceneIdx, 40);
-
-        // Step 2: Try Krea image-to-video, if it fails just return the image URL
-        // (Shotstack can still use a still image as a video clip)
-        try {
-          const kreaResult = await kreaService.generateVideo(scenePrompt, {
-            model: 'kling-2.5',
-            width: 1280,
-            height: 720,
-            duration: Math.max(5, Math.min(10, sceneDuration)),
-            imageUrl: imgData.imageUrl,
-          });
-          updateSceneProgress(sceneIdx, 100);
-          if (kreaResult?.videoUrl) return kreaResult.videoUrl;
-        } catch (kreaAnimErr) {
-          console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
-        }
-        
-        // Fallback: use the still image directly — Shotstack handles images as video clips
-        updateSceneProgress(sceneIdx, 100);
-        return imgData.imageUrl;
-      };
-
-      const createKreaSceneClip = async (scenePrompt: string, sceneIdx: number, sceneDuration: number): Promise<string> => {
-        updateSceneProgress(sceneIdx, 5);
-        const kreaResult = await kreaService.generateVideo(scenePrompt, {
-          model: 'kling-2.5',
-          width: 1280,
-          height: 720,
-          duration: Math.max(5, Math.min(10, sceneDuration)),
-          imageUrl: uploadedImages[0],
-        });
-        updateSceneProgress(sceneIdx, 100);
-        if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
-        return kreaResult.videoUrl;
-      };
+      const createKreaSceneClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
+        createKreaSceneClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
       let runwayBlocked = forceDidOnlyMode || forceKreaOnlyMode;
 
