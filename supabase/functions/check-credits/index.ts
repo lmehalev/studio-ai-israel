@@ -180,7 +180,12 @@ async function checkHeyGen(apiKey: string): Promise<ProviderStatus> {
       const quotaRes = await fetch("https://api.heygen.com/v1/user/remaining_quota", { headers });
       if (quotaRes.ok) {
         const qd = await quotaRes.json();
-        remaining = qd?.data?.remaining_quota ?? qd?.remaining_quota ?? -1;
+        remaining = qd?.data?.remaining_quota ?? qd?.data?.details?.remaining_quota ?? qd?.remaining_quota ?? -1;
+        // If the response has details.api or details.plan_credit, sum them as remaining
+        if (remaining < 0 && qd?.data?.details) {
+          const d = qd.data.details;
+          remaining = (d.api ?? 0) + (d.plan_credit ?? 0);
+        }
         if (typeof remaining === "number" && remaining >= 0) {
           creditsAvailable = remaining > 0;
           plan = `Creator — ${remaining} קרדיטים`;
