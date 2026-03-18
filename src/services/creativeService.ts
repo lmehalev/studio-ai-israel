@@ -179,12 +179,39 @@ export const avatarDbService = {
 
 // ====== Voice Clone + TTS Service ======
 export const voiceCloneService = {
-  cloneAndSpeak: async (audioUrl: string, scriptText: string): Promise<{ audioUrl: string; voiceId: string }> => {
+  cloneAndSpeak: async (params: {
+    scriptText: string;
+    audioUrl?: string;
+    providerVoiceId?: string;
+    language?: 'he' | 'en' | 'ar';
+    voiceSettings?: Record<string, unknown>;
+    trainingAudioDurationSec?: number;
+    trainingAudioSizeBytes?: number;
+    trainingAudioFileName?: string;
+  }): Promise<{ audioUrl: string; voiceId: string; clonedFresh?: boolean; modelId?: string; language?: string; voiceSettings?: Record<string, unknown> }> => {
     return withTimeout(
       (async () => {
+        const body: Record<string, unknown> = {
+          scriptText: params.scriptText,
+          language: params.language,
+          voiceSettings: params.voiceSettings,
+          trainingAudioDurationSec: params.trainingAudioDurationSec,
+          trainingAudioSizeBytes: params.trainingAudioSizeBytes,
+          trainingAudioFileName: params.trainingAudioFileName,
+        };
+
+        if (params.providerVoiceId) {
+          body.providerVoiceId = params.providerVoiceId;
+        } else if (params.audioUrl) {
+          body.audioUrl = params.audioUrl;
+        } else {
+          throw new Error('יש לספק מזהה קול ספק או קובץ אימון');
+        }
+
         const { data, error } = await supabase.functions.invoke("clone-voice-tts", {
-          body: { audioUrl, scriptText },
+          body,
         });
+
         if (error) throw new Error(error.message || "שגיאה בשכפול קול");
         if (data?.error) throw new Error(data.error);
         return data;
