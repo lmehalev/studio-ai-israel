@@ -1134,8 +1134,34 @@ export function VideoWizardFlow({
 
         let clipUrl: string | null = null;
 
-        // Provider 1: Runway
-        if (!runwayBlocked) {
+        // Provider 1: HeyGen (primary)
+        if (!clipUrl && heygenFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createHeygenSceneClipShared(scene.spokenText || scene.title, i, narrationAudioUrl, normalizedAvatarUrl, () => {}),
+              120000, 'HeyGen timeout'
+            );
+          } catch (heygenErr: any) {
+            errors.push(`HeyGen: ${heygenErr?.message || ''}`);
+            if (isHeygenUnavailableErrorMessage(heygenErr?.message)) heygenFallbackEnabled = false;
+          }
+        }
+
+        // Provider 2: Krea
+        if (!clipUrl && kreaFallbackEnabled) {
+          try {
+            clipUrl = await withTimeout(
+              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}),
+              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
+            );
+          } catch (kreaErr: any) {
+            errors.push(`Krea: ${kreaErr?.message || ''}`);
+            if (isKreaCreditsErrorMessage(kreaErr?.message)) kreaFallbackEnabled = false;
+          }
+        }
+
+        // Provider 3: Runway (fallback only)
+        if (!clipUrl && !runwayBlocked) {
           try {
             if (normalizedAvatarUrl && i === 0) {
               const taskData = await withTimeout(
@@ -1154,32 +1180,6 @@ export function VideoWizardFlow({
             const msg = runwayErr?.message || '';
             errors.push(`Runway: ${msg}`);
             if (isRunwayCreditsErrorMessage(msg)) runwayBlocked = true;
-          }
-        }
-
-        // Provider 2: HeyGen
-        if (!clipUrl && heygenFallbackEnabled) {
-          try {
-            clipUrl = await withTimeout(
-              createHeygenSceneClipShared(scene.spokenText || scene.title, i, narrationAudioUrl, normalizedAvatarUrl, () => {}),
-              120000, 'HeyGen timeout'
-            );
-          } catch (heygenErr: any) {
-            errors.push(`HeyGen: ${heygenErr?.message || ''}`);
-            if (isHeygenUnavailableErrorMessage(heygenErr?.message)) heygenFallbackEnabled = false;
-          }
-        }
-
-        // Provider 3: Krea
-        if (!clipUrl && kreaFallbackEnabled) {
-          try {
-            clipUrl = await withTimeout(
-              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}),
-              KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
-            );
-          } catch (kreaErr: any) {
-            errors.push(`Krea: ${kreaErr?.message || ''}`);
-            if (isKreaCreditsErrorMessage(kreaErr?.message)) kreaFallbackEnabled = false;
           }
         }
 
