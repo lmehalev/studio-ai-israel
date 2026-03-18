@@ -218,7 +218,7 @@ export function ConnectionsTab() {
             <span>✅ לא מבצע יצירה בריענון</span>
             <span>✅ לא מבצע בדיקות יקרות</span>
             <span>✅ הגנה מפני כפילויות</span>
-            <span>✅ Runway חסום בשרת</span>
+            <span>✅ Runway גיבוי בלבד</span>
           </div>
         </div>
       </div>
