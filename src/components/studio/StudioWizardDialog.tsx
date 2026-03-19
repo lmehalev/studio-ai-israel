@@ -143,6 +143,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // Carousel mode state
   const [imageMode, setImageMode] = useState<'single' | 'carousel'>('single');
   const [showCarousel, setShowCarousel] = useState(false);
+
+  const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
   // Inline brand selector state (for result view when no brand pre-selected)
