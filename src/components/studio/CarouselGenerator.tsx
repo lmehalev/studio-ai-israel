@@ -602,11 +602,29 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
         </div>
 
         {activeBrand && (
-          <button onClick={handleSaveAll} disabled={savingOutput}
-            className="w-full gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
-            {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {savingOutput ? 'שומר...' : `שמור ${generatedSlides.length} תמונות בפרויקט`}
-          </button>
+          <div className="space-y-1.5">
+            <button onClick={() => handleSaveAll()} disabled={savingOutput}
+              className="w-full gradient-gold text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+              {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {savingOutput
+                ? `שומר ${saveProgress.done}/${saveProgress.total}...`
+                : savedProjectName
+                  ? `✓ נשמר בפרויקט "${savedProjectName}"`
+                  : `שמור ${generatedSlides.length} תמונות בפרויקט`}
+            </button>
+            {savingOutput && saveProgress.total > 0 && (
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{ width: `${(saveProgress.done / saveProgress.total) * 100}%` }} />
+              </div>
+            )}
+            {!savingOutput && saveProgress.failed.length > 0 && (
+              <button onClick={() => handleSaveAll(saveProgress.failed)}
+                className="w-full text-xs text-destructive hover:underline py-1">
+                {saveProgress.failed.length} תמונות נכשלו — לחץ לניסיון חוזר
+              </button>
+            )}
+          </div>
         )}
 
         {/* Per-slide refine */}
