@@ -149,6 +149,9 @@ export default function CreativeStudioPage() {
     <AppLayout>
       <GuidedTour />
       <div className="space-y-6">
+        {/* Migration Banner */}
+        {showMigrationBanner && <DomainMigrationBanner />}
+
         {/* Header */}
         <div>
           <h1 className="text-2xl font-rubik font-bold flex items-center gap-2">
