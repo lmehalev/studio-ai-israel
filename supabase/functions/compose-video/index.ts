@@ -63,47 +63,64 @@ interface OutputConfig {
   resolution: string;
 }
 
-let cachedHebrewFontBase64: string | null = null;
+let cachedHebrewFontUrl: string | null = null;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+async function ensureHebrewFontUrl(): Promise<string> {
+  if (cachedHebrewFontUrl) return cachedHebrewFontUrl;
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const fontStoragePath = "fonts/NotoSansHebrew-Regular.ttf";
 
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
+  // If we have Supabase credentials, try storage first
+  if (supabaseUrl && serviceKey) {
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/media/${fontStoragePath}`;
 
-async function getEmbeddedHebrewFontBase64(): Promise<string> {
-  if (cachedHebrewFontBase64) return cachedHebrewFontBase64;
-
-  const errors: string[] = [];
-
-  for (const fontUrl of HEBREW_FONT_URLS) {
+    // Check if already uploaded
     try {
-      const res = await fetch(fontUrl);
-      if (!res.ok) {
-        errors.push(`${fontUrl} -> ${res.status}`);
-        continue;
+      const head = await fetch(publicUrl, { method: "HEAD" });
+      if (head.ok) {
+        cachedHebrewFontUrl = publicUrl;
+        console.log("Hebrew font already in storage:", publicUrl);
+        return publicUrl;
       }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      cachedHebrewFontBase64 = uint8ToBase64(bytes);
-      return cachedHebrewFontBase64;
-    } catch (e) {
-      errors.push(`${fontUrl} -> ${e instanceof Error ? e.message : String(e)}`);
+    } catch (_) { /* continue to upload */ }
+
+    // Fetch from CDN and upload to storage
+    for (const cdnUrl of HEBREW_FONT_URLS) {
+      try {
+        const res = await fetch(cdnUrl);
+        if (!res.ok) continue;
+        const fontBytes = new Uint8Array(await res.arrayBuffer());
+
+        const uploadRes = await fetch(
+          `${supabaseUrl}/storage/v1/object/media/${fontStoragePath}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "font/ttf",
+              "x-upsert": "true",
+            },
+            body: fontBytes,
+          },
+        );
+
+        if (uploadRes.ok || uploadRes.status === 200) {
+          cachedHebrewFontUrl = publicUrl;
+          console.log("Hebrew font uploaded to storage:", publicUrl);
+          return publicUrl;
+        }
+        // consume body
+        await uploadRes.text();
+      } catch (_) { /* try next */ }
     }
   }
 
-  throw new Error(`לא ניתן לטעון פונט עברי מוטמע: ${errors.join(" | ")}`);
+  // Fallback: use CDN URL directly (Shotstack HTML renderer should fetch it)
+  cachedHebrewFontUrl = HEBREW_FONT_URLS[0];
+  console.log("Using CDN font URL fallback:", cachedHebrewFontUrl);
+  return cachedHebrewFontUrl;
 }
 
 function escapeXml(value: string): string {
