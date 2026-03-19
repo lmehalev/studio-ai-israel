@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  subtitleService, type SubtitleSegment, type Brand,
+  subtitleService, type SubtitleSegment, type Brand, type CaptionCue,
   storageService, composeService,
 } from '@/services/creativeService';
 import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/studio/CostApprovalDialog';
@@ -162,6 +162,17 @@ interface SubtitleEditorProps {
   onBack: () => void;
 }
 
+interface SubtitleTranscribeDebug {
+  provider: string;
+  status: number;
+  videoUrl: string;
+  sourceAudioUrl: string;
+  videoDuration: number;
+  totalCueCount: number;
+  firstCues: CaptionCue[];
+  providerBody?: string;
+}
+
 // Step names
 const STEPS = [
   { key: 'upload', label: 'העלאה', icon: Upload },
@@ -184,6 +195,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [transcribeDebug, setTranscribeDebug] = useState<SubtitleTranscribeDebug | null>(null);
 
   // Style
   const [selectedFont, setSelectedFont] = useState('impact');
@@ -275,21 +288,78 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
   const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
   const segEndRef = useRef<number | null>(null);
+  const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
 
-  const seekToSegment = (seg: SubtitleSegment, index: number) => {
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(videoPreviewUrl);
+      }
+    };
+  }, [videoPreviewUrl]);
+
+  const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
+    if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const onLoaded = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('לא ניתן לטעון את מטא-דאטה של הווידאו'));
+      };
+      const cleanup = () => {
+        video.removeEventListener('loadedmetadata', onLoaded);
+        video.removeEventListener('error', onError);
+      };
+
+      video.addEventListener('loadedmetadata', onLoaded, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      video.load();
+    });
+  }, []);
+
+  const ensureUploadedVideoUrl = useCallback(async () => {
+    if (uploadedVideoUrl) return uploadedVideoUrl;
+    if (!videoFile) throw new Error('לא נמצא קובץ וידאו לתמלול');
+
+    toast.info('מעלה את הסרטון כדי לתמלל מהאודיו המקורי...');
+    const remoteUrl = await storageService.upload(videoFile);
+    setUploadedVideoUrl(remoteUrl);
+    setVideoPreviewUrl(remoteUrl);
+    return remoteUrl;
+  }, [uploadedVideoUrl, videoFile]);
+
+  const seekToSegment = async (seg: SubtitleSegment, index: number) => {
     const video = videoPreviewRef.current;
     if (!video) {
       toast.error('הווידאו עדיין לא נטען');
       return;
     }
-    // Normalize: always use min/max to prevent reversed ranges
-    const rawStart = Math.max(0, Math.min(seg.start, seg.end) + subtitleOffset);
-    const rawEnd = Math.max(seg.start, seg.end) + subtitleOffset;
-    const startTime = Math.max(0, rawStart);
-    const endTime = Math.max(startTime + 0.1, rawEnd);
 
-    // Set up end-time listener
-    segEndRef.current = endTime;
+    if (!video.src) {
+      toast.error('אין מקור וידאו תקין לתצוגה מקדימה');
+      return;
+    }
+
+    const start = Math.max(0, Math.min(seg.start, seg.end) + subtitleOffset);
+    const end = Math.max(seg.start, seg.end) + subtitleOffset;
+
+    if (!(end > start)) {
+      toast.error(`טווח לא תקין לכתובית: התחלה ${start.toFixed(3)}, סיום ${end.toFixed(3)}`);
+      return;
+    }
+
+    if (playbackListenerRef.current) {
+      video.removeEventListener('timeupdate', playbackListenerRef.current);
+      playbackListenerRef.current = null;
+    }
+
+    segEndRef.current = end;
     setPlayingSegIndex(index);
     setShowPreview(true);
 
@@ -298,144 +368,80 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         video.pause();
         segEndRef.current = null;
         setPlayingSegIndex(null);
-        video.removeEventListener('timeupdate', onTimeUpdate);
+        if (playbackListenerRef.current) {
+          video.removeEventListener('timeupdate', playbackListenerRef.current);
+          playbackListenerRef.current = null;
+        }
       }
     };
-    // Clean any previous listener
-    const prev = (video as any).__segListener;
-    if (prev) video.removeEventListener('timeupdate', prev);
-    (video as any).__segListener = onTimeUpdate;
+
+    playbackListenerRef.current = onTimeUpdate;
     video.addEventListener('timeupdate', onTimeUpdate);
 
-    const doSeekAndPlay = () => {
-      video.currentTime = startTime;
-      video.play().catch(err => {
-        toast.error(`שגיאת ניגון: ${err.message}`);
-        setPlayingSegIndex(null);
-      });
-    };
-
-    // Wait for metadata if not loaded yet
-    if (video.readyState < 1) {
-      video.addEventListener('loadedmetadata', doSeekAndPlay, { once: true });
-    } else {
-      doSeekAndPlay();
+    try {
+      await waitForVideoMetadata(video);
+      video.currentTime = start;
+      await video.play();
+    } catch (err: any) {
+      if (playbackListenerRef.current) {
+        video.removeEventListener('timeupdate', playbackListenerRef.current);
+        playbackListenerRef.current = null;
+      }
+      segEndRef.current = null;
+      setPlayingSegIndex(null);
+      const details = err instanceof Error ? err.message : String(err);
+      toast.error(`שגיאת ניגון מקטע: ${details}`);
     }
-  };
-
-  // ── Extract audio from video for transcription (smaller payload) ──
-  const extractAudioBlob = async (video: File): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const videoEl = document.createElement('video');
-      videoEl.src = URL.createObjectURL(video);
-      // IMPORTANT: Do NOT set muted=true — we need audio to flow through AudioContext
-      videoEl.volume = 0; // silence speakers but keep audio stream active
-
-      videoEl.onloadedmetadata = () => {
-        const audioCtx = new AudioContext();
-        const source = audioCtx.createMediaElementSource(videoEl);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        // Don't connect to speakers — keeps it silent
-        // source.connect(audioCtx.destination); // intentionally omitted
-
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : MediaRecorder.isTypeSupported('audio/webm')
-            ? 'audio/webm'
-            : 'audio/mp4';
-        const mediaRecorder = new MediaRecorder(dest.stream, { mimeType });
-        const chunks: BlobPart[] = [];
-
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-          URL.revokeObjectURL(videoEl.src);
-          audioCtx.close();
-          const blob = new Blob(chunks, { type: mimeType });
-          if (blob.size < 100) {
-            reject(new Error('חילוץ האודיו נכשל — הקובץ ריק'));
-          } else {
-            resolve(blob);
-          }
-        };
-        mediaRecorder.onerror = () => {
-          URL.revokeObjectURL(videoEl.src);
-          reject(new Error('שגיאה בחילוץ אודיו'));
-        };
-
-        // Limit to first 2 minutes for transcription
-        const maxDuration = Math.min(videoEl.duration, 120);
-        mediaRecorder.start(1000); // collect chunks every second for reliability
-        videoEl.play().catch(() => reject(new Error('הדפדפן חסם את ניגון הווידאו')));
-        setTimeout(() => {
-          if (mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-          }
-          videoEl.pause();
-        }, maxDuration * 1000);
-      };
-
-      videoEl.onerror = () => {
-        URL.revokeObjectURL(videoEl.src);
-        reject(new Error('שגיאה בטעינת הווידאו'));
-      };
-    });
   };
 
   // ── Transcribe ──
   const handleTranscribe = async () => {
     if (!videoFile) return;
     setLoading(true);
-    // CLEAR old captions before new transcription
     setSubtitleSegments([]);
     setEditingIndex(null);
     setPlayingSegIndex(null);
-    try {
-      // For small files (<5MB), send directly as base64
-      // For larger files, extract audio first to reduce payload size
-      let base64: string;
-      const MAX_DIRECT_SIZE = 5 * 1024 * 1024; // 5MB
+    setTranscribeDebug(null);
 
-      if (videoFile.size <= MAX_DIRECT_SIZE) {
-        const ab = await videoFile.arrayBuffer();
-        const bytes = new Uint8Array(ab);
-        const chunkSize = 8192;
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += chunkSize)
-          binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-        base64 = btoa(binary);
-      } else {
-        toast.info('מחלץ אודיו מהסרטון לתמלול מהיר יותר...');
-        try {
-          const audioBlob = await extractAudioBlob(videoFile);
-          const ab = await audioBlob.arrayBuffer();
-          const bytes = new Uint8Array(ab);
-          const chunkSize = 8192;
-          let binary = '';
-          for (let i = 0; i < bytes.length; i += chunkSize)
-            binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-          base64 = btoa(binary);
-        } catch {
-          // Fallback: take only first 5MB of the original file
-          toast.info('משתמש בקטע הראשון של הסרטון...');
-          const ab = await videoFile.slice(0, MAX_DIRECT_SIZE).arrayBuffer();
-          const bytes = new Uint8Array(ab);
-          const chunkSize = 8192;
-          let binary = '';
-          for (let i = 0; i < bytes.length; i += chunkSize)
-            binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-          base64 = btoa(binary);
-        }
+    try {
+      const sourceVideoUrl = await ensureUploadedVideoUrl();
+
+      const videoEl = videoPreviewRef.current;
+      if (!videoEl) throw new Error('נגן הווידאו לא זמין כרגע');
+      await waitForVideoMetadata(videoEl);
+
+      const videoDuration = Number(videoEl.duration);
+      if (!Number.isFinite(videoDuration) || videoDuration <= 0) {
+        throw new Error('אורך הווידאו לא תקין ולכן אי אפשר לתמלל');
       }
 
-      const videoDuration = videoPreviewRef.current?.duration || undefined;
-      const result = await subtitleService.transcribe(base64, 'עברית', videoDuration);
+      const result = await subtitleService.transcribe({
+        sourceAudioUrl: sourceVideoUrl,
+        language: 'עברית',
+        videoDuration,
+      });
+
+      const invalidCue = result.captions.find((cue) => !(cue.startSec >= 0 && cue.endSec > cue.startSec && cue.endSec <= videoDuration && cue.text.trim()));
+      if (invalidCue) {
+        throw new Error(
+          `התקבלו זמנים לא תקינים מהתמלול: ${invalidCue.startSec} -> ${invalidCue.endSec}. תגובת ספק: ${result.debug.providerBody || 'לא סופקה'}`
+        );
+      }
+
       setSubtitleSegments(result.segments);
       setShowPreview(true);
-      console.log('[SubtitleEditor] Transcription debug:', result.debug);
-      toast.success(`התמלול מוכן! ${result.segments.length} כתוביות (מתוך ${result.debug.rawCount} גולמיות)`);
+      setTranscribeDebug({
+        ...result.debug,
+        videoUrl: sourceVideoUrl,
+        sourceAudioUrl: result.debug.sourceAudioUrl,
+        videoDuration,
+        totalCueCount: result.captions.length,
+        firstCues: result.captions.slice(0, 5),
+      });
+      toast.success(`התמלול מוכן! ${result.captions.length} כתוביות תקינות`);
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה בתמלול');
+      setSubtitleSegments([]);
+      toast.error(e?.message || 'שגיאה בתמלול');
     } finally {
       setLoading(false);
     }
@@ -716,13 +722,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={e => {
-          e.preventDefault(); setIsDragging(false);
+          e.preventDefault();
+          setIsDragging(false);
           const file = e.dataTransfer.files[0];
           if (file && file.type.startsWith('video/')) {
             setVideoFile(file);
+            setUploadedVideoUrl(null);
+            setSubtitleSegments([]);
+            setTranscribeDebug(null);
             setVideoPreviewUrl(URL.createObjectURL(file));
             setStep(1);
-          } else toast.error('יש להעלות קובץ וידאו');
+          } else {
+            toast.error('יש להעלות קובץ וידאו');
+          }
         }}
         onClick={() => fileInputRef.current?.click()}
         className={cn(
@@ -733,7 +745,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
           onChange={e => {
             const f = e.target.files?.[0];
-            if (f) { setVideoFile(f); setVideoPreviewUrl(URL.createObjectURL(f)); setStep(1); }
+            if (f) {
+              setVideoFile(f);
+              setUploadedVideoUrl(null);
+              setSubtitleSegments([]);
+              setTranscribeDebug(null);
+              setVideoPreviewUrl(URL.createObjectURL(f));
+              setStep(1);
+            }
           }}
         />
         <Upload className={cn('w-12 h-12 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
@@ -788,6 +807,32 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           </>
         )}
       </div>
+
+      {transcribeDebug && (
+        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs">
+          <div className="font-semibold text-foreground">דיבאג תמלול</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5" dir="ltr">
+            <div><span className="text-muted-foreground">provider:</span> {transcribeDebug.provider}</div>
+            <div><span className="text-muted-foreground">status:</span> {transcribeDebug.status}</div>
+            <div className="md:col-span-2 break-all"><span className="text-muted-foreground">videoUrl:</span> {transcribeDebug.videoUrl}</div>
+            <div className="md:col-span-2 break-all"><span className="text-muted-foreground">sourceAudioUrl:</span> {transcribeDebug.sourceAudioUrl}</div>
+            <div><span className="text-muted-foreground">videoDuration:</span> {transcribeDebug.videoDuration.toFixed(3)}s</div>
+            <div><span className="text-muted-foreground">totalCues:</span> {transcribeDebug.totalCueCount}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-muted-foreground">First 5 cues:</div>
+            <div className="space-y-1" dir="ltr">
+              {transcribeDebug.firstCues.map((cue, idx) => (
+                <div key={`${cue.startSec}-${cue.endSec}-${idx}`} className="bg-background border border-border rounded px-2 py-1">
+                  <span className="text-muted-foreground">#{idx + 1}</span>{' '}
+                  {cue.startSec.toFixed(3)} → {cue.endSec.toFixed(3)} | {cue.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Subtitle segments with gap controls */}
       {subtitleSegments.length > 0 ? (

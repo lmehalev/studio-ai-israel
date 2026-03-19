@@ -333,67 +333,122 @@ export interface SubtitleSegment {
   text: string;
 }
 
+export interface CaptionCue {
+  startSec: number;
+  endSec: number;
+  text: string;
+}
+
+export interface TranscriptionDebug {
+  provider: string;
+  status: number;
+  sourceAudioUrl: string;
+  videoDuration: number;
+  totalCueCount: number;
+  firstCues: CaptionCue[];
+  providerBody?: string;
+}
+
 export const subtitleService = {
-  transcribe: async (audioBase64: string, language: string = 'עברית', videoDuration?: number): Promise<{ segments: SubtitleSegment[]; debug: { provider: string; rawCount: number; mergedCount: number } }> => {
+  transcribe: async ({
+    sourceAudioUrl,
+    language = 'עברית',
+    videoDuration,
+  }: {
+    sourceAudioUrl: string;
+    language?: string;
+    videoDuration: number;
+  }): Promise<{ captions: CaptionCue[]; segments: SubtitleSegment[]; debug: TranscriptionDebug }> => {
     const { data, error } = await supabase.functions.invoke("transcribe-audio", {
-      body: { audioBase64, language },
+      body: { sourceAudioUrl, language, videoDuration },
     });
-    if (error) throw new Error(error.message || "שגיאה בתמלול");
-    if (data?.error) throw new Error(data.error);
 
-    // Strict validation of response shape
-    const rawSegments: any[] = data?.segments;
-    if (!Array.isArray(rawSegments) || rawSegments.length === 0) {
-      throw new Error('התמלול לא החזיר כתוביות תקינות. נסה שוב.');
+    if (error) {
+      throw new Error(error.message || 'שגיאה בתמלול');
     }
 
-    // Validate & clean each segment
-    const maxEnd = videoDuration || Infinity;
-    const validated: SubtitleSegment[] = [];
-    for (const seg of rawSegments) {
-      const start = Number(seg?.start);
-      const end = Number(seg?.end);
-      const text = typeof seg?.text === 'string' ? seg.text.trim() : '';
-      if (isNaN(start) || isNaN(end) || !text) continue;
-      if (end <= start) continue;
-      if (start < 0) continue;
-      const clampedEnd = Math.min(end, maxEnd);
-      if (clampedEnd <= start) continue;
-      validated.push({ start, end: clampedEnd, text });
+    if (data?.error) {
+      const provider = data?.provider || 'STT';
+      const status = data?.status ?? 'לא ידוע';
+      const providerBody = typeof data?.providerBody === 'string' ? data.providerBody : '';
+      throw new Error(
+        `התמלול נכשל (${provider}, סטטוס ${status}). ${data.error}${providerBody ? `\nתגובת ספק: ${providerBody}` : ''}`
+      );
     }
 
-    if (validated.length === 0) {
-      throw new Error('כל הכתוביות שהתקבלו היו לא תקינות (זמנים שגויים או טקסט ריק).');
+    const rawCaptions: any[] = data?.captions;
+    if (!Array.isArray(rawCaptions) || rawCaptions.length === 0) {
+      throw new Error('התמלול החזיר מבנה לא תקין: חסר captions[] עם זמנים אמיתיים.');
     }
 
-    // Sort monotonically
-    validated.sort((a, b) => a.start - b.start);
+    const issues: string[] = [];
+    const captions: CaptionCue[] = [];
+    let prevEnd = 0;
 
-    // Smart merge: combine tiny adjacent segments (< 1s or < 15 chars) 
-    const merged: SubtitleSegment[] = [];
-    const MAX_CHARS_PER_LINE = 80;
-    const MIN_DURATION = 0.4;
+    for (let i = 0; i < rawCaptions.length; i += 1) {
+      const cue = rawCaptions[i];
+      const startSec = Number(cue?.startSec);
+      const endSec = Number(cue?.endSec);
+      const text = typeof cue?.text === 'string' ? cue.text.trim() : '';
 
-    for (const seg of validated) {
-      const prev = merged[merged.length - 1];
-      if (prev) {
-        const gap = seg.start - prev.end;
-        const combinedLen = prev.text.length + seg.text.length + 1;
-        const prevDuration = prev.end - prev.start;
-        const segDuration = seg.end - seg.start;
-        // Merge if: tiny gap AND combined text not too long AND either segment is very short
-        if (gap < 0.5 && combinedLen <= MAX_CHARS_PER_LINE && (prevDuration < MIN_DURATION || segDuration < MIN_DURATION || gap < 0.15)) {
-          prev.end = seg.end;
-          prev.text = prev.text + ' ' + seg.text;
-          continue;
-        }
+      if (!Number.isFinite(startSec) || !Number.isFinite(endSec)) {
+        issues.push(`#${i + 1}: זמן לא מספרי`);
+        continue;
       }
-      merged.push({ ...seg });
+
+      if (startSec < 0) {
+        issues.push(`#${i + 1}: startSec קטן מ-0 (${startSec})`);
+      }
+
+      if (endSec <= startSec) {
+        issues.push(`#${i + 1}: endSec חייב להיות גדול מ-startSec (${startSec} -> ${endSec})`);
+      }
+
+      if (i > 0 && startSec < prevEnd) {
+        issues.push(`#${i + 1}: זמנים לא מונוטוניים (${startSec} < ${prevEnd})`);
+      }
+
+      if (endSec > videoDuration + 0.05) {
+        issues.push(`#${i + 1}: endSec חורג מאורך הסרטון (${endSec} > ${videoDuration})`);
+      }
+
+      if (!text) {
+        issues.push(`#${i + 1}: טקסט ריק`);
+      }
+
+      prevEnd = endSec;
+      captions.push({
+        startSec: Number(startSec.toFixed(3)),
+        endSec: Number(endSec.toFixed(3)),
+        text,
+      });
     }
+
+    if (issues.length > 0) {
+      const providerBody = typeof data?.providerBody === 'string' ? data.providerBody.slice(0, 600) : '';
+      throw new Error(
+        `התמלול החזיר כתוביות לא תקינות ולכן הופסק. ${issues.slice(0, 5).join(' | ')}${providerBody ? `\nתגובת ספק: ${providerBody}` : ''}`
+      );
+    }
+
+    const segments: SubtitleSegment[] = captions.map((cue) => ({
+      start: cue.startSec,
+      end: cue.endSec,
+      text: cue.text,
+    }));
 
     return {
-      segments: merged,
-      debug: { provider: 'gemini-transcribe', rawCount: rawSegments.length, mergedCount: merged.length },
+      captions,
+      segments,
+      debug: {
+        provider: data?.provider || 'elevenlabs/scribe_v2',
+        status: Number(data?.status ?? 200),
+        sourceAudioUrl: data?.sourceAudioUrl || sourceAudioUrl,
+        videoDuration,
+        totalCueCount: captions.length,
+        firstCues: captions.slice(0, 3),
+        providerBody: typeof data?.providerBody === 'string' ? data.providerBody : undefined,
+      },
     };
   },
 
