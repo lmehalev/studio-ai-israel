@@ -18,6 +18,30 @@ import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/s
 // ── Font presets (YouTube-style, creative) ──
 const fontPresets = [
   {
+    id: 'clean',
+    label: '✦ נקי',
+    font: "'Noto Sans Hebrew', sans-serif",
+    fontWeight: 700,
+    bgColor: 'transparent',
+    borderRadius: 0,
+    shadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 2px 4px rgba(0,0,0,0.6)',
+    padding: '6px 12px',
+    preview: 'כתובית נקייה',
+    textColor: '#FFFFFF',
+  },
+  {
+    id: 'strip',
+    label: '▬ רצועה',
+    font: "'Heebo', sans-serif",
+    fontWeight: 600,
+    bgColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 4,
+    shadow: 'none',
+    padding: '6px 16px',
+    preview: 'כתובית ברצועה',
+    textColor: '#FFFFFF',
+  },
+  {
     id: 'impact',
     label: '💥 Impact',
     font: "'Rubik', sans-serif",
@@ -237,9 +261,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
 
   // Style
-  const [selectedFont, setSelectedFont] = useState('impact');
+  const [selectedFont, setSelectedFont] = useState('clean');
   const [customColor, setCustomColor] = useState('#FFFFFF');
-  const [customFontSize, setCustomFontSize] = useState(32);
+  const [customFontSize, setCustomFontSize] = useState(26);
+  const [captionPosition, setCaptionPosition] = useState<'bottom' | 'middle' | 'top'>('bottom');
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
@@ -1246,29 +1272,46 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   };
 
   // ── Preview subtitle CSS ──
-  const getPreviewSubtitleStyle = (): React.CSSProperties => ({
-    fontFamily: currentFont.font,
-    fontSize: `${Math.min(customFontSize * 0.6, 22)}px`,
-    color: (currentFont as any).textColor || customColor,
-    background: currentFont.bgColor,
-    borderRadius: `${currentFont.borderRadius}px`,
-    textShadow: currentFont.shadow,
-    fontWeight: currentFont.fontWeight as any,
-    padding: '6px 14px',
-    direction: 'rtl',
-    textAlign: 'center' as const,
-    maxWidth: '90%',
-  });
+  const getPreviewSubtitleStyle = (): React.CSSProperties => {
+    // Responsive: scale font relative to container, clamp between 12–28px
+    const basePx = Math.max(12, Math.min(customFontSize * 0.55, 28));
+    return {
+      fontFamily: currentFont.font,
+      fontSize: `clamp(12px, ${basePx}px, 28px)`,
+      lineHeight: 1.3,
+      color: (currentFont as any).textColor || customColor,
+      background: currentFont.bgColor,
+      borderRadius: `${currentFont.borderRadius}px`,
+      textShadow: currentFont.shadow,
+      fontWeight: currentFont.fontWeight as any,
+      padding: '4px 10px',
+      direction: 'rtl',
+      textAlign: 'center' as const,
+      maxWidth: '88%',
+      wordBreak: 'break-word' as const,
+      overflowWrap: 'break-word' as const,
+      display: '-webkit-box',
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: 'vertical' as any,
+      overflow: 'hidden',
+    };
+  };
 
-  // ── Video preview (inline JSX — NOT a function component, to prevent remounting) ──
+  // Position alignment classes
+  const captionPositionClass =
+    captionPosition === 'top' ? 'items-start pt-3' :
+    captionPosition === 'middle' ? 'items-center' :
+    'items-end pb-10'; // bottom: stay above native controls
+
+  // ── Video preview with overlays inside same container ──
   const videoPreviewJSX = videoPreviewUrl ? (
-    <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+    <div ref={videoContainerRef} className="rounded-xl overflow-hidden border border-border relative bg-black">
       <video
         ref={setVideoPreviewElement}
         src={videoPreviewUrl}
         controls
         preload="metadata"
-        className="w-full max-h-[240px]"
+        className="w-full max-h-[260px] block"
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
           setVideoLoadError(null);
@@ -1289,32 +1332,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-    </div>
-  ) : null;
-
-  // Caption overlay - always above the playing video
-  const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
-    <div className="absolute inset-0 z-30 pointer-events-none flex items-end justify-center px-4 pb-12" dir="rtl">
-      <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
-    </div>
-  ) : null;
-
-  const logoOverlayJSX = logoUrl ? (
-    <div className="absolute top-3 right-3 z-20 pointer-events-none">
-      <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
-    </div>
-  ) : null;
-
-  // Always-visible overlay debug strip
-  const overlayDebugJSX = videoPreviewUrl ? (
-    <div
-      className="absolute top-1 left-1 right-1 z-40 pointer-events-none grid grid-cols-1 md:grid-cols-4 gap-1 text-[10px] font-mono leading-tight px-2 py-1 rounded border border-border bg-background/80 text-foreground"
-      dir="ltr"
-    >
-      <span>activeCueIndex: {activeCueIndex ?? -1}</span>
-      <span>currentTime: {playbackDebug.currentTime.toFixed(3)}</span>
-      <span>activeListeners: {playbackDebug.activeTimeupdateListeners}</span>
-      <span className="truncate">activeText: {(currentSubtitle || '').slice(0, 30) || '(empty)'}</span>
+      {/* Caption overlay — inside video container */}
+      {showPreview && currentSubtitle && (
+        <div
+          className={cn('absolute inset-0 z-30 pointer-events-none flex justify-center px-3', captionPositionClass)}
+          dir="rtl"
+        >
+          <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+        </div>
+      )}
+      {/* Logo overlay — inside video container */}
+      {logoUrl && (
+        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+          <img src={logoUrl} alt="logo" className="w-8 h-8 object-contain rounded-lg opacity-90" />
+        </div>
+      )}
     </div>
   ) : null;
 
@@ -1419,12 +1451,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 1) return (
     <div className="space-y-3">
       <StepIndicator />
-      <div className="relative">
-        {videoPreviewJSX}
-        {overlayDebugJSX}
-        {captionOverlayJSX}
-        {logoOverlayJSX}
-      </div>
+      {videoPreviewJSX}
 
       {videoLoadError && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive" dir="rtl">
@@ -1559,24 +1586,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       )}
 
-      {videoPreviewUrl && (
-        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs" dir="ltr">
-          <div className="font-semibold text-foreground" dir="rtl">דיבאג נגן חי</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
-            <div><span className="text-muted-foreground">readyState:</span> {playbackDebug.readyState}</div>
-            <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
-            <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
-            <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
-            <div><span className="text-muted-foreground">activeListeners:</span> {playbackDebug.activeTimeupdateListeners}</div>
-            <div><span className="text-muted-foreground">timeupdate/sec:</span> {playbackDebug.timeupdateEventsPerSecond.toFixed(1)}</div>
-          </div>
-          {playbackDebug.playError && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
-              {playbackDebug.playError}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Subtitle segments with gap controls */}
       {subtitleSegments.length > 0 ? (
@@ -1725,12 +1734,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 2) return (
     <div className="space-y-3">
       <StepIndicator />
-      <div className="relative">
-        {videoPreviewJSX}
-        {overlayDebugJSX}
-        {captionOverlayJSX}
-        {logoOverlayJSX}
-      </div>
+      {videoPreviewJSX}
 
       {/* Font presets grid */}
       <div className="space-y-2">
@@ -1811,6 +1815,31 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       </div>
 
+      {/* Position */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">מיקום כתובית</h4>
+        <div className="flex gap-2">
+          {([
+            { value: 'top' as const, label: 'למעלה' },
+            { value: 'middle' as const, label: 'מרכז' },
+            { value: 'bottom' as const, label: 'למטה' },
+          ]).map(pos => (
+            <button
+              key={pos.value}
+              onClick={() => setCaptionPosition(pos.value)}
+              className={cn(
+                'px-4 py-1.5 rounded-lg border text-xs font-bold transition-all flex-1',
+                captionPosition === pos.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              {pos.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <NavButtons />
     </div>
   );
@@ -1821,12 +1850,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 3) return (
     <div className="space-y-3">
       <StepIndicator />
-      <div className="relative">
-        {videoPreviewJSX}
-        {overlayDebugJSX}
-        {captionOverlayJSX}
-        {logoOverlayJSX}
-      </div>
+      {videoPreviewJSX}
 
       {/* Music section */}
       <div className="space-y-2">
