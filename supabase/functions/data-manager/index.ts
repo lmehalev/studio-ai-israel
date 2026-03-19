@@ -14,7 +14,61 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { action, data } = await req.json();
+    const body = await req.json();
+    const { action, data } = body;
+
+    // ===== SETUP (create tables if needed) =====
+    if (action === "setup") {
+      const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+      if (!dbUrl) throw new Error("SUPABASE_DB_URL not set");
+      
+      const { Pool } = await import("https://deno.land/x/postgres@v0.19.3/mod.ts");
+      const pool = new Pool(dbUrl, 1);
+      const conn = await pool.connect();
+      try {
+        await conn.queryArray(`
+          CREATE TABLE IF NOT EXISTS public.brands (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            name text NOT NULL,
+            logo text,
+            colors text[] NOT NULL DEFAULT '{}',
+            tone text NOT NULL DEFAULT '',
+            target_audience text NOT NULL DEFAULT '',
+            industry text NOT NULL DEFAULT '',
+            departments text[] NOT NULL DEFAULT '{}',
+            created_at timestamptz NOT NULL DEFAULT now()
+          );
+        `);
+        await conn.queryArray(`ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;`);
+        await conn.queryArray(`
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='brands' AND policyname='Allow public all on brands') THEN
+              CREATE POLICY "Allow public all on brands" ON public.brands FOR ALL TO public USING (true) WITH CHECK (true);
+            END IF;
+          END $$;
+        `);
+        await conn.queryArray(`
+          CREATE TABLE IF NOT EXISTS public.scripts (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            name text NOT NULL,
+            content text NOT NULL DEFAULT '',
+            created_at timestamptz NOT NULL DEFAULT now()
+          );
+        `);
+        await conn.queryArray(`ALTER TABLE public.scripts ENABLE ROW LEVEL SECURITY;`);
+        await conn.queryArray(`
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='scripts' AND policyname='Allow public all on scripts') THEN
+              CREATE POLICY "Allow public all on scripts" ON public.scripts FOR ALL TO public USING (true) WITH CHECK (true);
+            END IF;
+          END $$;
+        `);
+        return new Response(JSON.stringify({ ok: true, message: "Tables created" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } finally {
+        conn.release();
+        await pool.end();
+      }
+    }
 
     // ===== BRANDS =====
     if (action === "list_brands") {
