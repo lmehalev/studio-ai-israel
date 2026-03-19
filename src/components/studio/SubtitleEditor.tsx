@@ -1389,10 +1389,15 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       };
 
       const renderResult = await composeService.render(renderParams);
+
+      if ((renderResult as any).error) {
+        throw new Error(`שגיאת הרכבה (compose-video): ${(renderResult as any).error}`);
+      }
+
       const renderId = renderResult.renderId;
       const shotstackEnv = renderResult.shotstackEnv;
 
-      if (!renderId) throw new Error('לא התקבל מזהה הרכבה');
+      if (!renderId) throw new Error('לא התקבל מזהה הרכבה מ-Shotstack');
 
       setRenderProgress(40);
       toast.info('מרכיב סרטון... זה עשוי לקחת כמה דקות');
@@ -1405,23 +1410,29 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
         const status = await composeService.checkStatus(renderId, shotstackEnv);
 
+        if ((status as any).error) {
+          throw new Error(`שגיאת סטטוס (compose-video): ${(status as any).error}`);
+        }
+
         if (status.status === 'done' && status.url) {
           setRenderedVideoUrl(status.url);
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
           break;
         } else if (status.status === 'failed') {
-          throw new Error('ההרכבה נכשלה');
+          throw new Error('ההרכבה נכשלה ב-Shotstack (status: failed)');
         }
 
         setRenderProgress(40 + Math.min(55, (attempts / maxAttempts) * 55));
       }
 
       if (attempts >= maxAttempts) {
-        throw new Error('ההרכבה לקחה יותר מדי זמן');
+        throw new Error('ההרכבה לקחה יותר מדי זמן (timeout 10 דקות)');
       }
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה בהרכבת הסרטון');
+      console.error('Render pipeline error:', e);
+      const msg = e.message || 'שגיאה בהרכבת הסרטון';
+      toast.error(msg, { duration: 15000, description: 'functionName: compose-video | פנה לתמיכה אם הבעיה חוזרת' });
     } finally {
       setRendering(false);
     }
