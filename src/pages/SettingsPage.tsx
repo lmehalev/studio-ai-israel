@@ -155,9 +155,10 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="connections" dir="rtl">
-          <TabsList className="bg-muted/50">
+        <TabsList className="bg-muted/50">
             <TabsTrigger value="connections" className="flex items-center gap-2"><Plug className="w-4 h-4" /> חיבורים</TabsTrigger>
             <TabsTrigger value="storage" className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> אחסון</TabsTrigger>
+            <TabsTrigger value="data" className="flex items-center gap-2"><Database className="w-4 h-4" /> נתונים</TabsTrigger>
             <TabsTrigger value="system" className="flex items-center gap-2"><Shield className="w-4 h-4" /> מערכת</TabsTrigger>
           </TabsList>
 
