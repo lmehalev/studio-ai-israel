@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
 
       // === Logo overlay track ===
       if (logoUrl) {
-        tracks.push(buildLogoClip(logoUrl, totalDuration));
+        tracks.push(buildLogoClip(logoUrl, totalDuration, logoPlacement as LogoPlacement | undefined));
       }
 
       // === Sticker overlays track ===
