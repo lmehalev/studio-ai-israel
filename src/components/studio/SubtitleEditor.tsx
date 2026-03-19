@@ -1511,16 +1511,25 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           </div>
         </div>
       )}
-      {/* Logo overlay — inside content rect */}
+      {/* Logo overlay — respects position/size/margin/opacity settings */}
       {logoUrl && (
         <div
           className="absolute z-20 pointer-events-none"
           style={{
-            top: `${contentRect.y + 8}px`,
-            right: `${(containerSize.width - contentRect.x - contentRect.w) + 8}px`,
+            ...(logoPosition.includes('top') ? { top: `${contentRect.y + contentRect.h * logoMargin / 100}px` } : { bottom: `${(containerSize.height - contentRect.y - contentRect.h) + contentRect.h * logoMargin / 100}px` }),
+            ...(logoPosition.includes('Right') ? { right: `${(containerSize.width - contentRect.x - contentRect.w) + contentRect.w * logoMargin / 100}px` } : { left: `${contentRect.x + contentRect.w * logoMargin / 100}px` }),
           }}
         >
-          <img src={logoUrl} alt="logo" className="w-8 h-8 object-contain rounded-lg opacity-90" />
+          <img
+            src={logoUrl}
+            alt="logo"
+            className="object-contain rounded-lg"
+            style={{
+              width: `${contentRect.w * logoSize / 100}px`,
+              height: `${contentRect.w * logoSize / 100}px`,
+              opacity: logoOpacity / 100,
+            }}
+          />
         </div>
       )}
     </div>
