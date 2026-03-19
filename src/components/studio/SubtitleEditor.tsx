@@ -278,12 +278,28 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const effectiveOrientation = orientationOverride === 'auto' ? detectedOrientation : orientationOverride;
 
   // Compute the displayed content rect inside the player (letterbox/pillarbox math)
+  // When orientation is overridden, use the TARGET aspect ratio for caption layout
   const contentRect = (() => {
     const cw = containerSize.width;
     const ch = containerSize.height;
-    const vw = videoNativeWidth || cw;
-    const vh = videoNativeHeight || ch;
-    if (!cw || !ch || !vw || !vh) return { x: 0, y: 0, w: cw || 300, h: ch || 200 };
+    if (!cw || !ch) return { x: 0, y: 0, w: cw || 300, h: ch || 200 };
+
+    // Determine effective video dimensions for layout purposes
+    let vw = videoNativeWidth || cw;
+    let vh = videoNativeHeight || ch;
+
+    // When user overrides orientation, remap to target aspect ratio
+    if (orientationOverride === 'landscape' && vh > vw) {
+      // Portrait source → landscape target: use 16:9 aspect
+      const targetAspect = 16 / 9;
+      vw = Math.max(vw, vh * targetAspect);
+      vh = vw / targetAspect;
+    } else if (orientationOverride === 'portrait' && vw > vh) {
+      // Landscape source → portrait target: use 9:16 aspect
+      const targetAspect = 9 / 16;
+      vh = Math.max(vh, vw / targetAspect);
+      vw = vh * targetAspect;
+    }
 
     const scaleX = cw / vw;
     const scaleY = ch / vh;
