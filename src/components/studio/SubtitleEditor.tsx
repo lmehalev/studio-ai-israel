@@ -1400,6 +1400,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה מ-Shotstack');
 
+      // Log debug info for troubleshooting
+      if (renderResult.debug) {
+        console.log('Compose debug:', JSON.stringify(renderResult.debug, null, 2));
+      }
+
       setRenderProgress(40);
       toast.info('מרכיב סרטון... זה עשוי לקחת כמה דקות');
 
