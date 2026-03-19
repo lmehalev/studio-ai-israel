@@ -1297,15 +1297,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     };
   };
 
-  // ── Video preview (inline JSX — NOT a function component, to prevent remounting) ──
+  // Position alignment classes
+  const captionPositionClass =
+    captionPosition === 'top' ? 'items-start pt-3' :
+    captionPosition === 'middle' ? 'items-center' :
+    'items-end pb-10'; // bottom: stay above native controls
+
+  // ── Video preview with overlays inside same container ──
   const videoPreviewJSX = videoPreviewUrl ? (
-    <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+    <div ref={videoContainerRef} className="rounded-xl overflow-hidden border border-border relative bg-black">
       <video
         ref={setVideoPreviewElement}
         src={videoPreviewUrl}
         controls
         preload="metadata"
-        className="w-full max-h-[240px]"
+        className="w-full max-h-[260px] block"
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
           setVideoLoadError(null);
@@ -1326,32 +1332,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-    </div>
-  ) : null;
-
-  // Caption overlay - always above the playing video
-  const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
-    <div className="absolute inset-0 z-30 pointer-events-none flex items-end justify-center px-4 pb-12" dir="rtl">
-      <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
-    </div>
-  ) : null;
-
-  const logoOverlayJSX = logoUrl ? (
-    <div className="absolute top-3 right-3 z-20 pointer-events-none">
-      <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
-    </div>
-  ) : null;
-
-  // Always-visible overlay debug strip
-  const overlayDebugJSX = videoPreviewUrl ? (
-    <div
-      className="absolute top-1 left-1 right-1 z-40 pointer-events-none grid grid-cols-1 md:grid-cols-4 gap-1 text-[10px] font-mono leading-tight px-2 py-1 rounded border border-border bg-background/80 text-foreground"
-      dir="ltr"
-    >
-      <span>activeCueIndex: {activeCueIndex ?? -1}</span>
-      <span>currentTime: {playbackDebug.currentTime.toFixed(3)}</span>
-      <span>activeListeners: {playbackDebug.activeTimeupdateListeners}</span>
-      <span className="truncate">activeText: {(currentSubtitle || '').slice(0, 30) || '(empty)'}</span>
+      {/* Caption overlay — inside video container */}
+      {showPreview && currentSubtitle && (
+        <div
+          className={cn('absolute inset-0 z-30 pointer-events-none flex justify-center px-3', captionPositionClass)}
+          dir="rtl"
+        >
+          <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+        </div>
+      )}
+      {/* Logo overlay — inside video container */}
+      {logoUrl && (
+        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+          <img src={logoUrl} alt="logo" className="w-8 h-8 object-contain rounded-lg opacity-90" />
+        </div>
+      )}
     </div>
   ) : null;
 
