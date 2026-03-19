@@ -1420,7 +1420,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     <div className="space-y-3">
       <StepIndicator />
       <div className="relative">
-        <VideoPreview />
+        {videoPreviewJSX}
         {overlayDebugJSX}
         {captionOverlayJSX}
         {logoOverlayJSX}
