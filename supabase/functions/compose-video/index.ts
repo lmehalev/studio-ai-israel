@@ -175,6 +175,7 @@ Deno.serve(async (req) => {
         videoUrls,
         scenes,
         logoUrl,
+        logoPlacement,
         brandColors,
         audioUrl,
         subtitleStyle,
