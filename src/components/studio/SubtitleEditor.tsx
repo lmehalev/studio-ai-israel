@@ -971,24 +971,32 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoPreviewUrl]);
 
-  // Caption overlay rendered outside memoized video to always reflect current state
-  const CaptionOverlay = () => {
-    if (!showPreview || !currentSubtitle || !videoPreviewUrl) return null;
-    return (
-      <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4 z-20">
-        <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
-      </div>
-    );
-  };
+  // Caption overlay - rendered as inline JSX, NOT as a component (avoids unmount/remount flicker)
+  const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
+    <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4" style={{ zIndex: 30 }}>
+      <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+    </div>
+  ) : null;
 
-  const LogoOverlay = () => {
-    if (!logoUrl) return null;
-    return (
-      <div className="absolute top-3 right-3 pointer-events-none z-10">
-        <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
-      </div>
-    );
-  };
+  const logoOverlayJSX = logoUrl ? (
+    <div className="absolute top-3 right-3 pointer-events-none" style={{ zIndex: 25 }}>
+      <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
+    </div>
+  ) : null;
+
+  // Always-visible overlay debug strip
+  const overlayDebugJSX = videoPreviewUrl ? (
+    <div
+      className="absolute top-1 left-1 right-1 pointer-events-none flex justify-between items-start gap-2 text-[10px] font-mono leading-tight px-2 py-1 rounded"
+      style={{ zIndex: 40, background: 'rgba(0,0,0,0.7)', color: '#0f0' }}
+      dir="ltr"
+    >
+      <span>cueIdx: {activeCueIndex ?? '-1'}</span>
+      <span>t: {playbackDebug.currentTime?.toFixed(2) ?? '?'}</span>
+      <span>segs: {subtitleSegments.length}</span>
+      <span className="max-w-[120px] truncate">{currentSubtitle ? currentSubtitle.slice(0, 30) : '(no cue)'}</span>
+    </div>
+  ) : null;
 
   const StepIndicator = () => (
     <div className="flex items-center gap-1 mb-3">
