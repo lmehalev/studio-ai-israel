@@ -157,7 +157,7 @@ export default function ProjectsPage() {
                         <td className="px-3 py-2">
                           <div className="w-10 h-10 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
                             {thumb ? (
-                              <img src={thumb} alt="" className="w-full h-full object-cover" />
+                              <ThumbnailImg src={thumb} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <ImageIcon className="w-4 h-4 text-muted-foreground" />
                             )}
