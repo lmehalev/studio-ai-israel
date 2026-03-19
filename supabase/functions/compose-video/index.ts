@@ -175,7 +175,7 @@ function wrapText(text: string, maxCharsPerLine: number, maxLines = 3): string[]
   return lines.slice(0, maxLines);
 }
 
-function buildSubtitleSvgDataUri(
+function buildSubtitleHtmlAsset(
   text: string,
   style: SubtitleStyle,
   width: number,
@@ -191,51 +191,39 @@ function buildSubtitleSvgDataUri(
 
   const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
   const lines = wrapText(text, maxCharsPerLine, 3);
-  const safeLines = lines.length > 0 ? lines : [text];
+  const safeLines = (lines.length > 0 ? lines : [text]).map(escapeXml).join("<br />");
 
-  const lineHeight = Math.max(fontSize * 1.35, 20);
-  const textBlockHeight = (safeLines.length - 1) * lineHeight + fontSize;
-  const startY = Math.max(
-    padding.vertical + fontSize,
-    (height - textBlockHeight) / 2 + fontSize,
-  );
-
-  const tspans = safeLines
-    .map((line, idx) => {
-      const dy = idx === 0 ? 0 : lineHeight;
-      return `<tspan x="${width / 2}" dy="${dy}">${escapeXml(line)}</tspan>`;
-    })
-    .join("");
-
-  const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <defs>
-    <style><![CDATA[
+  return `<style>
       @font-face {
         font-family: 'HebrewEmbedded';
         src: url(data:font/ttf;base64,${fontBase64}) format('truetype');
         font-style: normal;
         font-weight: 100 900;
       }
-      .caption {
-        font-family: 'HebrewEmbedded', 'Arial', sans-serif;
-        font-size: ${fontSize}px;
-        font-weight: ${fontWeight};
-        fill: ${color};
-      }
-    ]]></style>
-    <filter id="captionShadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.9)"/>
-      <feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="rgba(0,0,0,0.6)"/>
-    </filter>
-  </defs>
-  <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
-  <text class="caption" x="${width / 2}" y="${startY}" text-anchor="middle" direction="rtl" unicode-bidi="bidi-override" filter="url(#captionShadow)">
-    ${tspans}
-  </text>
-</svg>`.trim();
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    </style>
+    <div style="
+      width:${width}px;
+      height:${height}px;
+      box-sizing:border-box;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      direction:rtl;
+      unicode-bidi:bidi-override;
+      font-family:'HebrewEmbedded','Arial',sans-serif;
+      font-size:${fontSize}px;
+      font-weight:${fontWeight};
+      color:${color};
+      background:${bgColor};
+      border-radius:${borderRadius}px;
+      line-height:1.35;
+      text-shadow:0 2px 6px rgba(0,0,0,0.85),0 0 1px rgba(0,0,0,0.65);
+      padding:${padding.vertical}px ${padding.horizontal}px;
+      white-space:normal;
+      overflow-wrap:break-word;
+      word-break:break-word;
+    ">${safeLines}</div>`;
 }
 
 function buildSubtitleClips(
@@ -252,8 +240,10 @@ function buildSubtitleClips(
     .filter((seg) => seg.text && seg.text.trim())
     .map((seg) => ({
       asset: {
-        type: "image",
-        src: buildSubtitleSvgDataUri(seg.text, style, subWidth, subHeight, fontBase64),
+        type: "html",
+        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontBase64),
+        width: subWidth,
+        height: subHeight,
       },
       start: seg.start,
       length: Math.max(0.5, seg.end - seg.start),
