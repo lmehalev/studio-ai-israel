@@ -58,6 +58,8 @@ export function CarouselGenerator({
   const [refinePrompt, setRefinePrompt] = useState('');
   const [refiningIndex, setRefiningIndex] = useState<number | null>(null);
   const [savingOutput, setSavingOutput] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<{ done: number; total: number; failed: number[] }>({ done: 0, total: 0, failed: [] });
+  const [savedProjectName, setSavedProjectName] = useState<string | null>(null);
   const [showSlideNumbers, setShowSlideNumbers] = useState(true);
 
   // Step: 'setup' | 'slides' | 'generating' | 'result'
