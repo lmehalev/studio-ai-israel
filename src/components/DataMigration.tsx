@@ -2,7 +2,14 @@ import { useState, useRef } from 'react';
 import { Download, Upload, AlertTriangle, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { brandService } from '@/services/creativeService';
-import { supabase } from '@/integrations/supabase/client';
+
+const REST_BASE = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = {
+  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
 
 /**
  * Domain migration banner: shown when brands table is empty but localStorage might have data on the old domain.
@@ -14,9 +21,9 @@ export function DomainMigrationBanner() {
   if (dismissed) return null;
 
   return (
-    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-col gap-3" dir="rtl">
+    <div className="bg-accent/50 border border-accent rounded-xl p-4 flex flex-col gap-3" dir="rtl">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        <AlertTriangle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="font-semibold text-sm">נראה שעברת דומיין</p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -30,7 +37,7 @@ export function DomainMigrationBanner() {
       <div className="flex gap-2">
         <button
           onClick={() => setShowImport(true)}
-          className="px-4 py-2 bg-amber-500 text-primary-foreground rounded-lg text-sm font-semibold flex items-center gap-2"
+          className="px-4 py-2 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center gap-2"
         >
           <Upload className="w-4 h-4" /> ייבא נתונים (JSON)
         </button>
@@ -96,39 +103,39 @@ function DataImporter({ onDone }: { onDone: () => void }) {
       let brandCount = 0;
       let scriptCount = 0;
 
-      // Import brands
       if (data.brands && Array.isArray(data.brands)) {
         for (const b of data.brands) {
-          const { error } = await supabase.from('brands').upsert({
-            id: b.id,
-            name: b.name,
-            logo: b.logo || null,
-            colors: b.colors || [],
-            tone: b.tone || '',
-            target_audience: b.targetAudience || b.target_audience || '',
-            industry: b.industry || '',
-            departments: b.departments || [],
-          }, { onConflict: 'id' });
-          if (!error) brandCount++;
+          const res = await fetch(`${REST_BASE}/brands`, {
+            method: 'POST',
+            headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify({
+              id: b.id,
+              name: b.name,
+              logo: b.logo || null,
+              colors: b.colors || [],
+              tone: b.tone || '',
+              target_audience: b.targetAudience || b.target_audience || '',
+              industry: b.industry || '',
+              departments: b.departments || [],
+            }),
+          });
+          if (res.ok) brandCount++;
         }
       }
 
-      // Import scripts
       if (data.scripts && Array.isArray(data.scripts)) {
         for (const s of data.scripts) {
-          const { error } = await supabase.from('scripts').upsert({
-            id: s.id,
-            name: s.name,
-            content: s.content || '',
-          }, { onConflict: 'id' });
-          if (!error) scriptCount++;
+          const res = await fetch(`${REST_BASE}/scripts`, {
+            method: 'POST',
+            headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify({ id: s.id, name: s.name, content: s.content || '' }),
+          });
+          if (res.ok) scriptCount++;
         }
       }
 
       setResult(`יובאו בהצלחה: ${brandCount} חברות, ${scriptCount} תסריטים`);
       toast.success('הייבוא הושלם!');
-      
-      // Reload page after short delay to reflect changes
       setTimeout(() => { window.location.reload(); }, 1500);
     } catch (e: any) {
       toast.error('שגיאה בייבוא: ' + e.message);
@@ -156,7 +163,7 @@ function DataImporter({ onDone }: { onDone: () => void }) {
         </div>
       )}
       {result && (
-        <div className="flex items-center gap-2 text-sm text-green-600">
+        <div className="flex items-center gap-2 text-sm text-primary">
           <CheckCircle2 className="w-4 h-4" /> {result}
         </div>
       )}

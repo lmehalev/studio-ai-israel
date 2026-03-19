@@ -508,7 +508,7 @@ export const promptEnhanceService = {
   },
 };
 
-// ====== Brand Management (Supabase DB) ======
+// ====== Brand Management (Supabase DB via REST) ======
 export interface Brand {
   id: string;
   name: string;
@@ -520,9 +520,16 @@ export interface Brand {
   departments?: string[];
 }
 
-const BRANDS_KEY = "creative_studio_brands"; // legacy localStorage key for migration
+const BRANDS_KEY = "creative_studio_brands"; // legacy localStorage key
 
-// Convert DB row to Brand interface
+const REST_BASE = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = {
+  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
+
 function rowToBrand(row: any): Brand {
   return {
     id: row.id,
@@ -536,20 +543,31 @@ function rowToBrand(row: any): Brand {
   };
 }
 
+function brandToRow(b: Brand) {
+  return {
+    id: b.id,
+    name: b.name,
+    logo: b.logo || null,
+    colors: b.colors || [],
+    tone: b.tone || '',
+    target_audience: b.targetAudience || '',
+    industry: b.industry || '',
+    departments: b.departments || [],
+  };
+}
+
 export const brandService = {
-  // Async version - fetches from Supabase
   getAllAsync: async (): Promise<Brand[]> => {
     try {
-      const { data, error } = await supabase.from('brands').select('*').order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data || []).map(rowToBrand);
+      const res = await fetch(`${REST_BASE}/brands?select=*&order=created_at.asc`, { headers: REST_HEADERS });
+      if (!res.ok) throw new Error(await res.text());
+      return ((await res.json()) || []).map(rowToBrand);
     } catch (e) {
-      console.error('Failed to fetch brands from DB, falling back to localStorage', e);
+      console.error('Failed to fetch brands from DB', e);
       return brandService.getAll();
     }
   },
 
-  // Sync fallback for backward compat (reads localStorage only)
   getAll: (): Brand[] => {
     try {
       const raw = localStorage.getItem(BRANDS_KEY);
@@ -558,26 +576,17 @@ export const brandService = {
   },
 
   save: (brands: Brand[]) => {
-    // Legacy: keep localStorage in sync for backward compat
     localStorage.setItem(BRANDS_KEY, JSON.stringify(brands));
   },
 
   add: async (brand: Brand): Promise<Brand[]> => {
     try {
-      await supabase.from('brands').upsert({
-        id: brand.id,
-        name: brand.name,
-        logo: brand.logo || null,
-        colors: brand.colors || [],
-        tone: brand.tone || '',
-        target_audience: brand.targetAudience || '',
-        industry: brand.industry || '',
-        departments: brand.departments || [],
-      }, { onConflict: 'id' });
-    } catch (e) {
-      console.error('Failed to save brand to DB', e);
-    }
-    // Also update localStorage for backward compat
+      await fetch(`${REST_BASE}/brands`, {
+        method: 'POST',
+        headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(brandToRow(brand)),
+      });
+    } catch (e) { console.error('Failed to save brand to DB', e); }
     const brands = brandService.getAll();
     brands.push(brand);
     brandService.save(brands);
@@ -594,10 +603,12 @@ export const brandService = {
       if (updates.targetAudience !== undefined) dbUpdates.target_audience = updates.targetAudience;
       if (updates.industry !== undefined) dbUpdates.industry = updates.industry;
       if (updates.departments !== undefined) dbUpdates.departments = updates.departments;
-      await supabase.from('brands').update(dbUpdates).eq('id', id);
-    } catch (e) {
-      console.error('Failed to update brand in DB', e);
-    }
+      await fetch(`${REST_BASE}/brands?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: REST_HEADERS,
+        body: JSON.stringify(dbUpdates),
+      });
+    } catch (e) { console.error('Failed to update brand in DB', e); }
     const brands = brandService.getAll().map(b => b.id === id ? { ...b, ...updates } : b);
     brandService.save(brands);
     return brands;
@@ -605,49 +616,54 @@ export const brandService = {
 
   remove: async (id: string): Promise<Brand[]> => {
     try {
-      await supabase.from('brands').delete().eq('id', id);
-    } catch (e) {
-      console.error('Failed to delete brand from DB', e);
-    }
+      await fetch(`${REST_BASE}/brands?id=eq.${id}`, { method: 'DELETE', headers: REST_HEADERS });
+    } catch (e) { console.error('Failed to delete brand from DB', e); }
     const brands = brandService.getAll().filter(b => b.id !== id);
     brandService.save(brands);
     return brands;
   },
 
-  // Migrate localStorage brands to Supabase (one-time)
   migrateLocalToDb: async (): Promise<number> => {
     const local = brandService.getAll();
     if (local.length === 0) return 0;
     let count = 0;
     for (const brand of local) {
       try {
-        await supabase.from('brands').upsert({
-          id: brand.id,
-          name: brand.name,
-          logo: brand.logo || null,
-          colors: brand.colors || [],
-          tone: brand.tone || '',
-          target_audience: brand.targetAudience || '',
-          industry: brand.industry || '',
-          departments: brand.departments || [],
-        }, { onConflict: 'id' });
-        count++;
+        const res = await fetch(`${REST_BASE}/brands`, {
+          method: 'POST',
+          headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(brandToRow(brand)),
+        });
+        if (res.ok) count++;
       } catch {}
     }
     return count;
   },
 
-  // Export all data for cross-domain migration
   exportAll: async (): Promise<{ brands: Brand[], scripts: any[] }> => {
     const brands = await brandService.getAllAsync();
-    // Also get localStorage brands that might not be in DB yet
     const localBrands = brandService.getAll();
     const allBrands = [...brands];
     for (const lb of localBrands) {
       if (!allBrands.find(b => b.id === lb.id)) allBrands.push(lb);
     }
-    // Get scripts from localStorage
     let scripts: any[] = [];
+    try { scripts = JSON.parse(localStorage.getItem('studio-scripts') || '[]'); } catch {}
+    // Also fetch from DB
+    try {
+      const res = await fetch(`${REST_BASE}/scripts?select=*&order=created_at.desc`, { headers: REST_HEADERS });
+      if (res.ok) {
+        const dbScripts = await res.json();
+        for (const ds of dbScripts) {
+          if (!scripts.find((s: any) => s.id === ds.id)) {
+            scripts.push({ id: ds.id, name: ds.name, content: ds.content, createdAt: ds.created_at });
+          }
+        }
+      }
+    } catch {}
+    return { brands: allBrands, scripts };
+  },
+};
     try { scripts = JSON.parse(localStorage.getItem('studio-scripts') || '[]'); } catch {}
     return { brands: allBrands, scripts };
   },

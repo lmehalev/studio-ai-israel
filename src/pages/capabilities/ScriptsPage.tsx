@@ -4,7 +4,6 @@ import { FileText, Plus, Trash2, X, Copy, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { promptEnhanceService } from '@/services/creativeService';
-import { supabase } from '@/integrations/supabase/client';
 
 interface SavedScript {
   id: string;
@@ -14,8 +13,14 @@ interface SavedScript {
 }
 
 const STORAGE_KEY = 'studio-scripts';
+const REST_BASE = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = {
+  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
 
-// Legacy localStorage helpers
 function getLocalScripts(): SavedScript[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
 }
@@ -29,12 +34,12 @@ export default function ScriptsManagePage() {
   const [generating, setGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Load from Supabase on mount, migrate localStorage if needed
   useEffect(() => {
     const load = async () => {
       try {
-        const { data, error } = await supabase.from('scripts').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+        const res = await fetch(`${REST_BASE}/scripts?select=*&order=created_at.desc`, { headers: REST_HEADERS });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
         const dbScripts: SavedScript[] = (data || []).map((r: any) => ({
           id: r.id, name: r.name, content: r.content, createdAt: r.created_at,
         }));
@@ -45,14 +50,16 @@ export default function ScriptsManagePage() {
         for (const ls of localScripts) {
           if (!merged.find(s => s.id === ls.id)) {
             try {
-              await supabase.from('scripts').upsert({ id: ls.id, name: ls.name, content: ls.content }, { onConflict: 'id' });
+              await fetch(`${REST_BASE}/scripts`, {
+                method: 'POST',
+                headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify({ id: ls.id, name: ls.name, content: ls.content }),
+              });
               merged.push(ls);
             } catch {}
           }
         }
-        if (localScripts.length > 0) {
-          localStorage.removeItem(STORAGE_KEY); // Clean up after migration
-        }
+        if (localScripts.length > 0) localStorage.removeItem(STORAGE_KEY);
         setScripts(merged);
       } catch (e) {
         console.error('Failed to load scripts from DB', e);
@@ -69,7 +76,9 @@ export default function ScriptsManagePage() {
 
     if (editingId) {
       try {
-        await supabase.from('scripts').update({ name, content }).eq('id', editingId);
+        await fetch(`${REST_BASE}/scripts?id=eq.${editingId}`, {
+          method: 'PATCH', headers: REST_HEADERS, body: JSON.stringify({ name, content }),
+        });
       } catch {}
       setScripts(prev => prev.map(s => s.id === editingId ? { ...s, name, content } : s));
       setEditingId(null);
@@ -78,7 +87,11 @@ export default function ScriptsManagePage() {
       const id = crypto.randomUUID();
       const newScript: SavedScript = { id, name, content, createdAt: new Date().toISOString() };
       try {
-        await supabase.from('scripts').upsert({ id, name, content }, { onConflict: 'id' });
+        await fetch(`${REST_BASE}/scripts`, {
+          method: 'POST',
+          headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify({ id, name, content }),
+        });
       } catch {}
       setScripts(prev => [newScript, ...prev]);
       toast.success('התסריט נשמר!');
@@ -100,7 +113,7 @@ export default function ScriptsManagePage() {
   };
 
   const handleDelete = async (id: string) => {
-    try { await supabase.from('scripts').delete().eq('id', id); } catch {}
+    try { await fetch(`${REST_BASE}/scripts?id=eq.${id}`, { method: 'DELETE', headers: REST_HEADERS }); } catch {}
     setScripts(prev => prev.filter(s => s.id !== id));
     toast.success('התסריט הוסר');
   };
