@@ -1299,15 +1299,43 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
   };
 
+  // ── Auto-split long display captions (presentation only, does NOT touch stored cues) ──
+  const MAX_CHARS_PER_LINE = 42;
+  const getDisplayCaption = (text: string): string => {
+    if (!text) return '';
+    // If short enough, return as-is
+    if (text.length <= MAX_CHARS_PER_LINE * 2) return text;
+    // Split into 2 lines at the nearest word boundary to midpoint
+    const words = text.split(' ');
+    let line1 = '';
+    let bestSplit = 0;
+    const mid = text.length / 2;
+    let len = 0;
+    for (let i = 0; i < words.length; i++) {
+      len += (i > 0 ? 1 : 0) + words[i].length;
+      if (Math.abs(len - mid) < Math.abs(line1.length - mid) || !line1) {
+        line1 = words.slice(0, i + 1).join(' ');
+        bestSplit = i + 1;
+      }
+    }
+    const line2 = words.slice(bestSplit).join(' ');
+    return line1 + '\n' + line2;
+  };
+
   // ── Preview subtitle CSS ──
-  const getPreviewSubtitleStyle = (): React.CSSProperties => {
+  const getPreviewSubtitleStyle = (text: string): React.CSSProperties => {
     // Responsive: scale font relative to content area height, clamp between 12–28px
     const refH = contentRect.h || 200;
-    const scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
+    let scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
+    // Downscale for long captions so they fit
+    if (text.length > MAX_CHARS_PER_LINE) {
+      const ratio = Math.max(0.65, MAX_CHARS_PER_LINE / text.length);
+      scaledPx = Math.max(12, scaledPx * ratio);
+    }
     return {
       fontFamily: currentFont.font,
       fontSize: `${scaledPx}px`,
-      lineHeight: 1.3,
+      lineHeight: 1.35,
       color: (currentFont as any).textColor || customColor,
       background: currentFont.bgColor,
       borderRadius: `${currentFont.borderRadius}px`,
@@ -1317,13 +1345,22 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       direction: 'rtl',
       textAlign: 'center' as const,
       maxWidth: '92%',
+      whiteSpace: 'pre-wrap' as const,
       wordBreak: 'break-word' as const,
       overflowWrap: 'break-word' as const,
-      display: '-webkit-box',
-      WebkitLineClamp: 2,
-      WebkitBoxOrient: 'vertical' as any,
-      overflow: 'hidden',
     };
+  };
+
+  // ── Caption animation CSS ──
+  const getCaptionAnimationStyle = (): string => {
+    switch (captionAnimation) {
+      case 'pop': return 'animate-caption-pop';
+      case 'slideUp': return 'animate-caption-slide-up';
+      case 'bounce': return 'animate-caption-bounce';
+      case 'dynamic': return 'animate-caption-dynamic';
+      case 'karaoke': return ''; // handled differently
+      default: return '';
+    }
   };
 
   // Position alignment inside content rect
