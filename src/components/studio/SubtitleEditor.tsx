@@ -2097,7 +2097,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       <StepIndicator />
       {videoPreviewJSX}
 
-      {/* Music section */}
+      {/* ─── MUSIC SECTION ─── */}
       <div className="space-y-2">
         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Music className="w-3.5 h-3.5" /> מוזיקת רקע
@@ -2108,12 +2108,13 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               key={m.id}
               onClick={() => {
                 setSelectedMusic(m.id);
+                setCustomMusicName(null);
                 if (m.id !== 'none') generateMusic(m.id);
                 else setMusicAudioUrl(null);
               }}
               className={cn(
                 'px-2 py-2 rounded-lg text-xs border transition-all text-center',
-                selectedMusic === m.id ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                selectedMusic === m.id && !customMusicName ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
               )}
             >
               <div className="text-lg mb-0.5">{m.emoji}</div>
@@ -2121,66 +2122,201 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             </button>
           ))}
         </div>
+
+        {/* Upload custom music */}
+        <div
+          onClick={() => musicUploadRef.current?.click()}
+          className={cn(
+            'border border-dashed rounded-lg p-3 text-center cursor-pointer transition-all',
+            customMusicName ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+          )}
+        >
+          <input
+            ref={musicUploadRef}
+            type="file"
+            accept="audio/mpeg,audio/wav,audio/mp3,audio/*"
+            className="hidden"
+            onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) {
+                setSelectedMusic('custom');
+                setCustomMusicName(f.name);
+                setMusicAudioUrl(URL.createObjectURL(f));
+                toast.success('מוזיקה הועלתה!');
+              }
+            }}
+          />
+          <Upload className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">{customMusicName || 'גרור או העלה מוזיקה (MP3/WAV)'}</p>
+        </div>
+
         {musicLoading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center py-3">
             <Loader2 className="w-4 h-4 animate-spin" /> מייצר מוזיקה...
           </div>
         )}
+
         {musicAudioUrl && (
-          <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-2 border border-border/50">
-            <button
-              onClick={() => {
-                if (!musicAudioRef.current) return;
-                if (musicPlaying) musicAudioRef.current.pause();
-                else musicAudioRef.current.play();
-                setMusicPlaying(!musicPlaying);
-              }}
-              className="w-8 h-8 gradient-gold text-primary-foreground rounded-full flex items-center justify-center text-xs shrink-0"
-            >
-              {musicPlaying ? '⏸' : '▶'}
-            </button>
-            <audio ref={musicAudioRef} src={musicAudioUrl} onEnded={() => setMusicPlaying(false)} className="flex-1 h-8" controls />
+          <div className="space-y-2 bg-muted/30 rounded-lg p-3 border border-border/50">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  if (!musicAudioRef.current) return;
+                  if (musicPlaying) musicAudioRef.current.pause();
+                  else {
+                    musicAudioRef.current.volume = musicVolume / 100;
+                    musicAudioRef.current.play();
+                  }
+                  setMusicPlaying(!musicPlaying);
+                }}
+                className="w-8 h-8 gradient-gold text-primary-foreground rounded-full flex items-center justify-center text-xs shrink-0"
+              >
+                {musicPlaying ? '⏸' : '▶'}
+              </button>
+              <audio
+                ref={musicAudioRef}
+                src={musicAudioUrl}
+                onEnded={() => setMusicPlaying(false)}
+                className="flex-1 h-8"
+                controls
+              />
+            </div>
+            {/* Volume */}
+            <div className="flex items-center gap-2">
+              <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={musicVolume}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  setMusicVolume(v);
+                  if (musicAudioRef.current) musicAudioRef.current.volume = v / 100;
+                }}
+                className="flex-1 accent-primary h-1.5"
+              />
+              <Volume2 className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{musicVolume}%</span>
+            </div>
+            {/* Ducking */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={musicDucking}
+                onChange={e => setMusicDucking(e.target.checked)}
+                className="accent-primary rounded"
+              />
+              <span className="text-xs text-muted-foreground">הנמך מוזיקה כשיש דיבור (ducking)</span>
+            </label>
           </div>
         )}
       </div>
 
-      {/* Logo section */}
+      {/* ─── LOGO SECTION ─── */}
       <div className="space-y-2">
         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Crown className="w-3.5 h-3.5" /> לוגו
         </h4>
         {logoUrl ? (
-          <div className="flex items-center gap-3 bg-muted/30 rounded-lg p-3 border border-border/50">
-            <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border" />
-            <div className="flex-1">
-              <p className="text-xs text-muted-foreground">יופיע בפינה הימנית העליונה</p>
-              <button onClick={() => setLogoUrl(null)}
-                className="text-xs text-destructive hover:underline flex items-center gap-1 mt-1">
-                <Trash2 className="w-3 h-3" /> הסר
-              </button>
+          <div className="space-y-2 bg-muted/30 rounded-lg p-3 border border-border/50">
+            <div className="flex items-center gap-3">
+              <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border" />
+              <div className="flex-1 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {logoPosition === 'topRight' ? 'ימין עליון' : logoPosition === 'topLeft' ? 'שמאל עליון' : logoPosition === 'bottomRight' ? 'ימין תחתון' : 'שמאל תחתון'}
+                  {' • '}{logoSize}% גודל{' • '}{logoOpacity}% שקיפות
+                </p>
+                <button onClick={() => setLogoUrl(null)}
+                  className="text-xs text-destructive hover:underline flex items-center gap-1">
+                  <Trash2 className="w-3 h-3" /> הסר
+                </button>
+              </div>
+            </div>
+            {/* Position */}
+            <div className="grid grid-cols-4 gap-1">
+              {([
+                { value: 'topRight' as LogoPosition, label: 'ימין ↗' },
+                { value: 'topLeft' as LogoPosition, label: 'שמאל ↖' },
+                { value: 'bottomRight' as LogoPosition, label: 'ימין ↘' },
+                { value: 'bottomLeft' as LogoPosition, label: 'שמאל ↙' },
+              ]).map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => setLogoPosition(p.value)}
+                  className={cn(
+                    'px-2 py-1 rounded text-[10px] border transition-all',
+                    logoPosition === p.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {/* Size slider */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground w-12">גודל</span>
+              <input type="range" min={4} max={15} step={0.5} value={logoSize}
+                onChange={e => setLogoSize(Number(e.target.value))}
+                className="flex-1 accent-primary h-1.5" />
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoSize}%</span>
+            </div>
+            {/* Margin slider */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground w-12">שוליים</span>
+              <input type="range" min={1} max={10} step={0.5} value={logoMargin}
+                onChange={e => setLogoMargin(Number(e.target.value))}
+                className="flex-1 accent-primary h-1.5" />
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoMargin}%</span>
+            </div>
+            {/* Opacity slider */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground w-12">שקיפות</span>
+              <input type="range" min={10} max={100} step={5} value={logoOpacity}
+                onChange={e => setLogoOpacity(Number(e.target.value))}
+                className="flex-1 accent-primary h-1.5" />
+              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoOpacity}%</span>
             </div>
           </div>
         ) : (
-          <div
-            onClick={() => logoInputRef.current?.click()}
-            className="border border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/40 transition-all"
-          >
-            <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }}
-            />
-            {logoUploading ? (
-              <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary" />
-            ) : (
-              <>
-                <Image className="w-6 h-6 mx-auto mb-1 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground">העלה לוגו</p>
-              </>
-            )}
+          <div className="flex gap-2">
+            <div
+              onClick={() => logoInputRef.current?.click()}
+              className="flex-1 border border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/40 transition-all"
+            >
+              <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }}
+              />
+              {logoUploading ? (
+                <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary" />
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">העלה לוגו</p>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setShowStoragePicker(true)}
+              className="flex-1 border border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/40 transition-all"
+            >
+              <Image className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">בחר מהספרייה</p>
+            </button>
           </div>
         )}
+        <StoragePicker
+          open={showStoragePicker}
+          onClose={() => setShowStoragePicker(false)}
+          onSelect={(urls) => {
+            if (urls.length > 0) setLogoUrl(urls[0]);
+          }}
+          accept="image/*"
+        />
       </div>
 
-      {/* Stickers section */}
+      {/* ─── STICKERS SECTION ─── */}
       <div className="space-y-2">
         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Sticker className="w-3.5 h-3.5" /> סטיקרים ואייקונים
@@ -2196,39 +2332,107 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             </button>
           ))}
         </div>
+
+        {/* Overlay list — editable */}
         {stickers.length > 0 && (
           <div className="space-y-1.5 mt-1">
-            <h5 className="text-[10px] font-medium text-muted-foreground">נוספו ({stickers.length})</h5>
-            {stickers.map(sticker => (
-              <div key={sticker.id} className="flex items-center gap-2 bg-muted/30 rounded-lg p-2 border border-border/50">
-                <span className="text-lg">{sticker.emoji}</span>
-                <select
-                  value={sticker.position}
-                  onChange={e => setStickers(prev => prev.map(s =>
-                    s.id === sticker.id ? { ...s, position: e.target.value as any } : s
-                  ))}
-                  className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs"
-                >
-                  <option value="topLeft">שמאל עליון</option>
-                  <option value="topRight">ימין עליון</option>
-                  <option value="bottomLeft">שמאל תחתון</option>
-                  <option value="bottomRight">ימין תחתון</option>
-                  <option value="center">מרכז</option>
-                </select>
-                <input type="number" step="0.5" min="0" value={sticker.startTime}
-                  onChange={e => setStickers(prev => prev.map(s =>
-                    s.id === sticker.id ? { ...s, startTime: Number(e.target.value) } : s
-                  ))}
-                  className="w-12 bg-background border border-border rounded px-1 py-1 text-xs text-center" title="התחלה" />
-                <input type="number" step="0.5" min="0.5" value={sticker.duration}
-                  onChange={e => setStickers(prev => prev.map(s =>
-                    s.id === sticker.id ? { ...s, duration: Number(e.target.value) } : s
-                  ))}
-                  className="w-12 bg-background border border-border rounded px-1 py-1 text-xs text-center" title="משך" />
-                <button onClick={() => removeSticker(sticker.id)}
-                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+            <h5 className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+              <Layers className="w-3 h-3" /> שכבות ({stickers.length})
+              {stickers.length > 4 && (
+                <span className="text-amber-500 flex items-center gap-0.5">
+                  <AlertTriangle className="w-3 h-3" /> עומס ויזואלי
+                </span>
+              )}
+            </h5>
+            {stickers.map((sticker, idx) => (
+              <div
+                key={sticker.id}
+                className={cn(
+                  'bg-muted/30 rounded-lg border transition-all',
+                  editingStickerIdx === idx ? 'border-primary/50 bg-primary/5 p-3' : 'border-border/50 p-2'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{sticker.emoji}</span>
+                  <div className="flex-1 text-xs text-muted-foreground">
+                    {STICKER_POSITION_LABELS[sticker.position]} • {sticker.startTime}s • {sticker.duration}s
+                  </div>
+                  <button
+                    onClick={() => setEditingStickerIdx(editingStickerIdx === idx ? null : idx)}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                  >
+                    <Move className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => removeSticker(sticker.id)}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {editingStickerIdx === idx && (
+                  <div className="mt-2 space-y-2">
+                    {/* Position */}
+                    <div className="flex flex-wrap gap-1">
+                      {(Object.entries(STICKER_POSITION_LABELS) as [OverlayPosition, string][]).map(([val, label]) => (
+                        <button
+                          key={val}
+                          onClick={() => setStickers(prev => prev.map(s =>
+                            s.id === sticker.id ? { ...s, position: val } : s
+                          ))}
+                          className={cn(
+                            'px-2 py-0.5 rounded text-[10px] border',
+                            sticker.position === val ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Timing */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">התחלה</span>
+                      <input type="number" step="0.5" min="0" value={sticker.startTime}
+                        onChange={e => setStickers(prev => prev.map(s =>
+                          s.id === sticker.id ? { ...s, startTime: Number(e.target.value) } : s
+                        ))}
+                        className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center" />
+                      <span className="text-[10px] text-muted-foreground">משך</span>
+                      <input type="number" step="0.5" min="0.5" value={sticker.duration}
+                        onChange={e => setStickers(prev => prev.map(s =>
+                          s.id === sticker.id ? { ...s, duration: Number(e.target.value) } : s
+                        ))}
+                        className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center" />
+                    </div>
+                    {/* Scale */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">גודל</span>
+                      <input type="range" min={0.5} max={3} step={0.1} value={sticker.scale}
+                        onChange={e => setStickers(prev => prev.map(s =>
+                          s.id === sticker.id ? { ...s, scale: Number(e.target.value) } : s
+                        ))}
+                        className="flex-1 accent-primary h-1.5" />
+                      <span className="text-[10px] text-muted-foreground w-8 text-center">×{sticker.scale}</span>
+                    </div>
+                    {/* Animation */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground">אנימציה:</span>
+                      {STICKER_ANIM_OPTIONS.map(a => (
+                        <button
+                          key={a.value}
+                          onClick={() => setStickers(prev => prev.map(s =>
+                            s.id === sticker.id ? { ...s, animationIn: a.value } : s
+                          ))}
+                          className={cn(
+                            'px-2 py-0.5 rounded text-[10px] border',
+                            sticker.animationIn === a.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                          )}
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2253,9 +2457,9 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
       {/* Result */}
       {renderedVideoUrl && (
-        <div className="bg-card border border-green-500/30 rounded-xl p-4 space-y-3">
+        <div className="bg-card border border-primary/30 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Check className="w-5 h-5 text-green-500" />
+            <Check className="w-5 h-5 text-primary" />
             <span className="text-sm font-bold">הסרטון מוכן!</span>
           </div>
           <video src={renderedVideoUrl} controls className="w-full rounded-lg max-h-[300px]" />
