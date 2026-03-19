@@ -1577,19 +1577,27 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           </div>
         </div>
       )}
-      {/* Logo overlay — respects position/size/margin/opacity settings */}
+      {/* Logo overlay — free placement using xPct/yPct relative to contentRect */}
       {logoUrl && (
         <div
-          className="absolute z-20 pointer-events-none"
+          className={cn("absolute z-20", logoDragging ? 'cursor-grabbing' : 'cursor-grab')}
           style={{
-            ...(logoPosition.includes('top') ? { top: `${contentRect.y + contentRect.h * logoMargin / 100}px` } : { bottom: `${(containerSize.height - contentRect.y - contentRect.h) + contentRect.h * logoMargin / 100}px` }),
-            ...(logoPosition.includes('Right') ? { right: `${(containerSize.width - contentRect.x - contentRect.w) + contentRect.w * logoMargin / 100}px` } : { left: `${contentRect.x + contentRect.w * logoMargin / 100}px` }),
+            left: `${contentRect.x + contentRect.w * logoXPct / 100}px`,
+            top: `${contentRect.y + contentRect.h * logoYPct / 100}px`,
+            pointerEvents: 'auto',
           }}
+          onMouseDown={handleLogoDragStart}
+          onTouchStart={handleLogoDragStart}
         >
+          {/* Safe-area guide while dragging */}
+          {logoDragging && (
+            <div className="absolute -inset-1 border-2 border-dashed border-primary/50 rounded-lg pointer-events-none" />
+          )}
           <img
             src={logoUrl}
             alt="logo"
-            className="object-contain rounded-lg"
+            className="object-contain rounded-lg select-none"
+            draggable={false}
             style={{
               width: `${contentRect.w * logoSize / 100}px`,
               height: `${contentRect.w * logoSize / 100}px`,
