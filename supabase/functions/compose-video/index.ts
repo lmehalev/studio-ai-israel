@@ -667,30 +667,36 @@ Deno.serve(async (req) => {
 
         if (response.ok) {
           const data = await response.json();
-          return new Response(
-            JSON.stringify({
-              renderId: data.response?.id,
-              status: "rendering",
-              shotstackEnv: env,
-              debug: debugObject,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
+          const renderResponse: ComposeRenderResponse = {
+            renderId: data.response?.id ?? null,
+            status: "rendering",
+            ...responseSummary,
+          };
+
+          return new Response(JSON.stringify(renderResponse), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
-        const errText = await response.text();
-        renderErrors.push(`${env}:${response.status} ${errText}`);
-        console.error(`Shotstack render error (${env}):`, response.status, errText);
+        // Always consume provider body but never echo it back to the client
+        await response.text();
+        renderErrors.push(`${env}:${response.status}`);
+        console.error(`Shotstack render error (${env}):`, response.status);
 
         if (![401, 403, 404].includes(response.status)) {
           break;
         }
       }
 
-      return new Response(
-        JSON.stringify({ error: `שגיאה בהרכבת הסרטון: ${renderErrors.join(" | ")}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      const failedResponse: ComposeRenderResponse = {
+        renderId: null,
+        status: `failed:${renderErrors.join(",") || "unknown"}`,
+        ...responseSummary,
+      };
+
+      return new Response(JSON.stringify(failedResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (action === "check_status") {
