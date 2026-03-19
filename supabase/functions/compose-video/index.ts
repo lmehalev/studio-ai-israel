@@ -1,3 +1,5 @@
+import hebrewFontBytes from "./NotoSansHebrew-Regular.ttf" with { type: "bytes" };
+
 // Deno.serve used natively
 
 const corsHeaders = {
@@ -78,12 +80,9 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function getEmbeddedHebrewFontBase64(): Promise<string> {
+function getEmbeddedHebrewFontBase64(): string {
   if (cachedHebrewFontBase64) return cachedHebrewFontBase64;
-
-  const fontPath = new URL("./NotoSansHebrew-Regular.ttf", import.meta.url);
-  const fontBytes = await Deno.readFile(fontPath);
-  cachedHebrewFontBase64 = uint8ToBase64(fontBytes);
+  cachedHebrewFontBase64 = uint8ToBase64(new Uint8Array(hebrewFontBytes));
   return cachedHebrewFontBase64;
 }
 
@@ -452,7 +451,7 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const embeddedFontBase64 = await getEmbeddedHebrewFontBase64();
+      const embeddedFontBase64 = getEmbeddedHebrewFontBase64();
 
       if (subtitleSegments && subtitleSegments.length > 0) {
         const subClips = buildSubtitleClips(
