@@ -722,13 +722,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={e => {
-          e.preventDefault(); setIsDragging(false);
+          e.preventDefault();
+          setIsDragging(false);
           const file = e.dataTransfer.files[0];
           if (file && file.type.startsWith('video/')) {
             setVideoFile(file);
+            setUploadedVideoUrl(null);
+            setSubtitleSegments([]);
+            setTranscribeDebug(null);
             setVideoPreviewUrl(URL.createObjectURL(file));
             setStep(1);
-          } else toast.error('יש להעלות קובץ וידאו');
+          } else {
+            toast.error('יש להעלות קובץ וידאו');
+          }
         }}
         onClick={() => fileInputRef.current?.click()}
         className={cn(
@@ -739,7 +745,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
           onChange={e => {
             const f = e.target.files?.[0];
-            if (f) { setVideoFile(f); setVideoPreviewUrl(URL.createObjectURL(f)); setStep(1); }
+            if (f) {
+              setVideoFile(f);
+              setUploadedVideoUrl(null);
+              setSubtitleSegments([]);
+              setTranscribeDebug(null);
+              setVideoPreviewUrl(URL.createObjectURL(f));
+              setStep(1);
+            }
           }}
         />
         <Upload className={cn('w-12 h-12 mx-auto mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
