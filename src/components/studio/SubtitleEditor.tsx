@@ -1011,84 +1011,49 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   });
 
   // ── Video preview component (shared across steps) ──
-  const videoPreviewUrlRef = useRef(videoPreviewUrl);
-  videoPreviewUrlRef.current = videoPreviewUrl;
+  const VideoPreview = () => {
+    if (!videoPreviewUrl) return null;
+    return (
+      <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+        <video
+          ref={setVideoPreviewElement}
+          src={videoPreviewUrl}
+          controls
+          preload="metadata"
+          className="w-full max-h-[240px]"
+          onLoadedMetadata={(e) => {
+            const video = e.currentTarget;
+            setVideoLoadError(null);
+            updatePlaybackDebug({
+              activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+              readyState: video.readyState,
+              currentTime: video.currentTime,
+            });
+            syncPlaybackFromVisibleVideo();
+          }}
+          onError={(e) => {
+            const video = e.currentTarget;
+            const mediaError = video.error;
+            const msg = mediaError
+              ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
+              : 'שגיאת טעינת וידאו לא מזוהה';
+            setVideoLoadError(msg);
+            updatePlaybackDebug({ readyState: video.readyState, playError: msg });
+          }}
+        />
+      </div>
+    );
+  };
 
-  const VideoPreview = useMemo(() => {
-    // eslint-disable-next-line react/display-name
-    const VP = () => {
-      const url = videoPreviewUrlRef.current;
-      if (!url) return null;
-      return (
-        <div className="rounded-xl overflow-hidden border border-border relative bg-black">
-          <video
-            ref={setVideoPreviewElement}
-            src={url}
-            controls
-            preload="metadata"
-            className="w-full max-h-[240px]"
-            onLoadedMetadata={() => {
-              if (!videoPreviewRef.current) return;
-              setVideoLoadError(null);
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-              });
-            }}
-            onError={(e) => {
-              const video = e.currentTarget;
-              const mediaError = video.error;
-              const msg = mediaError
-                ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
-                : 'שגיאת טעינת וידאו לא מזוהה';
-              setVideoLoadError(msg);
-              updatePlaybackDebug({ readyState: video.readyState, playError: msg });
-            }}
-            onPause={() => {
-              if (!videoPreviewRef.current) return;
-              const activePlayback = cuePlaybackRef.current;
-              if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
-                clearCuePlaybackState();
-                updatePlaybackDebug({ startSec: null, endSec: null });
-              }
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-                timeupdateEventsPerSecond: 0,
-              });
-            }}
-            onEnded={() => {
-              if (!videoPreviewRef.current) return;
-              clearCuePlaybackState();
-              activeCueIndexRef.current = null;
-              setActiveCueIndex(null);
-              setCurrentSubtitle('');
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-                startSec: null,
-                endSec: null,
-                timeupdateEventsPerSecond: 0,
-              });
-            }}
-          />
-        </div>
-      );
-    };
-    return VP;
-  // Only recreate when the URL identity changes (not on every render)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoPreviewUrl]);
-
-  // Caption overlay - rendered as inline JSX, NOT as a component (avoids unmount/remount flicker)
+  // Caption overlay - always above the playing video
   const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
-    <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4" style={{ zIndex: 30 }}>
+    <div className="absolute inset-0 z-30 pointer-events-none flex items-end justify-center px-4 pb-12" dir="rtl">
       <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
     </div>
   ) : null;
 
   const logoOverlayJSX = logoUrl ? (
-    <div className="absolute top-3 right-3 pointer-events-none" style={{ zIndex: 25 }}>
+    <div className="absolute top-3 right-3 z-20 pointer-events-none">
       <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
     </div>
   ) : null;
@@ -1096,14 +1061,13 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // Always-visible overlay debug strip
   const overlayDebugJSX = videoPreviewUrl ? (
     <div
-      className="absolute top-1 left-1 right-1 pointer-events-none flex justify-between items-start gap-2 text-[10px] font-mono leading-tight px-2 py-1 rounded"
-      style={{ zIndex: 40, background: 'rgba(0,0,0,0.7)', color: '#0f0' }}
+      className="absolute top-1 left-1 right-1 z-40 pointer-events-none grid grid-cols-1 md:grid-cols-4 gap-1 text-[10px] font-mono leading-tight px-2 py-1 rounded border border-border bg-background/80 text-foreground"
       dir="ltr"
     >
-      <span>cueIdx: {activeCueIndex ?? '-1'}</span>
-      <span>t: {playbackDebug.currentTime?.toFixed(2) ?? '?'}</span>
-      <span>segs: {subtitleSegments.length}</span>
-      <span className="max-w-[120px] truncate">{currentSubtitle ? currentSubtitle.slice(0, 30) : '(no cue)'}</span>
+      <span>activeCueIndex: {activeCueIndex ?? -1}</span>
+      <span>currentTime: {playbackDebug.currentTime.toFixed(3)}</span>
+      <span>activeListeners: {playbackDebug.activeTimeupdateListeners}</span>
+      <span className="truncate">activeText: {(currentSubtitle || '').slice(0, 30) || '(empty)'}</span>
     </div>
   ) : null;
 
