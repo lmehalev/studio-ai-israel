@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors, Layers
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,8 @@ import {
 import { VideoWizardFlow, type VideoWizardSession } from '@/components/studio/VideoWizardFlow';
 import { CostApprovalDialog, buildHighlightEstimates, type CostEstimate } from '@/components/studio/CostApprovalDialog';
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
+import { WebsiteScanPanel, type WebsiteScanResult } from '@/components/studio/WebsiteScanPanel';
+import { CarouselGenerator } from '@/components/studio/CarouselGenerator';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
 
@@ -130,6 +132,17 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [showHighlightCostApproval, setShowHighlightCostApproval] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState<string>('');
+
+  // Website scan state
+  const [websiteScanResult, setWebsiteScanResult] = useState<WebsiteScanResult | null>(null);
+  const [websiteContentForPrompt, setWebsiteContentForPrompt] = useState<{
+    headline?: string; subheadline?: string; bullets?: string[];
+    cta?: string; keywords?: string[]; brandColors?: string[]; logoUrl?: string;
+  } | null>(null);
+
+  // Carousel mode state
+  const [imageMode, setImageMode] = useState<'single' | 'carousel'>('single');
+  const [showCarousel, setShowCarousel] = useState(false);
 
   const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
@@ -325,6 +338,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightStage('');
         setHighlightOutputType('viral_short');
         setVideoWizardSession(null);
+        setWebsiteScanResult(null);
+        setWebsiteContentForPrompt(null);
+        setImageMode('single');
+        setShowCarousel(false);
       }, 300);
     }
   }, [open]);
@@ -871,12 +888,69 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         const allRefs = [
           ...(selectedAvatar ? [selectedAvatar.image_url] : []),
           ...imageRefPhotos,
+          ...(websiteContentForPrompt?.logoUrl ? [websiteContentForPrompt.logoUrl] : []),
         ];
+
+        // If carousel mode is active, show CarouselGenerator
+        if (imageMode === 'carousel' && showCarousel) {
+          return (
+            <CarouselGenerator
+              prompt={prompt}
+              buildPrompt={buildPrompt}
+              activeBrand={activeBrand}
+              activeBrandId={activeBrandId}
+              brandColors={websiteContentForPrompt?.brandColors}
+              logoUrl={websiteContentForPrompt?.logoUrl}
+              referenceImages={allRefs.length > 0 ? allRefs : undefined}
+              websiteContent={websiteContentForPrompt}
+              onBack={() => setShowCarousel(false)}
+            />
+          );
+        }
 
         return (
           <div className="space-y-4">
             {avatarVoiceBar}
+
+            {/* Image mode toggle */}
+            <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg p-1">
+              <button
+                onClick={() => { setImageMode('single'); setShowCarousel(false); }}
+                className={cn('flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5',
+                  imageMode === 'single' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                <ImageIcon className="w-3.5 h-3.5" /> תמונה אחת
+              </button>
+              <button
+                onClick={() => setImageMode('carousel')}
+                className={cn('flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5',
+                  imageMode === 'carousel' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              >
+                <Layers className="w-3.5 h-3.5" /> סט תמונות (קרוסלה)
+              </button>
+            </div>
+
             {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
+
+            {/* Website scan panel */}
+            <WebsiteScanPanel
+              onApplyContent={(data) => {
+                setWebsiteContentForPrompt(data);
+                // Inject chosen content into prompt
+                const parts: string[] = [];
+                if (data.headline) parts.push(`כותרת: ${data.headline}`);
+                if (data.subheadline) parts.push(`תת-כותרת: ${data.subheadline}`);
+                if (data.bullets?.length) parts.push(`נקודות: ${data.bullets.join(', ')}`);
+                if (data.cta) parts.push(`CTA: ${data.cta}`);
+                if (data.keywords?.length) parts.push(`מילות מפתח: ${data.keywords.join(', ')}`);
+                if (data.brandColors?.length) parts.push(`צבעי מותג: ${data.brandColors.join(', ')}`);
+                if (parts.length > 0) {
+                  setPrompt(prev => prev ? `${prev}\n\n--- תוכן מהאתר ---\n${parts.join('\n')}` : parts.join('\n'));
+                }
+              }}
+              onScanComplete={(result) => setWebsiteScanResult(result)}
+            />
+
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                 <ImageIcon className="w-3.5 h-3.5" /> תמונות רפרנס ({allRefs.length}/{MAX_REF_IMAGES})
@@ -907,27 +981,37 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                 />
               )}
             </div>
-            <button
-              onClick={async () => {
-                if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
-                setLoading(true);
-                try {
-                  const refs = allRefs.length > 0 ? allRefs : undefined;
-                  const avatarContext = selectedAvatar ? `\n\nIMPORTANT: Use the provided avatar/person reference image(s) — the person in the output MUST look exactly like the reference photos.` : '';
-                  const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs);
-                  setResult({ imageUrl: data.imageUrl });
-                  setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
-                  setStep(step + 1);
-                  toast.success('התמונה נוצרה!');
-                } catch (e: any) { toast.error(e.message); }
-                finally { setLoading(false); }
-              }}
-              disabled={loading}
-              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              {loading ? 'מייצר...' : 'צור תמונה'}
-            </button>
+
+            {imageMode === 'carousel' ? (
+              <button
+                onClick={() => setShowCarousel(true)}
+                className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                <Layers className="w-4 h-4" /> הגדר שקופיות קרוסלה
+              </button>
+            ) : (
+              <button
+                onClick={async () => {
+                  if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
+                  setLoading(true);
+                  try {
+                    const refs = allRefs.length > 0 ? allRefs : undefined;
+                    const avatarContext = selectedAvatar ? `\n\nIMPORTANT: Use the provided avatar/person reference image(s) — the person in the output MUST look exactly like the reference photos.` : '';
+                    const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs);
+                    setResult({ imageUrl: data.imageUrl });
+                    setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
+                    setStep(step + 1);
+                    toast.success('התמונה נוצרה!');
+                  } catch (e: any) { toast.error(e.message); }
+                  finally { setLoading(false); }
+                }}
+                disabled={loading}
+                className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                {loading ? 'מייצר...' : 'צור תמונה'}
+              </button>
+            )}
           </div>
         );
       }
