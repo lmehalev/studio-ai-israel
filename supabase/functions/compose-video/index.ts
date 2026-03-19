@@ -644,9 +644,8 @@ Deno.serve(async (req) => {
         subtitleCount: subtitleSegments?.length || 0,
       };
 
-      console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 1200));
+      console.log("Submitting Shotstack render (payload KB):", Math.round(JSON.stringify(renderBody).length / 1024));
       console.log("Compose debug object:", JSON.stringify(debugObject));
-      console.log("Compose debug export (timeline snippet):", JSON.stringify(renderBody).slice(0, 4000));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -666,10 +665,7 @@ Deno.serve(async (req) => {
               renderId: data.response?.id,
               status: "rendering",
               shotstackEnv: env,
-              debug: {
-                ...debugObject,
-                timelineJson: JSON.stringify(renderBody).slice(0, 2000),
-              },
+              debug: debugObject,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
