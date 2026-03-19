@@ -902,64 +902,84 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   });
 
   // ── Video preview component (shared across steps) ──
-  const VideoPreview = () => (
-    videoPreviewUrl ? (
-      <div className="rounded-xl overflow-hidden border border-border relative bg-black">
-        <video
-          ref={setVideoPreviewElement}
-          src={videoPreviewUrl}
-          controls
-          preload="metadata"
-          className="w-full max-h-[240px]"
-          onLoadedMetadata={() => {
-            if (!videoPreviewRef.current) return;
-            updatePlaybackDebug({
-              readyState: videoPreviewRef.current.readyState,
-              currentTime: videoPreviewRef.current.currentTime,
-            });
-          }}
-          onPause={() => {
-            if (!videoPreviewRef.current) return;
-            const activePlayback = cuePlaybackRef.current;
-            if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
-              clearCuePlaybackState();
-              updatePlaybackDebug({ startSec: null, endSec: null });
-            }
+  const videoPreviewUrlRef = useRef(videoPreviewUrl);
+  videoPreviewUrlRef.current = videoPreviewUrl;
 
-            updatePlaybackDebug({
-              readyState: videoPreviewRef.current.readyState,
-              currentTime: videoPreviewRef.current.currentTime,
-              timeupdateEventsPerSecond: 0,
-            });
-          }}
-          onEnded={() => {
-            if (!videoPreviewRef.current) return;
-            clearCuePlaybackState();
-            activeCueIndexRef.current = null;
-            setActiveCueIndex(null);
-            setCurrentSubtitle('');
-            updatePlaybackDebug({
-              readyState: videoPreviewRef.current.readyState,
-              currentTime: videoPreviewRef.current.currentTime,
-              startSec: null,
-              endSec: null,
-              timeupdateEventsPerSecond: 0,
-            });
-          }}
-        />
-        {showPreview && currentSubtitle && (
-          <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4">
-            <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
-          </div>
-        )}
-        {logoUrl && (
-          <div className="absolute top-3 right-3 pointer-events-none">
-            <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
-          </div>
-        )}
-      </div>
-    ) : null
-  );
+  const VideoPreview = useMemo(() => {
+    // eslint-disable-next-line react/display-name
+    const VP = () => {
+      const url = videoPreviewUrlRef.current;
+      if (!url) return null;
+      return (
+        <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+          <video
+            ref={setVideoPreviewElement}
+            src={url}
+            controls
+            preload="metadata"
+            className="w-full max-h-[240px]"
+            onLoadedMetadata={() => {
+              if (!videoPreviewRef.current) return;
+              setVideoLoadError(null);
+              updatePlaybackDebug({
+                readyState: videoPreviewRef.current.readyState,
+                currentTime: videoPreviewRef.current.currentTime,
+              });
+            }}
+            onError={(e) => {
+              const video = e.currentTarget;
+              const mediaError = video.error;
+              const msg = mediaError
+                ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
+                : 'שגיאת טעינת וידאו לא מזוהה';
+              setVideoLoadError(msg);
+              updatePlaybackDebug({ readyState: video.readyState, playError: msg });
+            }}
+            onPause={() => {
+              if (!videoPreviewRef.current) return;
+              const activePlayback = cuePlaybackRef.current;
+              if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
+                clearCuePlaybackState();
+                updatePlaybackDebug({ startSec: null, endSec: null });
+              }
+              updatePlaybackDebug({
+                readyState: videoPreviewRef.current.readyState,
+                currentTime: videoPreviewRef.current.currentTime,
+                timeupdateEventsPerSecond: 0,
+              });
+            }}
+            onEnded={() => {
+              if (!videoPreviewRef.current) return;
+              clearCuePlaybackState();
+              activeCueIndexRef.current = null;
+              setActiveCueIndex(null);
+              setCurrentSubtitle('');
+              updatePlaybackDebug({
+                readyState: videoPreviewRef.current.readyState,
+                currentTime: videoPreviewRef.current.currentTime,
+                startSec: null,
+                endSec: null,
+                timeupdateEventsPerSecond: 0,
+              });
+            }}
+          />
+          {showPreview && currentSubtitle && (
+            <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4">
+              <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+            </div>
+          )}
+          {logoUrl && (
+            <div className="absolute top-3 right-3 pointer-events-none">
+              <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
+            </div>
+          )}
+        </div>
+      );
+    };
+    return VP;
+  // Only recreate when the URL identity changes (not on every render)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoPreviewUrl]);
 
   // ── Step indicator ──
   const StepIndicator = () => (
