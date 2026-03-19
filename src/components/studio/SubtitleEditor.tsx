@@ -1364,8 +1364,9 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       <StepIndicator />
       <div className="relative">
         <VideoPreview />
-        <CaptionOverlay />
-        <LogoOverlay />
+        {overlayDebugJSX}
+        {captionOverlayJSX}
+        {logoOverlayJSX}
       </div>
 
       {/* Font presets grid */}
