@@ -265,6 +265,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [customColor, setCustomColor] = useState('#FFFFFF');
   const [customFontSize, setCustomFontSize] = useState(26);
   const [captionPosition, setCaptionPosition] = useState<'bottom' | 'middle' | 'top'>('bottom');
+  const [captionAnimation, setCaptionAnimation] = useState<'none' | 'pop' | 'slideUp' | 'bounce' | 'karaoke' | 'dynamic'>('none');
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Video orientation & content rect
