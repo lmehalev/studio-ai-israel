@@ -1430,7 +1430,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 3) return (
     <div className="space-y-3">
       <StepIndicator />
-      <VideoPreview />
+      <div className="relative">
+        <VideoPreview />
+        <CaptionOverlay />
+        <LogoOverlay />
+      </div>
 
       {/* Music section */}
       <div className="space-y-2">
