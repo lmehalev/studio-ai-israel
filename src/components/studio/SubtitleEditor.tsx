@@ -442,7 +442,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           currentTime: boundedEnd,
           startSec: null,
           endSec: null,
-          activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+          activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
           timeupdateEventsPerSecond: frameWindowRef.current.fps,
         });
         return;
@@ -452,7 +452,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     updatePlaybackDebug({
       readyState: video.readyState,
       currentTime,
-      activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+      activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
       timeupdateEventsPerSecond: frameWindowRef.current.fps,
     });
   }, [ACTIVE_CUE_TOLERANCE_SEC, clearCuePlaybackState, updatePlaybackDebug]);
