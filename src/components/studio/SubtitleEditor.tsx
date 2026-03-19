@@ -928,6 +928,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             updatePlaybackDebug({
               readyState: videoPreviewRef.current.readyState,
               currentTime: videoPreviewRef.current.currentTime,
+              timeupdateEventsPerSecond: 0,
             });
           }}
           onEnded={() => {
