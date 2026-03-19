@@ -294,36 +294,71 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
     }
   };
 
-  const handleSaveAll = async () => {
+  const handleSaveAll = async (retryIndices?: number[]) => {
     const brandObj = activeBrand;
     const brandId = activeBrandId;
     if (!brandId || !brandObj) {
       toast.error('יש לבחור חברה / מותג לפני השמירה');
       return;
     }
+
+    const indicesToSave = retryIndices || generatedSlides.map((_, i) => i).filter(i => generatedSlides[i].imageUrl);
     setSavingOutput(true);
+    setSaveProgress({ done: 0, total: indicesToSave.length, failed: [] });
+    setSavedProjectName(null);
+
     try {
+      // Phase A: create project row quickly
       const project = await projectService.findOrCreateByBrand(brandId, brandObj.name);
-      for (let i = 0; i < generatedSlides.length; i++) {
+      setSavedProjectName(project.name);
+      toast.success(`פרויקט "${project.name}" מוכן — שומר תמונות ברקע...`);
+
+      // Phase B: upload & insert in parallel (concurrency limit 3)
+      const failed: number[] = [];
+      let doneCount = 0;
+
+      const uploadAndInsert = async (i: number) => {
         const slide = generatedSlides[i];
-        if (!slide.imageUrl) continue;
-        let finalUrl = slide.imageUrl;
-        if (finalUrl.startsWith('data:')) {
-          const blob = await fetch(finalUrl).then(r => r.blob());
-          const file = new File([blob], `carousel-${i + 1}-${Date.now()}.png`, { type: blob.type });
-          finalUrl = await storageService.upload(file);
+        try {
+          let finalUrl = slide.imageUrl!;
+          if (finalUrl.startsWith('data:')) {
+            const blob = await fetch(finalUrl).then(r => r.blob());
+            const file = new File([blob], `carousel-${i + 1}-${Date.now()}.png`, { type: blob.type });
+            finalUrl = await storageService.upload(file);
+          }
+          await projectService.addOutput(project.id, {
+            name: `קרוסלה ${i + 1}/${generatedSlides.length} — ${brandObj.name}`,
+            description: `${slide.title}: ${slide.body}`,
+            thumbnail_url: finalUrl,
+            prompt: prompt || null,
+            script: null,
+            video_url: null,
+            provider: null,
+          });
+        } catch {
+          failed.push(i);
+        } finally {
+          doneCount++;
+          setSaveProgress(prev => ({ ...prev, done: doneCount, failed: [...failed] }));
         }
-        await projectService.addOutput(project.id, {
-          name: `קרוסלה ${i + 1}/${generatedSlides.length} — ${brandObj.name}`,
-          description: `${slide.title}: ${slide.body}`,
-          thumbnail_url: finalUrl,
-          prompt: prompt || null,
-          script: null,
-          video_url: null,
-          provider: null,
-        });
+      };
+
+      // Run with concurrency limit of 3
+      const queue = [...indicesToSave];
+      const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
+        while (queue.length > 0) {
+          const idx = queue.shift()!;
+          await uploadAndInsert(idx);
+        }
+      });
+      await Promise.all(workers);
+
+      if (failed.length > 0) {
+        toast.error(`${failed.length} תמונות נכשלו בשמירה — ניתן לנסות שוב`);
+      } else {
+        toast.success(`${indicesToSave.length} תמונות נשמרו בהצלחה!`);
       }
-      toast.success(`${generatedSlides.length} תמונות נשמרו בפרויקט "${brandObj.name}"!`);
+      setSaveProgress(prev => ({ ...prev, failed }));
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בשמירה');
     } finally {
