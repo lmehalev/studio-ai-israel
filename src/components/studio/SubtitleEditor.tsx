@@ -267,6 +267,33 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [captionPosition, setCaptionPosition] = useState<'bottom' | 'middle' | 'top'>('bottom');
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Video orientation & content rect
+  const [videoNativeWidth, setVideoNativeWidth] = useState(0);
+  const [videoNativeHeight, setVideoNativeHeight] = useState(0);
+  const [orientationOverride, setOrientationOverride] = useState<'auto' | 'portrait' | 'landscape'>('auto');
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  const detectedOrientation = videoNativeHeight > videoNativeWidth ? 'portrait' : 'landscape';
+  const effectiveOrientation = orientationOverride === 'auto' ? detectedOrientation : orientationOverride;
+
+  // Compute the displayed content rect inside the player (letterbox/pillarbox math)
+  const contentRect = (() => {
+    const cw = containerSize.width;
+    const ch = containerSize.height;
+    const vw = videoNativeWidth || cw;
+    const vh = videoNativeHeight || ch;
+    if (!cw || !ch || !vw || !vh) return { x: 0, y: 0, w: cw || 300, h: ch || 200 };
+
+    const scaleX = cw / vw;
+    const scaleY = ch / vh;
+    const scale = Math.min(scaleX, scaleY);
+    const contentW = vw * scale;
+    const contentH = vh * scale;
+    const offsetX = (cw - contentW) / 2;
+    const offsetY = (ch - contentH) / 2;
+    return { x: offsetX, y: offsetY, w: contentW, h: contentH };
+  })();
+
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
   const [logoUploading, setLogoUploading] = useState(false);
