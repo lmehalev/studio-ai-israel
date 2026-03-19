@@ -63,6 +63,27 @@ interface OutputConfig {
   resolution: string;
 }
 
+interface LogoPlacementSummary {
+  outputSize: { width: number; height: number };
+  contentRectPx: { x: number; y: number; w: number; h: number };
+  logoPxX: number;
+  logoPxY: number;
+  logoPxW: number;
+  logoPxH: number;
+}
+
+interface ComposeRenderResponse {
+  renderId: string | null;
+  status: string;
+  outputUrl: string | null;
+  thumbnailUrl: string | null;
+  subtitleCount: number;
+  logoPlacementSummary: LogoPlacementSummary | null;
+}
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
 let cachedHebrewFontUrl: string | null = null;
 
 async function ensureHebrewFontUrl(): Promise<string> {
