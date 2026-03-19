@@ -980,15 +980,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // ── Transcribe ──
   const handleTranscribe = async () => {
     if (!videoFile) return;
+
+    if (transcriptionHealth.state === 'fail') {
+      toast.error(`בדיקת בריאות נכשלה: ${transcriptionHealth.reason}`);
+      return;
+    }
+
     setLoading(true);
-    setSubtitleSegments([]);
     setEditingIndex(null);
     setPlayingSegIndex(null);
     setTranscribeDebug(null);
+    setTranscribeFailure(null);
 
     try {
-      const sourceVideoUrl = await ensureUploadedVideoUrl();
-
       const videoEl = videoPreviewRef.current;
       if (!videoEl) throw new Error('נגן הווידאו לא זמין כרגע');
       await waitForVideoMetadata(videoEl);
@@ -998,8 +1002,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         throw new Error('אורך הווידאו לא תקין ולכן אי אפשר לתמלל');
       }
 
+      const sourceCheck = await ensureValidTranscriptionSourceUrl();
+
       const result = await subtitleService.transcribe({
-        sourceAudioUrl: sourceVideoUrl,
+        sourceAudioUrl: sourceCheck.sourceAudioUrl,
         language: 'עברית',
         videoDuration,
       });
@@ -1015,16 +1021,38 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       setShowPreview(true);
       setTranscribeDebug({
         ...result.debug,
-        videoUrl: sourceVideoUrl,
-        sourceAudioUrl: result.debug.sourceAudioUrl,
+        videoUrl: sourceCheck.sourceAudioUrl,
+        sourceAudioUrl: result.debug.sourceAudioUrl || sourceCheck.sourceAudioUrl,
+        sourceAudioHttpStatus: sourceCheck.sourceAudioHttpStatus,
+        sourceAudioCheckedAt: sourceCheck.checkedAt,
         videoDuration,
         totalCueCount: result.captions.length,
         firstCues: result.captions.slice(0, 5),
       });
+      setTranscriptionHealth({
+        state: 'ok',
+        provider: result.debug.provider,
+        status: result.debug.status,
+        reason: 'כלי התמלול זמין',
+        checkedAt: new Date().toISOString(),
+      });
       toast.success(`התמלול מוכן! ${result.captions.length} כתוביות תקינות`);
     } catch (e: any) {
-      setSubtitleSegments([]);
-      toast.error(e?.message || 'שגיאה בתמלול');
+      const message = typeof e?.message === 'string' ? e.message : 'שגיאה בתמלול';
+      const statusMatch = message.match(/HTTP\s*(\d{3})|סטטוס\s*[:\)]?\s*(\d{3})/);
+      const providerMatch = message.match(/\(([^,]+),\s*סטטוס/);
+      const status = statusMatch ? Number(statusMatch[1] || statusMatch[2]) : null;
+      const provider = providerMatch?.[1] || (message.includes('מקור האודיו') ? 'source-audio' : 'transcribe-audio');
+
+      setTranscribeFailure({ provider, status, message });
+      setTranscriptionHealth({
+        state: 'fail',
+        provider,
+        status,
+        reason: message,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(message);
     } finally {
       setLoading(false);
     }
