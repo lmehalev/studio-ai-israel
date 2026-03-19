@@ -18,6 +18,30 @@ import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/s
 // ── Font presets (YouTube-style, creative) ──
 const fontPresets = [
   {
+    id: 'clean',
+    label: '✦ נקי',
+    font: "'Noto Sans Hebrew', sans-serif",
+    fontWeight: 700,
+    bgColor: 'transparent',
+    borderRadius: 0,
+    shadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 2px 4px rgba(0,0,0,0.6)',
+    padding: '6px 12px',
+    preview: 'כתובית נקייה',
+    textColor: '#FFFFFF',
+  },
+  {
+    id: 'strip',
+    label: '▬ רצועה',
+    font: "'Heebo', sans-serif",
+    fontWeight: 600,
+    bgColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 4,
+    shadow: 'none',
+    padding: '6px 16px',
+    preview: 'כתובית ברצועה',
+    textColor: '#FFFFFF',
+  },
+  {
     id: 'impact',
     label: '💥 Impact',
     font: "'Rubik', sans-serif",
