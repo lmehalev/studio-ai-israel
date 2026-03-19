@@ -764,6 +764,17 @@ Deno.serve(async (req) => {
         soundtrack.effect = "fadeOut";
       }
 
+      const subtitleProofClip = tracks
+        .flatMap((track: any) => track?.clips ?? [])
+        .find((clip: any) => clip?.asset?.type === "image" && typeof clip?.asset?.src === "string" && clip.asset.src.includes("/subtitle-overlays/"));
+
+      if (subtitleProofClip?.asset?.src) {
+        console.log("Subtitle overlay proof", {
+          type: subtitleProofClip.asset.type,
+          src: String(subtitleProofClip.asset.src).slice(0, 180),
+        });
+      }
+
       const renderBody: any = {
         timeline: {
           background: bgColor,
