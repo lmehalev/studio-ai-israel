@@ -1289,9 +1289,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-      {overlayDebugJSX}
-      {captionOverlayJSX}
-      {logoOverlayJSX}
     </div>
   ) : null;
 
