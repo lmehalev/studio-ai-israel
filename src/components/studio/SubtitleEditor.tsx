@@ -187,7 +187,7 @@ interface StickerOverlay {
   animationIn: StickerAnimation;
 }
 
-type LogoPosition = 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft';
+type LogoPosition = 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft' | 'manual';
 
 const STICKER_POSITION_LABELS: Record<OverlayPosition, string> = {
   topLeft: 'שמאל עליון',
