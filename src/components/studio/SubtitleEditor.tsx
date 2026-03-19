@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Loader2, Upload, Eye, Save, Download, ArrowRight, ArrowLeft,
   Subtitles, Check, X, Plus, Trash2, Scissors, Music,
@@ -202,6 +202,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [showPreview, setShowPreview] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState('');
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -302,9 +303,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const cuePlaybackRef = useRef<{ index: number; startSec: number; endSec: number } | null>(null);
   const activeCueIndexRef = useRef<number | null>(null);
   const adjustedSegmentsRef = useRef<SubtitleSegment[]>([]);
-  const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
-  const timeupdateWindowRef = useRef({ startedAt: 0, count: 0 });
-  const debugThrottleRef = useRef(0);
+  const attachedVideoRef = useRef<HTMLVideoElement | null>(null);
+  const playbackListenersCleanupRef = useRef<(() => void) | null>(null);
+  const rafLoopRef = useRef<number | null>(null);
+  const rvfcLoopRef = useRef<number | null>(null);
+  const frameWindowRef = useRef({ startedAt: 0, count: 0, fps: 0 });
   const [playbackDebug, setPlaybackDebug] = useState<SubtitlePlaybackDebug>({
     readyState: 0,
     currentTime: 0,
@@ -314,6 +317,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     activeTimeupdateListeners: 0,
     timeupdateEventsPerSecond: 0,
   });
+
+  const ACTIVE_CUE_TOLERANCE_SEC = 0.05;
 
   const updatePlaybackDebug = useCallback((patch: Partial<SubtitlePlaybackDebug>) => {
     setPlaybackDebug((prev) => ({ ...prev, ...patch }));
@@ -346,123 +351,227 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     adjustedSegmentsRef.current = getAdjustedSegments();
   }, [getAdjustedSegments]);
 
-  const detachTimeupdateListener = useCallback((video?: HTMLVideoElement | null) => {
-    const targetVideo = video ?? videoPreviewRef.current;
-    if (targetVideo && playbackListenerRef.current) {
-      targetVideo.removeEventListener('timeupdate', playbackListenerRef.current);
+  const stopFrameTracking = useCallback(() => {
+    const currentVideo = videoPreviewRef.current as (HTMLVideoElement & {
+      cancelVideoFrameCallback?: (handle: number) => void;
+    }) | null;
+
+    if (rvfcLoopRef.current !== null && currentVideo && typeof currentVideo.cancelVideoFrameCallback === 'function') {
+      currentVideo.cancelVideoFrameCallback(rvfcLoopRef.current);
     }
 
-    playbackListenerRef.current = null;
-    timeupdateWindowRef.current = { startedAt: 0, count: 0 };
-    updatePlaybackDebug({
-      activeTimeupdateListeners: 0,
-      timeupdateEventsPerSecond: 0,
-    });
-  }, [updatePlaybackDebug]);
-
-  const attachTimeupdateListener = useCallback((video: HTMLVideoElement) => {
-    if (playbackListenerRef.current) {
-      video.removeEventListener('timeupdate', playbackListenerRef.current);
-      playbackListenerRef.current = null;
+    if (rafLoopRef.current !== null) {
+      cancelAnimationFrame(rafLoopRef.current);
     }
 
-    timeupdateWindowRef.current = { startedAt: performance.now(), count: 0 };
+    rvfcLoopRef.current = null;
+    rafLoopRef.current = null;
+  }, []);
 
-    const onTimeUpdate = () => {
-      const now = performance.now();
-      const currentTime = video.currentTime;
+  const syncPlaybackFromVisibleVideo = useCallback(() => {
+    const video = videoPreviewRef.current;
+    if (!video) return;
 
-      timeupdateWindowRef.current.count += 1;
-      const elapsed = now - timeupdateWindowRef.current.startedAt;
-      if (elapsed >= 1000) {
-        const eventsPerSecond = Number((timeupdateWindowRef.current.count / (elapsed / 1000)).toFixed(1));
-        timeupdateWindowRef.current = { startedAt: now, count: 0 };
-        updatePlaybackDebug({
-          activeTimeupdateListeners: 1,
-          timeupdateEventsPerSecond: eventsPerSecond,
-        });
-      }
+    const now = performance.now();
+    const currentTime = video.currentTime;
 
-      const segments = adjustedSegmentsRef.current;
-      const nextCueIdx = segments.findIndex((s) => currentTime >= s.start && currentTime <= s.end);
-      const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
+    if (!frameWindowRef.current.startedAt) {
+      frameWindowRef.current.startedAt = now;
+      frameWindowRef.current.count = 0;
+    }
 
-      if (normalizedCueIdx !== activeCueIndexRef.current) {
-        activeCueIndexRef.current = normalizedCueIdx;
-        setActiveCueIndex(normalizedCueIdx);
-        setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
-      }
+    frameWindowRef.current.count += 1;
+    const elapsed = now - frameWindowRef.current.startedAt;
+    if (elapsed >= 1000) {
+      frameWindowRef.current.fps = Number((frameWindowRef.current.count / (elapsed / 1000)).toFixed(1));
+      frameWindowRef.current.startedAt = now;
+      frameWindowRef.current.count = 0;
+    }
 
-      const playbackWindow = cuePlaybackRef.current;
-      if (playbackWindow) {
-        const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - 0.05);
-        if (currentTime >= stopAt) {
-          video.pause();
-          const boundedEnd = Number.isFinite(video.duration)
-            ? Math.min(playbackWindow.endSec, video.duration)
-            : playbackWindow.endSec;
-          video.currentTime = boundedEnd;
-          clearCuePlaybackState();
-          updatePlaybackDebug({
-            readyState: video.readyState,
-            currentTime: boundedEnd,
-            startSec: null,
-            endSec: null,
-          });
-          return;
-        }
-      }
+    const segments = adjustedSegmentsRef.current;
+    const nextCueIdx = segments.findIndex((s) => (
+      (currentTime + ACTIVE_CUE_TOLERANCE_SEC) >= s.start &&
+      (currentTime - ACTIVE_CUE_TOLERANCE_SEC) <= s.end
+    ));
+    const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
 
-      if (now - debugThrottleRef.current >= 250) {
-        debugThrottleRef.current = now;
+    if (normalizedCueIdx !== activeCueIndexRef.current) {
+      activeCueIndexRef.current = normalizedCueIdx;
+      setActiveCueIndex(normalizedCueIdx);
+      setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
+    }
+
+    const playbackWindow = cuePlaybackRef.current;
+    if (playbackWindow) {
+      const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - ACTIVE_CUE_TOLERANCE_SEC);
+      if (currentTime >= stopAt) {
+        video.pause();
+        const boundedEnd = Number.isFinite(video.duration)
+          ? Math.min(playbackWindow.endSec, video.duration)
+          : playbackWindow.endSec;
+        video.currentTime = boundedEnd;
+        clearCuePlaybackState();
         updatePlaybackDebug({
           readyState: video.readyState,
-          currentTime,
+          currentTime: boundedEnd,
+          startSec: null,
+          endSec: null,
+          activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+          timeupdateEventsPerSecond: frameWindowRef.current.fps,
         });
+        return;
       }
-    };
-
-    playbackListenerRef.current = onTimeUpdate;
-    video.addEventListener('timeupdate', onTimeUpdate);
-    updatePlaybackDebug({
-      activeTimeupdateListeners: 1,
-      readyState: video.readyState,
-      currentTime: video.currentTime,
-    });
-  }, [clearCuePlaybackState, updatePlaybackDebug]);
-
-  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
-    const previousVideo = videoPreviewRef.current;
-
-    if (previousVideo && playbackListenerRef.current) {
-      previousVideo.removeEventListener('timeupdate', playbackListenerRef.current);
-      playbackListenerRef.current = null;
     }
 
-    videoPreviewRef.current = node;
+    updatePlaybackDebug({
+      readyState: video.readyState,
+      currentTime,
+      activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+      timeupdateEventsPerSecond: frameWindowRef.current.fps,
+    });
+  }, [ACTIVE_CUE_TOLERANCE_SEC, clearCuePlaybackState, updatePlaybackDebug]);
 
-    if (!node) {
-      timeupdateWindowRef.current = { startedAt: 0, count: 0 };
-      updatePlaybackDebug({
-        activeTimeupdateListeners: 0,
-        timeupdateEventsPerSecond: 0,
+  const scheduleFrameTracking = useCallback(() => {
+    const video = videoPreviewRef.current as (HTMLVideoElement & {
+      requestVideoFrameCallback?: (callback: () => void) => number;
+    }) | null;
+
+    if (!video || video.paused || video.ended) {
+      stopFrameTracking();
+      return;
+    }
+
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      rvfcLoopRef.current = video.requestVideoFrameCallback(() => {
+        syncPlaybackFromVisibleVideo();
+        scheduleFrameTracking();
       });
       return;
     }
 
-    attachTimeupdateListener(node);
-  }, [attachTimeupdateListener, updatePlaybackDebug]);
+    rafLoopRef.current = requestAnimationFrame(() => {
+      syncPlaybackFromVisibleVideo();
+      scheduleFrameTracking();
+    });
+  }, [stopFrameTracking, syncPlaybackFromVisibleVideo]);
+
+  const startFrameTracking = useCallback(() => {
+    frameWindowRef.current = { startedAt: performance.now(), count: 0, fps: 0 };
+    stopFrameTracking();
+    syncPlaybackFromVisibleVideo();
+    scheduleFrameTracking();
+  }, [scheduleFrameTracking, stopFrameTracking, syncPlaybackFromVisibleVideo]);
+
+  const attachPlaybackLifecycleListeners = useCallback((video: HTMLVideoElement) => {
+    if (attachedVideoRef.current === video && playbackListenersCleanupRef.current) {
+      updatePlaybackDebug({
+        activeTimeupdateListeners: 1,
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+      });
+      return;
+    }
+
+    playbackListenersCleanupRef.current?.();
+
+    const handlePlay = () => {
+      updatePlaybackDebug({ activeTimeupdateListeners: 1, playError: null });
+      startFrameTracking();
+    };
+
+    const handlePause = () => {
+      stopFrameTracking();
+      const activePlayback = cuePlaybackRef.current;
+      if (activePlayback && video.currentTime < activePlayback.endSec - ACTIVE_CUE_TOLERANCE_SEC) {
+        clearCuePlaybackState();
+        updatePlaybackDebug({ startSec: null, endSec: null });
+      }
+      syncPlaybackFromVisibleVideo();
+    };
+
+    const handleSeeked = () => {
+      syncPlaybackFromVisibleVideo();
+    };
+
+    const handleEnded = () => {
+      stopFrameTracking();
+      clearCuePlaybackState();
+      activeCueIndexRef.current = null;
+      setActiveCueIndex(null);
+      setCurrentSubtitle('');
+      syncPlaybackFromVisibleVideo();
+      updatePlaybackDebug({ startSec: null, endSec: null });
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeked', handleSeeked);
+    video.addEventListener('ended', handleEnded);
+
+    attachedVideoRef.current = video;
+    playbackListenersCleanupRef.current = () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('ended', handleEnded);
+      if (attachedVideoRef.current === video) {
+        attachedVideoRef.current = null;
+      }
+      stopFrameTracking();
+    };
+
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 1,
+      readyState: video.readyState,
+      currentTime: video.currentTime,
+      timeupdateEventsPerSecond: frameWindowRef.current.fps,
+    });
+
+    if (!video.paused && !video.ended) {
+      startFrameTracking();
+    } else {
+      syncPlaybackFromVisibleVideo();
+    }
+  }, [
+    ACTIVE_CUE_TOLERANCE_SEC,
+    clearCuePlaybackState,
+    startFrameTracking,
+    stopFrameTracking,
+    syncPlaybackFromVisibleVideo,
+    updatePlaybackDebug,
+  ]);
+
+  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
+    videoPreviewRef.current = node;
+    if (!node) return;
+    attachPlaybackLifecycleListeners(node);
+    syncPlaybackFromVisibleVideo();
+  }, [attachPlaybackLifecycleListeners, syncPlaybackFromVisibleVideo]);
+
+  useEffect(() => {
+    const nextBlobUrl = videoPreviewUrl?.startsWith('blob:') ? videoPreviewUrl : null;
+    const previousBlobUrl = previewBlobUrlRef.current;
+    if (previousBlobUrl && previousBlobUrl !== nextBlobUrl) {
+      URL.revokeObjectURL(previousBlobUrl);
+    }
+    previewBlobUrlRef.current = nextBlobUrl;
+  }, [videoPreviewUrl]);
 
   useEffect(() => {
     return () => {
-      detachTimeupdateListener(videoPreviewRef.current);
+      playbackListenersCleanupRef.current?.();
+      playbackListenersCleanupRef.current = null;
+      stopFrameTracking();
       clearCuePlaybackState();
       activeCueIndexRef.current = null;
-      if (videoPreviewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(videoPreviewUrl);
+      updatePlaybackDebug({ activeTimeupdateListeners: 0, timeupdateEventsPerSecond: 0 });
+
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
       }
     };
-  }, [clearCuePlaybackState, detachTimeupdateListener, videoPreviewUrl]);
+  }, [clearCuePlaybackState, stopFrameTracking, updatePlaybackDebug]);
 
   const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
     if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
@@ -902,84 +1011,49 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   });
 
   // ── Video preview component (shared across steps) ──
-  const videoPreviewUrlRef = useRef(videoPreviewUrl);
-  videoPreviewUrlRef.current = videoPreviewUrl;
+  const VideoPreview = () => {
+    if (!videoPreviewUrl) return null;
+    return (
+      <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+        <video
+          ref={setVideoPreviewElement}
+          src={videoPreviewUrl}
+          controls
+          preload="metadata"
+          className="w-full max-h-[240px]"
+          onLoadedMetadata={(e) => {
+            const video = e.currentTarget;
+            setVideoLoadError(null);
+            updatePlaybackDebug({
+              activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+              readyState: video.readyState,
+              currentTime: video.currentTime,
+            });
+            syncPlaybackFromVisibleVideo();
+          }}
+          onError={(e) => {
+            const video = e.currentTarget;
+            const mediaError = video.error;
+            const msg = mediaError
+              ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
+              : 'שגיאת טעינת וידאו לא מזוהה';
+            setVideoLoadError(msg);
+            updatePlaybackDebug({ readyState: video.readyState, playError: msg });
+          }}
+        />
+      </div>
+    );
+  };
 
-  const VideoPreview = useMemo(() => {
-    // eslint-disable-next-line react/display-name
-    const VP = () => {
-      const url = videoPreviewUrlRef.current;
-      if (!url) return null;
-      return (
-        <div className="rounded-xl overflow-hidden border border-border relative bg-black">
-          <video
-            ref={setVideoPreviewElement}
-            src={url}
-            controls
-            preload="metadata"
-            className="w-full max-h-[240px]"
-            onLoadedMetadata={() => {
-              if (!videoPreviewRef.current) return;
-              setVideoLoadError(null);
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-              });
-            }}
-            onError={(e) => {
-              const video = e.currentTarget;
-              const mediaError = video.error;
-              const msg = mediaError
-                ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
-                : 'שגיאת טעינת וידאו לא מזוהה';
-              setVideoLoadError(msg);
-              updatePlaybackDebug({ readyState: video.readyState, playError: msg });
-            }}
-            onPause={() => {
-              if (!videoPreviewRef.current) return;
-              const activePlayback = cuePlaybackRef.current;
-              if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
-                clearCuePlaybackState();
-                updatePlaybackDebug({ startSec: null, endSec: null });
-              }
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-                timeupdateEventsPerSecond: 0,
-              });
-            }}
-            onEnded={() => {
-              if (!videoPreviewRef.current) return;
-              clearCuePlaybackState();
-              activeCueIndexRef.current = null;
-              setActiveCueIndex(null);
-              setCurrentSubtitle('');
-              updatePlaybackDebug({
-                readyState: videoPreviewRef.current.readyState,
-                currentTime: videoPreviewRef.current.currentTime,
-                startSec: null,
-                endSec: null,
-                timeupdateEventsPerSecond: 0,
-              });
-            }}
-          />
-        </div>
-      );
-    };
-    return VP;
-  // Only recreate when the URL identity changes (not on every render)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoPreviewUrl]);
-
-  // Caption overlay - rendered as inline JSX, NOT as a component (avoids unmount/remount flicker)
+  // Caption overlay - always above the playing video
   const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
-    <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4" style={{ zIndex: 30 }}>
+    <div className="absolute inset-0 z-30 pointer-events-none flex items-end justify-center px-4 pb-12" dir="rtl">
       <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
     </div>
   ) : null;
 
   const logoOverlayJSX = logoUrl ? (
-    <div className="absolute top-3 right-3 pointer-events-none" style={{ zIndex: 25 }}>
+    <div className="absolute top-3 right-3 z-20 pointer-events-none">
       <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
     </div>
   ) : null;
@@ -987,14 +1061,13 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // Always-visible overlay debug strip
   const overlayDebugJSX = videoPreviewUrl ? (
     <div
-      className="absolute top-1 left-1 right-1 pointer-events-none flex justify-between items-start gap-2 text-[10px] font-mono leading-tight px-2 py-1 rounded"
-      style={{ zIndex: 40, background: 'rgba(0,0,0,0.7)', color: '#0f0' }}
+      className="absolute top-1 left-1 right-1 z-40 pointer-events-none grid grid-cols-1 md:grid-cols-4 gap-1 text-[10px] font-mono leading-tight px-2 py-1 rounded border border-border bg-background/80 text-foreground"
       dir="ltr"
     >
-      <span>cueIdx: {activeCueIndex ?? '-1'}</span>
-      <span>t: {playbackDebug.currentTime?.toFixed(2) ?? '?'}</span>
-      <span>segs: {subtitleSegments.length}</span>
-      <span className="max-w-[120px] truncate">{currentSubtitle ? currentSubtitle.slice(0, 30) : '(no cue)'}</span>
+      <span>activeCueIndex: {activeCueIndex ?? -1}</span>
+      <span>currentTime: {playbackDebug.currentTime.toFixed(3)}</span>
+      <span>activeListeners: {playbackDebug.activeTimeupdateListeners}</span>
+      <span className="truncate">activeText: {(currentSubtitle || '').slice(0, 30) || '(empty)'}</span>
     </div>
   ) : null;
 
