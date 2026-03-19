@@ -111,31 +111,35 @@ function buildStickerClips(stickers: StickerItem[]): any[] {
   }));
 }
 
-function buildLogoClip(logoUrl: string, totalDuration: number): any {
+interface LogoPlacement {
+  xPct: number;   // 0-100, left edge as % of video width
+  yPct: number;   // 0-100, top edge as % of video height
+  scalePct: number; // logo width as % of video width (2-30)
+  opacity: number;  // 0-1
+}
+
+function buildLogoClip(logoUrl: string, totalDuration: number, placement?: LogoPlacement): any {
+  // Convert percentage-based placement to Shotstack offset system
+  // Shotstack offset: x/y are -0.5 to 0.5 from center, scale is fraction of frame
+  const p = placement || { xPct: 88, yPct: 4, scalePct: 10, opacity: 0.92 };
+
+  // Convert xPct/yPct (0-100, top-left origin) to Shotstack offset (center origin, -0.5 to 0.5)
+  // Logo center in normalized coords:
+  const logoCenterX = (p.xPct + p.scalePct / 2) / 100; // 0-1
+  const logoCenterY = (p.yPct + p.scalePct / 2) / 100;  // 0-1
+  const offsetX = logoCenterX - 0.5; // -0.5 to 0.5
+  const offsetY = -(logoCenterY - 0.5); // Shotstack Y is inverted (positive = up)
+
   return {
     clips: [
-      // Main logo — bottom right, persistent
       {
         asset: { type: "image", src: logoUrl },
         start: 0,
         length: totalDuration,
-        position: "bottomRight",
-        offset: { x: -0.04, y: 0.04 },
-        scale: 0.15,
-        opacity: 0.92,
-      },
-      // Small watermark text — top right
-      {
-        asset: {
-          type: "html",
-          html: `<div style="font-family:'Noto Sans Hebrew',sans-serif;direction:rtl;font-size:14px;color:rgba(255,255,255,0.75);text-shadow:0 1px 4px rgba(0,0,0,0.6);letter-spacing:0.05em;font-weight:600;"></div>`,
-          width: 300,
-          height: 30,
-        },
-        start: 0,
-        length: totalDuration,
-        position: "topRight",
-        offset: { x: -0.02, y: -0.02 },
+        position: "center",
+        offset: { x: offsetX, y: offsetY },
+        scale: p.scalePct / 100,
+        opacity: p.opacity,
       },
     ],
   };
@@ -171,6 +175,7 @@ Deno.serve(async (req) => {
         videoUrls,
         scenes,
         logoUrl,
+        logoPlacement,
         brandColors,
         audioUrl,
         subtitleStyle,
@@ -199,7 +204,7 @@ Deno.serve(async (req) => {
 
       // === Logo overlay track ===
       if (logoUrl) {
-        tracks.push(buildLogoClip(logoUrl, totalDuration));
+        tracks.push(buildLogoClip(logoUrl, totalDuration, logoPlacement as LogoPlacement | undefined));
       }
 
       // === Sticker overlays track ===

@@ -187,7 +187,7 @@ interface StickerOverlay {
   animationIn: StickerAnimation;
 }
 
-type LogoPosition = 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft';
+type LogoPosition = 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft' | 'manual';
 
 const STICKER_POSITION_LABELS: Record<OverlayPosition, string> = {
   topLeft: 'שמאל עליון',
@@ -336,14 +336,80 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return { x: offsetX, y: offsetY, w: contentW, h: contentH };
   })();
 
-  // Logo
+  // Logo — free placement mode
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPosition, setLogoPosition] = useState<LogoPosition>('topRight');
-  const [logoSize, setLogoSize] = useState(8); // percent of video width
-  const [logoMargin, setLogoMargin] = useState(4); // percent
+  const [logoSize, setLogoSize] = useState(10); // percent of video width (2-30)
+  const [logoMargin, setLogoMargin] = useState(4); // percent (used only for corner presets)
   const [logoOpacity, setLogoOpacity] = useState(90); // 0-100
+  const [logoXPct, setLogoXPct] = useState(88); // 0-100 (left edge of logo as % of contentRect width)
+  const [logoYPct, setLogoYPct] = useState(4);  // 0-100 (top edge of logo as % of contentRect height)
+  const [logoManualMode, setLogoManualMode] = useState(false);
+  const [logoDragging, setLogoDragging] = useState(false);
+  const logoDragStart = useRef<{ mx: number; my: number; sx: number; sy: number } | null>(null);
   const [showStoragePicker, setShowStoragePicker] = useState(false);
+
+  // Snap-to-corner helper: sets logoXPct/logoYPct based on corner + margin
+  const snapLogoToCorner = (corner: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft') => {
+    const m = logoMargin;
+    const s = logoSize;
+    switch (corner) {
+      case 'topRight': setLogoXPct(100 - m - s); setLogoYPct(m); break;
+      case 'topLeft': setLogoXPct(m); setLogoYPct(m); break;
+      case 'bottomRight': setLogoXPct(100 - m - s); setLogoYPct(100 - m - s); break;
+      case 'bottomLeft': setLogoXPct(m); setLogoYPct(100 - m - s); break;
+    }
+    setLogoPosition(corner);
+  };
+
+  // Initialize X/Y from default corner on first mount
+  useEffect(() => {
+    if (!logoManualMode && logoPosition !== 'manual') {
+      snapLogoToCorner(logoPosition as any);
+    }
+  }, []);
+
+  // Logo drag handlers
+  const handleLogoDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    logoDragStart.current = { mx: clientX, my: clientY, sx: logoXPct, sy: logoYPct };
+    setLogoDragging(true);
+    setLogoManualMode(true);
+    setLogoPosition('manual');
+  };
+
+  useEffect(() => {
+    if (!logoDragging) return;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!logoDragStart.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const dx = clientX - logoDragStart.current.mx;
+      const dy = clientY - logoDragStart.current.my;
+      const dxPct = (dx / contentRect.w) * 100;
+      const dyPct = (dy / contentRect.h) * 100;
+      setLogoXPct(Math.max(0, Math.min(100 - logoSize, logoDragStart.current.sx + dxPct)));
+      setLogoYPct(Math.max(0, Math.min(100 - logoSize, logoDragStart.current.sy + dyPct)));
+    };
+    const onUp = () => {
+      setLogoDragging(false);
+      logoDragStart.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, [logoDragging, contentRect.w, contentRect.h, logoSize]);
 
   // Stickers
   const [stickers, setStickers] = useState<StickerOverlay[]>([]);
@@ -1298,6 +1364,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         videoUrl,
         scenes,
         logoUrl: logoUrl || undefined,
+        logoPlacement: logoUrl ? { xPct: logoXPct, yPct: logoYPct, scalePct: logoSize, opacity: logoOpacity / 100 } : undefined,
         brandColors: activeBrand?.colors || [],
         audioUrl,
         subtitleStyle: {
@@ -1511,19 +1578,27 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           </div>
         </div>
       )}
-      {/* Logo overlay — respects position/size/margin/opacity settings */}
+      {/* Logo overlay — free placement using xPct/yPct relative to contentRect */}
       {logoUrl && (
         <div
-          className="absolute z-20 pointer-events-none"
+          className={cn("absolute z-20", logoDragging ? 'cursor-grabbing' : 'cursor-grab')}
           style={{
-            ...(logoPosition.includes('top') ? { top: `${contentRect.y + contentRect.h * logoMargin / 100}px` } : { bottom: `${(containerSize.height - contentRect.y - contentRect.h) + contentRect.h * logoMargin / 100}px` }),
-            ...(logoPosition.includes('Right') ? { right: `${(containerSize.width - contentRect.x - contentRect.w) + contentRect.w * logoMargin / 100}px` } : { left: `${contentRect.x + contentRect.w * logoMargin / 100}px` }),
+            left: `${contentRect.x + contentRect.w * logoXPct / 100}px`,
+            top: `${contentRect.y + contentRect.h * logoYPct / 100}px`,
+            pointerEvents: 'auto',
           }}
+          onMouseDown={handleLogoDragStart}
+          onTouchStart={handleLogoDragStart}
         >
+          {/* Safe-area guide while dragging */}
+          {logoDragging && (
+            <div className="absolute -inset-1 border-2 border-dashed border-primary/50 rounded-lg pointer-events-none" />
+          )}
           <img
             src={logoUrl}
             alt="logo"
-            className="object-contain rounded-lg"
+            className="object-contain rounded-lg select-none"
+            draggable={false}
             style={{
               width: `${contentRect.w * logoSize / 100}px`,
               height: `${contentRect.w * logoSize / 100}px`,
@@ -2225,7 +2300,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border" />
               <div className="flex-1 space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  {logoPosition === 'topRight' ? 'ימין עליון' : logoPosition === 'topLeft' ? 'שמאל עליון' : logoPosition === 'bottomRight' ? 'ימין תחתון' : 'שמאל תחתון'}
+                  {logoPosition === 'manual' ? `ידני X:${Math.round(logoXPct)}% Y:${Math.round(logoYPct)}%` :
+                    logoPosition === 'topRight' ? 'ימין עליון' : logoPosition === 'topLeft' ? 'שמאל עליון' : logoPosition === 'bottomRight' ? 'ימין תחתון' : 'שמאל תחתון'}
                   {' • '}{logoSize}% גודל{' • '}{logoOpacity}% שקיפות
                 </p>
                 <button onClick={() => setLogoUrl(null)}
@@ -2234,17 +2310,30 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                 </button>
               </div>
             </div>
-            {/* Position */}
+
+            {/* Manual mode toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={logoManualMode} onChange={e => {
+                const manual = e.target.checked;
+                setLogoManualMode(manual);
+                if (manual) setLogoPosition('manual');
+                else snapLogoToCorner('topRight');
+              }} className="accent-primary" />
+              <Move className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs text-muted-foreground">מיקום ידני (גרירה על הווידאו)</span>
+            </label>
+
+            {/* Snap-to-corner presets */}
             <div className="grid grid-cols-4 gap-1">
               {([
-                { value: 'topRight' as LogoPosition, label: 'ימין ↗' },
-                { value: 'topLeft' as LogoPosition, label: 'שמאל ↖' },
-                { value: 'bottomRight' as LogoPosition, label: 'ימין ↘' },
-                { value: 'bottomLeft' as LogoPosition, label: 'שמאל ↙' },
+                { value: 'topRight' as const, label: 'ימין ↗' },
+                { value: 'topLeft' as const, label: 'שמאל ↖' },
+                { value: 'bottomRight' as const, label: 'ימין ↘' },
+                { value: 'bottomLeft' as const, label: 'שמאל ↙' },
               ]).map(p => (
                 <button
                   key={p.value}
-                  onClick={() => setLogoPosition(p.value)}
+                  onClick={() => { snapLogoToCorner(p.value); setLogoManualMode(false); }}
                   className={cn(
                     'px-2 py-1 rounded text-[10px] border transition-all',
                     logoPosition === p.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
@@ -2254,21 +2343,35 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                 </button>
               ))}
             </div>
-            {/* Size slider */}
+
+            {/* Manual X/Y inputs */}
+            {logoManualMode && (
+              <div className="flex gap-2">
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-[10px] text-muted-foreground">X%</span>
+                  <input type="number" min={0} max={100} step={1} value={Math.round(logoXPct)}
+                    onChange={e => setLogoXPct(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="w-14 text-xs px-1.5 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+                </div>
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-[10px] text-muted-foreground">Y%</span>
+                  <input type="number" min={0} max={100} step={1} value={Math.round(logoYPct)}
+                    onChange={e => setLogoYPct(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="w-14 text-xs px-1.5 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+                </div>
+              </div>
+            )}
+
+            {/* Size slider (2-30%) + numeric input */}
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground w-12">גודל</span>
-              <input type="range" min={4} max={15} step={0.5} value={logoSize}
+              <input type="range" min={2} max={30} step={0.5} value={logoSize}
                 onChange={e => setLogoSize(Number(e.target.value))}
                 className="flex-1 accent-primary h-1.5" />
-              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoSize}%</span>
-            </div>
-            {/* Margin slider */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground w-12">שוליים</span>
-              <input type="range" min={1} max={10} step={0.5} value={logoMargin}
-                onChange={e => setLogoMargin(Number(e.target.value))}
-                className="flex-1 accent-primary h-1.5" />
-              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoMargin}%</span>
+              <input type="number" min={2} max={30} step={0.5} value={logoSize}
+                onChange={e => setLogoSize(Math.max(2, Math.min(30, Number(e.target.value))))}
+                className="w-12 text-[10px] px-1 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+              <span className="text-[10px] text-muted-foreground">%</span>
             </div>
             {/* Opacity slider */}
             <div className="flex items-center gap-2">
