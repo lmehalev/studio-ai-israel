@@ -971,7 +971,25 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoPreviewUrl]);
 
-  // ── Step indicator ──
+  // Caption overlay rendered outside memoized video to always reflect current state
+  const CaptionOverlay = () => {
+    if (!showPreview || !currentSubtitle || !videoPreviewUrl) return null;
+    return (
+      <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4 z-20">
+        <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+      </div>
+    );
+  };
+
+  const LogoOverlay = () => {
+    if (!logoUrl) return null;
+    return (
+      <div className="absolute top-3 right-3 pointer-events-none z-10">
+        <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
+      </div>
+    );
+  };
+
   const StepIndicator = () => (
     <div className="flex items-center gap-1 mb-3">
       {STEPS.map((s, i) => (
