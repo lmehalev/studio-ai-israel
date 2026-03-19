@@ -248,7 +248,7 @@ function buildSubtitleClips(
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
-  fontBase64: string,
+  fontUrl: string,
 ): any[] {
   const subWidth = Math.round(outputWidth * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
@@ -258,7 +258,7 @@ function buildSubtitleClips(
     .map((seg) => ({
       asset: {
         type: "html",
-        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontBase64),
+        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontUrl),
         width: subWidth,
         height: subHeight,
       },
