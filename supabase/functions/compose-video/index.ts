@@ -63,47 +63,64 @@ interface OutputConfig {
   resolution: string;
 }
 
-let cachedHebrewFontBase64: string | null = null;
+let cachedHebrewFontUrl: string | null = null;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+async function ensureHebrewFontUrl(): Promise<string> {
+  if (cachedHebrewFontUrl) return cachedHebrewFontUrl;
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const fontStoragePath = "fonts/NotoSansHebrew-Regular.ttf";
 
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
+  // If we have Supabase credentials, try storage first
+  if (supabaseUrl && serviceKey) {
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/media/${fontStoragePath}`;
 
-async function getEmbeddedHebrewFontBase64(): Promise<string> {
-  if (cachedHebrewFontBase64) return cachedHebrewFontBase64;
-
-  const errors: string[] = [];
-
-  for (const fontUrl of HEBREW_FONT_URLS) {
+    // Check if already uploaded
     try {
-      const res = await fetch(fontUrl);
-      if (!res.ok) {
-        errors.push(`${fontUrl} -> ${res.status}`);
-        continue;
+      const head = await fetch(publicUrl, { method: "HEAD" });
+      if (head.ok) {
+        cachedHebrewFontUrl = publicUrl;
+        console.log("Hebrew font already in storage:", publicUrl);
+        return publicUrl;
       }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      cachedHebrewFontBase64 = uint8ToBase64(bytes);
-      return cachedHebrewFontBase64;
-    } catch (e) {
-      errors.push(`${fontUrl} -> ${e instanceof Error ? e.message : String(e)}`);
+    } catch (_) { /* continue to upload */ }
+
+    // Fetch from CDN and upload to storage
+    for (const cdnUrl of HEBREW_FONT_URLS) {
+      try {
+        const res = await fetch(cdnUrl);
+        if (!res.ok) continue;
+        const fontBytes = new Uint8Array(await res.arrayBuffer());
+
+        const uploadRes = await fetch(
+          `${supabaseUrl}/storage/v1/object/media/${fontStoragePath}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "font/ttf",
+              "x-upsert": "true",
+            },
+            body: fontBytes,
+          },
+        );
+
+        if (uploadRes.ok || uploadRes.status === 200) {
+          cachedHebrewFontUrl = publicUrl;
+          console.log("Hebrew font uploaded to storage:", publicUrl);
+          return publicUrl;
+        }
+        // consume body
+        await uploadRes.text();
+      } catch (_) { /* try next */ }
     }
   }
 
-  throw new Error(`לא ניתן לטעון פונט עברי מוטמע: ${errors.join(" | ")}`);
+  // Fallback: use CDN URL directly (Shotstack HTML renderer should fetch it)
+  cachedHebrewFontUrl = HEBREW_FONT_URLS[0];
+  console.log("Using CDN font URL fallback:", cachedHebrewFontUrl);
+  return cachedHebrewFontUrl;
 }
 
 function escapeXml(value: string): string {
@@ -180,7 +197,7 @@ function buildSubtitleHtmlAsset(
   style: SubtitleStyle,
   width: number,
   height: number,
-  fontBase64: string,
+  fontUrl: string,
 ): string {
   const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
@@ -196,7 +213,7 @@ function buildSubtitleHtmlAsset(
   return `<style>
       @font-face {
         font-family: 'HebrewEmbedded';
-        src: url(data:font/ttf;base64,${fontBase64}) format('truetype');
+        src: url('${fontUrl}') format('truetype');
         font-style: normal;
         font-weight: 100 900;
       }
@@ -231,7 +248,7 @@ function buildSubtitleClips(
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
-  fontBase64: string,
+  fontUrl: string,
 ): any[] {
   const subWidth = Math.round(outputWidth * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
@@ -241,7 +258,7 @@ function buildSubtitleClips(
     .map((seg) => ({
       asset: {
         type: "html",
-        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontBase64),
+        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontUrl),
         width: subWidth,
         height: subHeight,
       },
@@ -461,7 +478,7 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const embeddedFontBase64 = await getEmbeddedHebrewFontBase64();
+      const hebrewFontUrl = await ensureHebrewFontUrl();
 
       if (subtitleSegments && subtitleSegments.length > 0) {
         const subClips = buildSubtitleClips(
@@ -469,7 +486,7 @@ Deno.serve(async (req) => {
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
-          embeddedFontBase64,
+          hebrewFontUrl,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
@@ -489,7 +506,7 @@ Deno.serve(async (req) => {
               style,
               outputConfig.width,
               outputConfig.height,
-              embeddedFontBase64,
+              hebrewFontUrl,
             );
             textClips.push(...subClips);
           }
@@ -509,7 +526,7 @@ Deno.serve(async (req) => {
               },
               titleWidth,
               titleHeight,
-              embeddedFontBase64,
+              hebrewFontUrl,
             );
 
             textClips.push({
@@ -627,9 +644,8 @@ Deno.serve(async (req) => {
         subtitleCount: subtitleSegments?.length || 0,
       };
 
-      console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 1200));
+      console.log("Submitting Shotstack render (payload KB):", Math.round(JSON.stringify(renderBody).length / 1024));
       console.log("Compose debug object:", JSON.stringify(debugObject));
-      console.log("Compose debug export (timeline snippet):", JSON.stringify(renderBody).slice(0, 4000));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -649,10 +665,7 @@ Deno.serve(async (req) => {
               renderId: data.response?.id,
               status: "rendering",
               shotstackEnv: env,
-              debug: {
-                ...debugObject,
-                timelineJson: JSON.stringify(renderBody).slice(0, 2000),
-              },
+              debug: debugObject,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
