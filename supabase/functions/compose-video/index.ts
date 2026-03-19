@@ -204,7 +204,7 @@ async function uploadSubtitleSvg(svg: string, objectPath: string): Promise<strin
   const { error } = await supabase.storage
     .from("media")
     .upload(objectPath, svgBytes, {
-      contentType: "image/svg+xml; charset=utf-8",
+      contentType: "text/plain",
       upsert: true,
       cacheControl: "31536000",
     });
