@@ -1443,7 +1443,13 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       {/* Caption overlay — positioned to real content rect */}
       {showPreview && currentSubtitle && (
         <div style={captionPositionStyle()} dir="rtl">
-          <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
+          <div
+            key={activeCueIndex ?? 'idle'}
+            className={getCaptionAnimationStyle()}
+            style={getPreviewSubtitleStyle(currentSubtitle)}
+          >
+            {getDisplayCaption(currentSubtitle)}
+          </div>
         </div>
       )}
       {/* Logo overlay — inside content rect */}
