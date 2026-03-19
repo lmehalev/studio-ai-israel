@@ -905,7 +905,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     videoPreviewUrl ? (
       <div className="rounded-xl overflow-hidden border border-border relative bg-black">
         <video
-          ref={videoPreviewRef}
+          ref={setVideoPreviewElement}
           src={videoPreviewUrl}
           controls
           preload="metadata"
@@ -917,33 +917,30 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               currentTime: videoPreviewRef.current.currentTime,
             });
           }}
-          onTimeUpdate={() => {
-            if (!videoPreviewRef.current) return;
-            const t = videoPreviewRef.current.currentTime;
-            const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
-            setCurrentSubtitle(active?.text || '');
-            updatePlaybackDebug({
-              readyState: videoPreviewRef.current.readyState,
-              currentTime: t,
-            });
-          }}
           onPause={() => {
             if (!videoPreviewRef.current) return;
+            const activePlayback = cuePlaybackRef.current;
+            if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
+              clearCuePlaybackState();
+              updatePlaybackDebug({ startSec: null, endSec: null });
+            }
+
             updatePlaybackDebug({
               readyState: videoPreviewRef.current.readyState,
               currentTime: videoPreviewRef.current.currentTime,
             });
-
-            if (playbackListenerRef.current) {
-              clearSegmentPlayback(videoPreviewRef.current);
-            }
           }}
           onEnded={() => {
             if (!videoPreviewRef.current) return;
-            clearSegmentPlayback(videoPreviewRef.current);
+            clearCuePlaybackState();
+            activeCueIndexRef.current = null;
+            setActiveCueIndex(null);
+            setCurrentSubtitle('');
             updatePlaybackDebug({
               readyState: videoPreviewRef.current.readyState,
               currentTime: videoPreviewRef.current.currentTime,
+              startSec: null,
+              endSec: null,
             });
           }}
         />
