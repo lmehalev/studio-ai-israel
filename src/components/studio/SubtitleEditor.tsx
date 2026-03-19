@@ -1833,6 +1833,31 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       </div>
 
+      {/* Position */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">מיקום כתובית</h4>
+        <div className="flex gap-2">
+          {([
+            { value: 'top' as const, label: 'למעלה' },
+            { value: 'middle' as const, label: 'מרכז' },
+            { value: 'bottom' as const, label: 'למטה' },
+          ]).map(pos => (
+            <button
+              key={pos.value}
+              onClick={() => setCaptionPosition(pos.value)}
+              className={cn(
+                'px-4 py-1.5 rounded-lg border text-xs font-bold transition-all flex-1',
+                captionPosition === pos.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              {pos.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <NavButtons />
     </div>
   );
