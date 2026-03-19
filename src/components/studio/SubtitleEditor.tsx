@@ -994,6 +994,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               <Eye className="w-4 h-4" /> תצוגה חיה
             </button>
             <button
+              onClick={handlePlayFullVideo}
+              className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5"
+            >
+              <Play className="w-3.5 h-3.5" /> נגן וידאו מלא
+            </button>
+            <button
               onClick={() => {
                 const srt = subtitleService.toSRT(getAdjustedSegments());
                 const blob = new Blob(['\uFEFF' + srt], { type: 'text/plain;charset=utf-8' });
@@ -1035,6 +1041,23 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {videoPreviewUrl && (
+        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs" dir="ltr">
+          <div className="font-semibold text-foreground" dir="rtl">דיבאג נגן חי</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+            <div><span className="text-muted-foreground">readyState:</span> {playbackDebug.readyState}</div>
+            <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
+            <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
+            <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
+          </div>
+          {playbackDebug.playError && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
+              {playbackDebug.playError}
+            </div>
+          )}
         </div>
       )}
 
