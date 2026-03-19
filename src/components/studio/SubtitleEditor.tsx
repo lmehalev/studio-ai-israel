@@ -686,6 +686,179 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return remoteUrl;
   }, [uploadedVideoUrl, videoFile]);
 
+  const probeTranscriptionSourceUrl = useCallback(async (url: string) => {
+    const fetchProbe = async (method: 'HEAD' | 'GET') => {
+      const headers: Record<string, string> = {};
+      if (method === 'GET') headers.Range = 'bytes=0-1';
+      return fetch(url, {
+        method,
+        headers,
+        cache: 'no-store',
+      });
+    };
+
+    try {
+      let response: Response;
+      try {
+        response = await fetchProbe('HEAD');
+        if (response.status === 405 || response.status === 501) {
+          response = await fetchProbe('GET');
+        }
+      } catch {
+        response = await fetchProbe('GET');
+      }
+
+      if (response.ok || response.status === 206) {
+        return { ok: true, status: response.status, reason: 'OK' };
+      }
+
+      return {
+        ok: false,
+        status: response.status,
+        reason: `מקור האודיו לא נגיש (HTTP ${response.status})`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        status: null,
+        reason: `כשל בבדיקת מקור האודיו: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`,
+      };
+    }
+  }, []);
+
+  const ensureValidTranscriptionSourceUrl = useCallback(async () => {
+    const initialUrl = await ensureUploadedVideoUrl();
+    let sourceAudioUrl = initialUrl;
+    let probe = await probeTranscriptionSourceUrl(sourceAudioUrl);
+
+    const looksSigned = /[?&](token|signature|expires|x-amz-signature|x-amz-expires)=/i.test(sourceAudioUrl);
+
+    if (!probe.ok && videoFile && (probe.status === 401 || probe.status === 403 || probe.status === 404 || looksSigned)) {
+      const refreshedUrl = await storageService.upload(videoFile);
+      setUploadedVideoUrl(refreshedUrl);
+      sourceAudioUrl = refreshedUrl;
+      probe = await probeTranscriptionSourceUrl(sourceAudioUrl);
+    }
+
+    if (!probe.ok) {
+      throw new Error(`${probe.reason}. סטטוס: ${probe.status ?? 'לא ידוע'}`);
+    }
+
+    return {
+      sourceAudioUrl,
+      sourceAudioHttpStatus: probe.status ?? 200,
+      checkedAt: new Date().toISOString(),
+    };
+  }, [ensureUploadedVideoUrl, probeTranscriptionSourceUrl, videoFile]);
+
+  const createSilentWavBase64 = useCallback((durationMs: number = 350) => {
+    const sampleRate = 16000;
+    const numSamples = Math.max(1, Math.floor((durationMs / 1000) * sampleRate));
+    const blockAlign = 2;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = numSamples * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeAscii = (offset: number, value: string) => {
+      for (let i = 0; i < value.length; i += 1) {
+        view.setUint8(offset + i, value.charCodeAt(i));
+      }
+    };
+
+    writeAscii(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeAscii(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+
+    return btoa(binary);
+  }, []);
+
+  const handleHealthTest = useCallback(async () => {
+    setTranscriptionHealth((prev) => ({
+      ...prev,
+      state: 'testing',
+      reason: 'בודק זמינות...',
+      checkedAt: new Date().toISOString(),
+    }));
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-audio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          audioBase64: createSilentWavBase64(350),
+          audioMimeType: 'audio/wav',
+          language: 'עברית',
+          videoDuration: 1,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      const provider = typeof payload?.provider === 'string' ? payload.provider : 'elevenlabs/scribe_v2';
+      const providerStatus = Number.isFinite(Number(payload?.status)) ? Number(payload.status) : response.status;
+      const providerReachable = response.ok || (
+        response.status === 422 &&
+        provider === 'elevenlabs/scribe_v2' &&
+        providerStatus === 200
+      );
+
+      if (providerReachable) {
+        setTranscriptionHealth({
+          state: 'ok',
+          provider,
+          status: providerStatus,
+          reason: 'כלי התמלול זמין',
+          checkedAt: new Date().toISOString(),
+        });
+        toast.success('בדיקת כלי התמלול עברה בהצלחה');
+        return;
+      }
+
+      const reason = typeof payload?.error === 'string'
+        ? payload.error
+        : `כלי התמלול לא זמין (HTTP ${response.status})`;
+
+      setTranscriptionHealth({
+        state: 'fail',
+        provider,
+        status: providerStatus,
+        reason,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(`בדיקת כלי התמלול נכשלה: ${reason}`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'שגיאה לא ידועה';
+      setTranscriptionHealth({
+        state: 'fail',
+        provider: 'transcribe-audio',
+        status: null,
+        reason,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(`בדיקת כלי התמלול נכשלה: ${reason}`);
+    }
+  }, [createSilentWavBase64]);
+
   const seekToSegment = async (seg: SubtitleSegment, index: number) => {
     const video = videoPreviewRef.current;
     if (!video) {
