@@ -162,6 +162,31 @@ async function remove(table: string, id: string): Promise<void> {
   }
 }
 
+async function removeByFilter(table: string, filter: Record<string, string>): Promise<void> {
+  const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
+  for (const [key, value] of Object.entries(filter)) {
+    url.searchParams.set(key, `eq.${value}`);
+  }
+  const res = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `שגיאה במחיקת ${table}`);
+  }
+}
+
+/** Extract storage path from a public Supabase URL */
+function extractStoragePath(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/storage\/v1\/object\/public\/media\/(.+)/);
+  return match ? match[1] : null;
+}
+
 export const projectService = {
   async getAll(): Promise<ProjectRow[]> {
     return query<ProjectRow[]>('projects', { order: { column: 'created_at', ascending: false } });
@@ -199,8 +224,40 @@ export const projectService = {
     return update<ProjectRow>('projects', id, updates);
   },
 
-  async delete(id: string): Promise<void> {
-    return remove('projects', id);
+  /** Cascade delete: outputs (+ storage files), timeline, versions, then project */
+  async delete(id: string, onProgress?: (step: string) => void): Promise<void> {
+    // 1. Get all outputs to delete storage files
+    const outputs = await query<ProjectOutputRow[]>('project_outputs', { filter: { project_id: id } });
+    
+    // 2. Delete storage files for outputs
+    const storagePaths = outputs
+      .flatMap(o => [extractStoragePath(o.thumbnail_url), extractStoragePath(o.video_url)])
+      .filter(Boolean) as string[];
+    
+    if (storagePaths.length > 0) {
+      onProgress?.('מוחק קבצים מהאחסון...');
+      try {
+        await supabase.storage.from('media').remove(storagePaths);
+      } catch { /* non-critical */ }
+    }
+
+    // 3. Delete related rows
+    onProgress?.('מוחק תוצרים...');
+    await removeByFilter('project_outputs', { project_id: id });
+    onProgress?.('מוחק היסטוריה...');
+    await removeByFilter('project_timeline', { project_id: id });
+    await removeByFilter('project_versions', { project_id: id });
+
+    // 4. Delete project itself
+    onProgress?.('מוחק פרויקט...');
+    await remove('projects', id);
+  },
+
+  /** Duplicate project metadata (no outputs) */
+  async duplicate(id: string): Promise<ProjectRow> {
+    const original = await query<ProjectRow>('projects', { filter: { id }, single: true });
+    const { id: _id, created_at, updated_at, output_count, current_version, ...rest } = original;
+    return projectService.create({ ...rest, name: `${original.name} (עותק)` });
   },
 
   async getOutputs(projectId: string): Promise<ProjectOutputRow[]> {
@@ -242,6 +299,25 @@ export const projectService = {
       await update('projects', projectId, { output_count: (proj.output_count || 0) + 1 });
     } catch { /* non-critical */ }
     return created;
+  },
+
+  /** Update a single output row */
+  async updateOutput(outputId: string, updates: Partial<ProjectOutputRow>): Promise<ProjectOutputRow> {
+    return update<ProjectOutputRow>('project_outputs', outputId, updates);
+  },
+
+  /** Delete a single output + its storage files */
+  async deleteOutput(outputId: string, output: ProjectOutputRow): Promise<void> {
+    const paths = [extractStoragePath(output.thumbnail_url), extractStoragePath(output.video_url)].filter(Boolean) as string[];
+    if (paths.length > 0) {
+      try { await supabase.storage.from('media').remove(paths); } catch { /* non-critical */ }
+    }
+    await remove('project_outputs', outputId);
+    // Decrement output_count
+    try {
+      const proj = await query<ProjectRow>('projects', { filter: { id: output.project_id }, single: true });
+      await update('projects', output.project_id, { output_count: Math.max(0, (proj.output_count || 1) - 1) });
+    } catch { /* non-critical */ }
   },
 
   async findOrCreateByBrand(brandId: string, brandName: string, category?: string): Promise<ProjectRow> {
