@@ -380,30 +380,28 @@ async function buildSubtitleClips(
   const subHeight = Math.round(outputHeight * 0.15);
   const font = await loadHebrewFont();
 
-  const cleanSegments = segments.filter((seg) => seg.text && seg.text.trim());
+  return segments
+    .filter((seg) => seg.text && seg.text.trim())
+    .map((seg) => {
+      const svgMarkup = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
 
-  return Promise.all(cleanSegments.map(async (seg) => {
-    const svg = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
-    const hash = await sha1Hex(`${subWidth}x${subHeight}|${JSON.stringify(style || {})}|${seg.text}`);
-    const objectPath = `uploads/subtitle-overlays/${hash}.svg`;
-    const src = await uploadSubtitleSvg(svg, objectPath);
-
-    return {
-      asset: {
-        type: "image",
-        src,
-      },
-      start: seg.start,
-      length: Math.max(0.5, seg.end - seg.start),
-      position: "bottom",
-      offset: { y: 0.08 },
-      scale: round2(subWidth / outputWidth),
-      transition: {
-        in: "slideUp",
-        out: "fade",
-      },
-    };
-  }));
+      return {
+        asset: {
+          type: "html",
+          html: svgMarkup,
+          width: subWidth,
+          height: subHeight,
+        },
+        start: seg.start,
+        length: Math.max(0.5, seg.end - seg.start),
+        position: "bottom",
+        offset: { y: 0.08 },
+        transition: {
+          in: "slideUp",
+          out: "fade",
+        },
+      };
+    });
 }
 
 function buildStickerClips(stickers: StickerItem[]): any[] {
