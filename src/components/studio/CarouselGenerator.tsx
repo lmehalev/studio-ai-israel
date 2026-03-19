@@ -330,7 +330,7 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
   };
 
   const costEstimates: CostEstimate[] = [
-    { provider: 'Lovable AI', action: `יצירת ${slides.length} תמונות`, estimatedCost: `~$${(slides.length * 0.03).toFixed(2)}`, details: `${slides.length} שקופיות × Gemini Image` },
+    { provider: 'Lovable AI', action: `יצירת ${slides.length} תמונות`, estimatedCost: `~$${(slides.length * 0.03).toFixed(2)}`, details: [`${slides.length} שקופיות × Gemini Image`] },
   ];
 
   // ====== SETUP STEP ======
