@@ -2300,7 +2300,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               <img src={logoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border" />
               <div className="flex-1 space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  {logoPosition === 'topRight' ? 'ימין עליון' : logoPosition === 'topLeft' ? 'שמאל עליון' : logoPosition === 'bottomRight' ? 'ימין תחתון' : 'שמאל תחתון'}
+                  {logoPosition === 'manual' ? `ידני X:${Math.round(logoXPct)}% Y:${Math.round(logoYPct)}%` :
+                    logoPosition === 'topRight' ? 'ימין עליון' : logoPosition === 'topLeft' ? 'שמאל עליון' : logoPosition === 'bottomRight' ? 'ימין תחתון' : 'שמאל תחתון'}
                   {' • '}{logoSize}% גודל{' • '}{logoOpacity}% שקיפות
                 </p>
                 <button onClick={() => setLogoUrl(null)}
@@ -2309,17 +2310,30 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                 </button>
               </div>
             </div>
-            {/* Position */}
+
+            {/* Manual mode toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={logoManualMode} onChange={e => {
+                const manual = e.target.checked;
+                setLogoManualMode(manual);
+                if (manual) setLogoPosition('manual');
+                else snapLogoToCorner('topRight');
+              }} className="accent-primary" />
+              <Move className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs text-muted-foreground">מיקום ידני (גרירה על הווידאו)</span>
+            </label>
+
+            {/* Snap-to-corner presets */}
             <div className="grid grid-cols-4 gap-1">
               {([
-                { value: 'topRight' as LogoPosition, label: 'ימין ↗' },
-                { value: 'topLeft' as LogoPosition, label: 'שמאל ↖' },
-                { value: 'bottomRight' as LogoPosition, label: 'ימין ↘' },
-                { value: 'bottomLeft' as LogoPosition, label: 'שמאל ↙' },
+                { value: 'topRight' as const, label: 'ימין ↗' },
+                { value: 'topLeft' as const, label: 'שמאל ↖' },
+                { value: 'bottomRight' as const, label: 'ימין ↘' },
+                { value: 'bottomLeft' as const, label: 'שמאל ↙' },
               ]).map(p => (
                 <button
                   key={p.value}
-                  onClick={() => setLogoPosition(p.value)}
+                  onClick={() => { snapLogoToCorner(p.value); setLogoManualMode(false); }}
                   className={cn(
                     'px-2 py-1 rounded text-[10px] border transition-all',
                     logoPosition === p.value ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
@@ -2329,21 +2343,35 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                 </button>
               ))}
             </div>
-            {/* Size slider */}
+
+            {/* Manual X/Y inputs */}
+            {logoManualMode && (
+              <div className="flex gap-2">
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-[10px] text-muted-foreground">X%</span>
+                  <input type="number" min={0} max={100} step={1} value={Math.round(logoXPct)}
+                    onChange={e => setLogoXPct(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="w-14 text-xs px-1.5 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+                </div>
+                <div className="flex items-center gap-1 flex-1">
+                  <span className="text-[10px] text-muted-foreground">Y%</span>
+                  <input type="number" min={0} max={100} step={1} value={Math.round(logoYPct)}
+                    onChange={e => setLogoYPct(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="w-14 text-xs px-1.5 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+                </div>
+              </div>
+            )}
+
+            {/* Size slider (2-30%) + numeric input */}
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground w-12">גודל</span>
-              <input type="range" min={4} max={15} step={0.5} value={logoSize}
+              <input type="range" min={2} max={30} step={0.5} value={logoSize}
                 onChange={e => setLogoSize(Number(e.target.value))}
                 className="flex-1 accent-primary h-1.5" />
-              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoSize}%</span>
-            </div>
-            {/* Margin slider */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground w-12">שוליים</span>
-              <input type="range" min={1} max={10} step={0.5} value={logoMargin}
-                onChange={e => setLogoMargin(Number(e.target.value))}
-                className="flex-1 accent-primary h-1.5" />
-              <span className="text-[10px] text-muted-foreground w-8 text-center">{logoMargin}%</span>
+              <input type="number" min={2} max={30} step={0.5} value={logoSize}
+                onChange={e => setLogoSize(Math.max(2, Math.min(30, Number(e.target.value))))}
+                className="w-12 text-[10px] px-1 py-0.5 rounded border border-border bg-background text-foreground text-center" />
+              <span className="text-[10px] text-muted-foreground">%</span>
             </div>
             {/* Opacity slider */}
             <div className="flex items-center gap-2">
