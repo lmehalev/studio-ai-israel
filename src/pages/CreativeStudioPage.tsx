@@ -90,7 +90,7 @@ export default function CreativeStudioPage() {
     return prompt;
   };
 
-  const handleAddBrand = () => {
+  const handleAddBrand = async () => {
     if (!newBrand.name?.trim()) { toast.error('יש להזין שם'); return; }
     const brand: Brand = {
       id: crypto.randomUUID(),
@@ -101,7 +101,7 @@ export default function CreativeStudioPage() {
       colors: newBrand.colors || [],
       departments: newBrand.departments || [],
     };
-    const updated = brandService.add(brand);
+    const updated = await brandService.add(brand);
     setBrands(updated);
     setActiveBrandId(brand.id);
     setActiveSubActivity('');
