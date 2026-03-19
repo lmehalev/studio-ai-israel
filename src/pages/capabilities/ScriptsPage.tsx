@@ -1,9 +1,10 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Plus, Trash2, X, Copy, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { promptEnhanceService } from '@/services/creativeService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SavedScript {
   id: string;
@@ -14,41 +15,72 @@ interface SavedScript {
 
 const STORAGE_KEY = 'studio-scripts';
 
-function getScripts(): SavedScript[] {
+// Legacy localStorage helpers
+function getLocalScripts(): SavedScript[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-function saveScriptsToStorage(scripts: SavedScript[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scripts));
 }
 
 export default function ScriptsManagePage() {
-  const [scripts, setScripts] = useState<SavedScript[]>(getScripts());
+  const [scripts, setScripts] = useState<SavedScript[]>([]);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [generating, setGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleSave = () => {
+  // Load from Supabase on mount, migrate localStorage if needed
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await supabase.from('scripts').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        const dbScripts: SavedScript[] = (data || []).map((r: any) => ({
+          id: r.id, name: r.name, content: r.content, createdAt: r.created_at,
+        }));
+
+        // Migrate localStorage scripts to DB
+        const localScripts = getLocalScripts();
+        let merged = [...dbScripts];
+        for (const ls of localScripts) {
+          if (!merged.find(s => s.id === ls.id)) {
+            try {
+              await supabase.from('scripts').upsert({ id: ls.id, name: ls.name, content: ls.content }, { onConflict: 'id' });
+              merged.push(ls);
+            } catch {}
+          }
+        }
+        if (localScripts.length > 0) {
+          localStorage.removeItem(STORAGE_KEY); // Clean up after migration
+        }
+        setScripts(merged);
+      } catch (e) {
+        console.error('Failed to load scripts from DB', e);
+        setScripts(getLocalScripts());
+      }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const handleSave = async () => {
     if (!name.trim()) { toast.error('יש להזין שם לתסריט'); return; }
     if (!content.trim()) { toast.error('יש להזין תוכן'); return; }
 
     if (editingId) {
-      const updated = scripts.map(s => s.id === editingId ? { ...s, name, content } : s);
-      setScripts(updated);
-      saveScriptsToStorage(updated);
+      try {
+        await supabase.from('scripts').update({ name, content }).eq('id', editingId);
+      } catch {}
+      setScripts(prev => prev.map(s => s.id === editingId ? { ...s, name, content } : s));
       setEditingId(null);
       toast.success('התסריט עודכן');
     } else {
-      const newScript: SavedScript = {
-        id: crypto.randomUUID(),
-        name,
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [...scripts, newScript];
-      setScripts(updated);
-      saveScriptsToStorage(updated);
+      const id = crypto.randomUUID();
+      const newScript: SavedScript = { id, name, content, createdAt: new Date().toISOString() };
+      try {
+        await supabase.from('scripts').upsert({ id, name, content }, { onConflict: 'id' });
+      } catch {}
+      setScripts(prev => [newScript, ...prev]);
       toast.success('התסריט נשמר!');
     }
     setCreating(false);
@@ -67,10 +99,9 @@ export default function ScriptsManagePage() {
     finally { setGenerating(false); }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = scripts.filter(s => s.id !== id);
-    setScripts(updated);
-    saveScriptsToStorage(updated);
+  const handleDelete = async (id: string) => {
+    try { await supabase.from('scripts').delete().eq('id', id); } catch {}
+    setScripts(prev => prev.filter(s => s.id !== id));
     toast.success('התסריט הוסר');
   };
 
@@ -139,7 +170,12 @@ export default function ScriptsManagePage() {
           </div>
         )}
 
-        {scripts.length === 0 && !creating ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm mt-2">טוען תסריטים...</p>
+          </div>
+        ) : scripts.length === 0 && !creating ? (
           <div className="text-center py-16 text-muted-foreground">
             <FileText className="w-16 h-16 mx-auto mb-4 opacity-30" />
             <p className="text-lg font-medium">אין תסריטים עדיין</p>

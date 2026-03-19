@@ -508,7 +508,7 @@ export const promptEnhanceService = {
   },
 };
 
-// ====== Brand Management (Local Storage) ======
+// ====== Brand Management (Supabase DB) ======
 export interface Brand {
   id: string;
   name: string;
@@ -520,9 +520,36 @@ export interface Brand {
   departments?: string[];
 }
 
-const BRANDS_KEY = "creative_studio_brands";
+const BRANDS_KEY = "creative_studio_brands"; // legacy localStorage key for migration
+
+// Convert DB row to Brand interface
+function rowToBrand(row: any): Brand {
+  return {
+    id: row.id,
+    name: row.name,
+    logo: row.logo || undefined,
+    colors: row.colors || [],
+    tone: row.tone || '',
+    targetAudience: row.target_audience || '',
+    industry: row.industry || '',
+    departments: row.departments || [],
+  };
+}
 
 export const brandService = {
+  // Async version - fetches from Supabase
+  getAllAsync: async (): Promise<Brand[]> => {
+    try {
+      const { data, error } = await supabase.from('brands').select('*').order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []).map(rowToBrand);
+    } catch (e) {
+      console.error('Failed to fetch brands from DB, falling back to localStorage', e);
+      return brandService.getAll();
+    }
+  },
+
+  // Sync fallback for backward compat (reads localStorage only)
   getAll: (): Brand[] => {
     try {
       const raw = localStorage.getItem(BRANDS_KEY);
@@ -531,26 +558,98 @@ export const brandService = {
   },
 
   save: (brands: Brand[]) => {
+    // Legacy: keep localStorage in sync for backward compat
     localStorage.setItem(BRANDS_KEY, JSON.stringify(brands));
   },
 
-  add: (brand: Brand) => {
+  add: async (brand: Brand): Promise<Brand[]> => {
+    try {
+      await supabase.from('brands').upsert({
+        id: brand.id,
+        name: brand.name,
+        logo: brand.logo || null,
+        colors: brand.colors || [],
+        tone: brand.tone || '',
+        target_audience: brand.targetAudience || '',
+        industry: brand.industry || '',
+        departments: brand.departments || [],
+      }, { onConflict: 'id' });
+    } catch (e) {
+      console.error('Failed to save brand to DB', e);
+    }
+    // Also update localStorage for backward compat
     const brands = brandService.getAll();
     brands.push(brand);
     brandService.save(brands);
     return brands;
   },
 
-  update: (id: string, updates: Partial<Brand>) => {
+  update: async (id: string, updates: Partial<Brand>): Promise<Brand[]> => {
+    try {
+      const dbUpdates: any = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
+      if (updates.colors !== undefined) dbUpdates.colors = updates.colors;
+      if (updates.tone !== undefined) dbUpdates.tone = updates.tone;
+      if (updates.targetAudience !== undefined) dbUpdates.target_audience = updates.targetAudience;
+      if (updates.industry !== undefined) dbUpdates.industry = updates.industry;
+      if (updates.departments !== undefined) dbUpdates.departments = updates.departments;
+      await supabase.from('brands').update(dbUpdates).eq('id', id);
+    } catch (e) {
+      console.error('Failed to update brand in DB', e);
+    }
     const brands = brandService.getAll().map(b => b.id === id ? { ...b, ...updates } : b);
     brandService.save(brands);
     return brands;
   },
 
-  remove: (id: string) => {
+  remove: async (id: string): Promise<Brand[]> => {
+    try {
+      await supabase.from('brands').delete().eq('id', id);
+    } catch (e) {
+      console.error('Failed to delete brand from DB', e);
+    }
     const brands = brandService.getAll().filter(b => b.id !== id);
     brandService.save(brands);
     return brands;
+  },
+
+  // Migrate localStorage brands to Supabase (one-time)
+  migrateLocalToDb: async (): Promise<number> => {
+    const local = brandService.getAll();
+    if (local.length === 0) return 0;
+    let count = 0;
+    for (const brand of local) {
+      try {
+        await supabase.from('brands').upsert({
+          id: brand.id,
+          name: brand.name,
+          logo: brand.logo || null,
+          colors: brand.colors || [],
+          tone: brand.tone || '',
+          target_audience: brand.targetAudience || '',
+          industry: brand.industry || '',
+          departments: brand.departments || [],
+        }, { onConflict: 'id' });
+        count++;
+      } catch {}
+    }
+    return count;
+  },
+
+  // Export all data for cross-domain migration
+  exportAll: async (): Promise<{ brands: Brand[], scripts: any[] }> => {
+    const brands = await brandService.getAllAsync();
+    // Also get localStorage brands that might not be in DB yet
+    const localBrands = brandService.getAll();
+    const allBrands = [...brands];
+    for (const lb of localBrands) {
+      if (!allBrands.find(b => b.id === lb.id)) allBrands.push(lb);
+    }
+    // Get scripts from localStorage
+    let scripts: any[] = [];
+    try { scripts = JSON.parse(localStorage.getItem('studio-scripts') || '[]'); } catch {}
+    return { brands: allBrands, scripts };
   },
 };
 
