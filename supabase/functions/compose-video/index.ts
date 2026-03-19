@@ -748,15 +748,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "פעולה לא מוכרת" }), {
-      status: 400,
+    const unknownActionResponse: ComposeRenderResponse = {
+      renderId: null,
+      status: "failed:unknown_action",
+      outputUrl: null,
+      thumbnailUrl: null,
+      subtitleCount: 0,
+      logoPlacementSummary: null,
+    };
+
+    return new Response(JSON.stringify(unknownActionResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("compose-video error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה בהרכבת סרטון" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+
+    const failureResponse: ComposeRenderResponse = {
+      renderId: null,
+      status: `failed:${e instanceof Error ? e.message.slice(0, 80) : "compose_error"}`,
+      outputUrl: null,
+      thumbnailUrl: null,
+      subtitleCount: 0,
+      logoPlacementSummary: null,
+    };
+
+    return new Response(JSON.stringify(failureResponse), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
