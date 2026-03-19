@@ -1462,9 +1462,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       {showPreview && currentSubtitle && (
         <div style={captionPositionStyle()} dir="rtl">
           <div
-            key={activeCueIndex ?? 'idle'}
-            className={getCaptionAnimationStyle()}
-            style={getPreviewSubtitleStyle(currentSubtitle)}
+            key={`${activeCueIndex ?? 'idle'}-${captionAnimation}`}
+            className={cn(getCaptionAnimationStyle())}
+            style={{
+              ...getPreviewSubtitleStyle(currentSubtitle),
+              animationFillMode: 'both',
+            }}
           >
             {getDisplayCaption(currentSubtitle)}
           </div>
