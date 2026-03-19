@@ -202,6 +202,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [showPreview, setShowPreview] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState('');
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
