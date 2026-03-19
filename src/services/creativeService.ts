@@ -258,6 +258,8 @@ export const composeService = {
     subtitleSegments?: { start: number; end: number; text: string }[];
     totalDuration?: number;
     orientation?: string;
+    sourceWidth?: number;
+    sourceHeight?: number;
   }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage'; debug?: any }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },

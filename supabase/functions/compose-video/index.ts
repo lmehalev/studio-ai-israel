@@ -11,6 +11,11 @@ const SHOTSTACK_ENDPOINTS = {
   stage: "https://api.shotstack.io/edit/stage",
 } as const;
 
+const HEBREW_FONT_URLS = [
+  "https://raw.githubusercontent.com/openmaptiles/fonts/master/noto-sans/NotoSansHebrew-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/openmaptiles/fonts@noto-sans/NotoSansHebrew-Regular.ttf",
+];
+
 type ShotstackEnv = keyof typeof SHOTSTACK_ENDPOINTS;
 
 interface SubtitleSegment {
@@ -38,25 +43,196 @@ interface StickerItem {
   scale?: number;
 }
 
-// Google Fonts @import for Hebrew fonts — embedded in every HTML asset to guarantee rendering
-const GOOGLE_FONTS_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;700;800;900&family=Heebo:wght@400;500;600;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap');`;
+interface LogoPlacement {
+  xPct: number; // 0-100, left edge as % of contentRect width
+  yPct: number; // 0-100, top edge as % of contentRect height
+  scalePct: number; // 2-30 (logo width as % of contentRect width)
+  opacity: number; // 0-1
+}
+
+interface ContentRectPx {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface OutputConfig {
+  width: number;
+  height: number;
+  resolution: string;
+}
+
+let cachedHebrewFontBase64: string | null = null;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function getEmbeddedHebrewFontBase64(): Promise<string> {
+  if (cachedHebrewFontBase64) return cachedHebrewFontBase64;
+
+  const errors: string[] = [];
+
+  for (const fontUrl of HEBREW_FONT_URLS) {
+    try {
+      const res = await fetch(fontUrl);
+      if (!res.ok) {
+        errors.push(`${fontUrl} -> ${res.status}`);
+        continue;
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      cachedHebrewFontBase64 = uint8ToBase64(bytes);
+      return cachedHebrewFontBase64;
+    } catch (e) {
+      errors.push(`${fontUrl} -> ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  throw new Error(`לא ניתן לטעון פונט עברי מוטמע: ${errors.join(" | ")}`);
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parsePadding(padding: string | undefined): { vertical: number; horizontal: number } {
+  if (!padding) return { vertical: 12, horizontal: 28 };
+  const tokens = padding
+    .split(/\s+/)
+    .map((t) => Number.parseFloat(t.replace("px", "")))
+    .filter((n) => Number.isFinite(n));
+
+  if (tokens.length === 1) {
+    return { vertical: tokens[0], horizontal: tokens[0] };
+  }
+  if (tokens.length >= 2) {
+    return { vertical: tokens[0], horizontal: tokens[1] };
+  }
+  return { vertical: 12, horizontal: 28 };
+}
+
+function wrapText(text: string, maxCharsPerLine: number, maxLines = 3): string[] {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+
+  const words = normalized.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    const next = `${current} ${word}`;
+    if (next.length <= maxCharsPerLine) {
+      current = next;
+      continue;
+    }
+
+    lines.push(current);
+    current = word;
+
+    if (lines.length >= maxLines - 1) {
+      break;
+    }
+  }
+
+  if (lines.length < maxLines && current) {
+    lines.push(current);
+  }
+
+  // Hard split for very long single tokens (e.g. no spaces)
+  if (lines.length === 1 && lines[0].length > maxCharsPerLine) {
+    const hard: string[] = [];
+    for (let i = 0; i < lines[0].length && hard.length < maxLines; i += maxCharsPerLine) {
+      hard.push(lines[0].slice(i, i + maxCharsPerLine));
+    }
+    return hard;
+  }
+
+  return lines.slice(0, maxLines);
+}
+
+function buildSubtitleHtmlAsset(
+  text: string,
+  style: SubtitleStyle,
+  width: number,
+  height: number,
+  fontBase64: string,
+): string {
+  const fontSize = style.fontSize || 30;
+  const color = style.color || "#FFFFFF";
+  const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
+  const borderRadius = style.borderRadius ?? 16;
+  const fontWeight = style.fontWeight || 800;
+  const padding = parsePadding(style.padding);
+
+  const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
+  const lines = wrapText(text, maxCharsPerLine, 3);
+  const safeLines = (lines.length > 0 ? lines : [text]).map(escapeXml).join("<br />");
+
+  return `<style>
+      @font-face {
+        font-family: 'HebrewEmbedded';
+        src: url(data:font/ttf;base64,${fontBase64}) format('truetype');
+        font-style: normal;
+        font-weight: 100 900;
+      }
+    </style>
+    <div style="
+      width:${width}px;
+      height:${height}px;
+      box-sizing:border-box;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      direction:rtl;
+      unicode-bidi:bidi-override;
+      font-family:'HebrewEmbedded','Arial',sans-serif;
+      font-size:${fontSize}px;
+      font-weight:${fontWeight};
+      color:${color};
+      background:${bgColor};
+      border-radius:${borderRadius}px;
+      line-height:1.35;
+      text-shadow:0 2px 6px rgba(0,0,0,0.85),0 0 1px rgba(0,0,0,0.65);
+      padding:${padding.vertical}px ${padding.horizontal}px;
+      white-space:normal;
+      overflow-wrap:break-word;
+      word-break:break-word;
+    ">${safeLines}</div>`;
+}
 
 function buildSubtitleClips(
   segments: SubtitleSegment[],
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
+  fontBase64: string,
 ): any[] {
-  const font = style.font || "'Noto Sans Hebrew', 'Arial', sans-serif";
-  const fontSize = style.fontSize || 30;
-  const color = style.color || "#FFFFFF";
-  const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
-  const borderRadius = style.borderRadius ?? 16;
-  const shadow = style.shadow || "0 2px 16px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)";
-  const fontWeight = style.fontWeight || 800;
-  const padding = style.padding || "14px 32px";
-
-  // Scale subtitle box to output resolution
   const subWidth = Math.round(outputWidth * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
 
@@ -65,25 +241,7 @@ function buildSubtitleClips(
     .map((seg) => ({
       asset: {
         type: "html",
-        html: `<style>${GOOGLE_FONTS_IMPORT}</style><div style="
-          font-family: ${font};
-          direction: rtl;
-          unicode-bidi: bidi-override;
-          text-align: center;
-          padding: ${padding};
-          background: ${bgColor};
-          backdrop-filter: blur(8px);
-          border-radius: ${borderRadius}px;
-          color: ${color};
-          font-size: ${fontSize}px;
-          font-weight: ${fontWeight};
-          line-height: 1.5;
-          text-shadow: ${shadow};
-          letter-spacing: 0.03em;
-          white-space: pre-wrap;
-          word-wrap: break-word;
-          border: 1px solid rgba(255,255,255,0.1);
-        ">${seg.text}</div>`,
+        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontBase64),
         width: subWidth,
         height: subHeight,
       },
@@ -121,47 +279,101 @@ function buildStickerClips(stickers: StickerItem[]): any[] {
   }));
 }
 
-interface LogoPlacement {
-  xPct: number;   // 0-100, left edge as % of video width
-  yPct: number;   // 0-100, top edge as % of video height
-  scalePct: number; // logo width as % of video width (2-30)
-  opacity: number;  // 0-1
+function resolveOutputConfig(orientation?: string): OutputConfig {
+  if (orientation === "portrait" || orientation === "9:16") {
+    return { width: 1080, height: 1920, resolution: "1080" };
+  }
+  return { width: 1920, height: 1080, resolution: "hd" };
 }
 
-function buildLogoClip(logoUrl: string, totalDuration: number, placement?: LogoPlacement): any {
-  // Convert percentage-based placement to Shotstack offset system
-  // Shotstack offset: x/y are -0.5 to 0.5 from center, scale is fraction of frame
-  const p = placement || { xPct: 88, yPct: 4, scalePct: 10, opacity: 0.92 };
+function resolveContentRect(
+  outputWidth: number,
+  outputHeight: number,
+  sourceWidth?: number,
+  sourceHeight?: number,
+): ContentRectPx {
+  const sw = Number(sourceWidth);
+  const sh = Number(sourceHeight);
 
-  // Convert xPct/yPct (0-100, top-left origin) to Shotstack offset (center origin, -0.5 to 0.5)
-  // Logo center in normalized coords:
-  const logoCenterX = (p.xPct + p.scalePct / 2) / 100; // 0-1
-  const logoCenterY = (p.yPct + p.scalePct / 2) / 100;  // 0-1
-  const offsetX = logoCenterX - 0.5; // -0.5 to 0.5
-  const offsetY = -(logoCenterY - 0.5); // Shotstack Y is inverted (positive = up)
+  if (!Number.isFinite(sw) || !Number.isFinite(sh) || sw <= 0 || sh <= 0) {
+    return { x: 0, y: 0, w: outputWidth, h: outputHeight };
+  }
+
+  const sourceAspect = sw / sh;
+  const targetAspect = outputWidth / outputHeight;
+
+  if (sourceAspect > targetAspect) {
+    const w = outputWidth;
+    const h = outputWidth / sourceAspect;
+    return { x: 0, y: (outputHeight - h) / 2, w, h };
+  }
+
+  const h = outputHeight;
+  const w = outputHeight * sourceAspect;
+  return { x: (outputWidth - w) / 2, y: 0, w, h };
+}
+
+function buildLogoClip(
+  logoUrl: string,
+  totalDuration: number,
+  outputWidth: number,
+  outputHeight: number,
+  contentRect: ContentRectPx,
+  placement?: LogoPlacement,
+): { track: any; debug: Record<string, unknown> } {
+  const p = placement || { xPct: 88, yPct: 4, scalePct: 10, opacity: 0.92 };
+  const scalePct = clamp(Number(p.scalePct) || 10, 2, 30);
+  const xPct = clamp(Number(p.xPct) || 0, 0, 100 - scalePct);
+  const yPct = clamp(Number(p.yPct) || 0, 0, 100 - scalePct);
+  const opacity = clamp(Number(p.opacity) || 0.92, 0, 1);
+
+  // EXACT preview parity:
+  // logo width/height are based on contentRect WIDTH, while x/y are percentages over contentRect.
+  const logoPxW = (contentRect.w * scalePct) / 100;
+  const logoPxH = logoPxW;
+  const logoPxX = contentRect.x + (contentRect.w * xPct) / 100;
+  const logoPxY = contentRect.y + (contentRect.h * yPct) / 100;
+
+  const centerX = logoPxX + logoPxW / 2;
+  const centerY = logoPxY + logoPxH / 2;
+
+  const offsetX = centerX / outputWidth - 0.5;
+  const offsetY = -(centerY / outputHeight - 0.5);
 
   return {
-    clips: [
-      {
-        asset: { type: "image", src: logoUrl },
-        start: 0,
-        length: totalDuration,
-        position: "center",
-        offset: { x: offsetX, y: offsetY },
-        scale: p.scalePct / 100,
-        opacity: p.opacity,
+    track: {
+      clips: [
+        {
+          asset: { type: "image", src: logoUrl },
+          start: 0,
+          length: totalDuration,
+          position: "center",
+          offset: { x: offsetX, y: offsetY },
+          scale: logoPxW / outputWidth,
+          opacity,
+        },
+      ],
+    },
+    debug: {
+      outputSize: { width: outputWidth, height: outputHeight },
+      contentRectPx: {
+        x: round2(contentRect.x),
+        y: round2(contentRect.y),
+        w: round2(contentRect.w),
+        h: round2(contentRect.h),
       },
-    ],
+      logoPxX: round2(logoPxX),
+      logoPxY: round2(logoPxY),
+      logoPxW: round2(logoPxW),
+      logoPxH: round2(logoPxH),
+      normalized: {
+        offsetX: round2(offsetX),
+        offsetY: round2(offsetY),
+        scale: round2(logoPxW / outputWidth),
+      },
+      input: { xPct, yPct, scalePct, opacity },
+    },
   };
-}
-
-// Resolve output dimensions from orientation
-function resolveOutputConfig(orientation?: string): { width: number; height: number; resolution: string } {
-  if (orientation === "portrait" || orientation === "9:16") {
-    return { width: 1080, height: 1920, resolution: "1080", };
-  }
-  // Default: landscape 16:9
-  return { width: 1920, height: 1080, resolution: "hd" };
 }
 
 function getShotstackEnvOrder(preferredEnv?: unknown): ShotstackEnv[] {
@@ -187,7 +399,6 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // ====== Render composited video ======
     if (action === "render") {
       const {
         videoUrl,
@@ -202,6 +413,8 @@ Deno.serve(async (req) => {
         subtitleSegments,
         totalDuration: requestedDuration,
         orientation,
+        sourceWidth,
+        sourceHeight,
       } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
@@ -213,31 +426,51 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Resolve output dimensions based on orientation
       const outputConfig = resolveOutputConfig(orientation);
 
-      // Calculate duration
       const sceneDuration = (scenes || []).reduce(
         (sum: number, s: any) => sum + (s.duration || 10),
-        0
+        0,
       );
       const totalDuration = requestedDuration || Math.max(sceneDuration, clipUrls.length * 10) || 30;
 
+      const contentRect = resolveContentRect(
+        outputConfig.width,
+        outputConfig.height,
+        Number(sourceWidth),
+        Number(sourceHeight),
+      );
+
       const tracks: any[] = [];
 
-      // === Logo overlay track ===
+      let logoDebug: Record<string, unknown> | null = null;
       if (logoUrl) {
-        tracks.push(buildLogoClip(logoUrl, totalDuration, logoPlacement as LogoPlacement | undefined));
+        const logo = buildLogoClip(
+          logoUrl,
+          totalDuration,
+          outputConfig.width,
+          outputConfig.height,
+          contentRect,
+          logoPlacement as LogoPlacement | undefined,
+        );
+        logoDebug = logo.debug;
+        tracks.push(logo.track);
       }
 
-      // === Sticker overlays track ===
       if (stickers && stickers.length > 0) {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      // === Subtitle track ===
+      const embeddedFontBase64 = await getEmbeddedHebrewFontBase64();
+
       if (subtitleSegments && subtitleSegments.length > 0) {
-        const subClips = buildSubtitleClips(subtitleSegments, subtitleStyle || {}, outputConfig.width, outputConfig.height);
+        const subClips = buildSubtitleClips(
+          subtitleSegments,
+          subtitleStyle || {},
+          outputConfig.width,
+          outputConfig.height,
+          embeddedFontBase64,
+        );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
         }
@@ -256,31 +489,35 @@ Deno.serve(async (req) => {
               style,
               outputConfig.width,
               outputConfig.height,
+              embeddedFontBase64,
             );
             textClips.push(...subClips);
           }
 
-          // Scene title badge
           if (scene.title && dur > 2) {
+            const titleWidth = 520;
+            const titleHeight = 70;
+            const titleHtml = buildSubtitleHtmlAsset(
+              scene.title,
+              {
+                fontSize: 22,
+                color: "#1a1a1a",
+                bgColor: "rgba(255,180,40,0.95)",
+                borderRadius: 12,
+                fontWeight: 800,
+                padding: "10px 24px",
+              },
+              titleWidth,
+              titleHeight,
+              embeddedFontBase64,
+            );
+
             textClips.push({
               asset: {
                 type: "html",
-                html: `<style>${GOOGLE_FONTS_IMPORT}</style><div style="
-                  font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
-                  direction: rtl;
-                  unicode-bidi: bidi-override;
-                  text-align: center;
-                  padding: 10px 28px;
-                  background: linear-gradient(135deg, rgba(255,200,50,0.95), rgba(255,140,0,0.95));
-                  border-radius: 12px;
-                  color: #1a1a1a;
-                  font-size: 22px;
-                  font-weight: 800;
-                  box-shadow: 0 6px 20px rgba(255,160,0,0.5);
-                  letter-spacing: 0.03em;
-                ">${scene.title}</div>`,
-                width: 520,
-                height: 60,
+                html: titleHtml,
+                width: titleWidth,
+                height: titleHeight,
               },
               start: cumulativeTime + 0.15,
               length: Math.min(dur - 0.3, 3),
@@ -290,7 +527,6 @@ Deno.serve(async (req) => {
             });
           }
 
-          // Floating icons
           if (scene.icons && scene.icons.length > 0) {
             const iconPositions = ["left", "right", "topLeft", "topRight"];
             scene.icons.slice(0, 4).forEach((icon: string, i: number) => {
@@ -319,8 +555,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // === Video clips track ===
-      // Use "contain" fit so the video is letterboxed/pillarboxed to match output — no crop
       const videoClips: any[] = [];
       let videoStart = 0;
       for (let i = 0; i < clipUrls.length; i++) {
@@ -329,18 +563,17 @@ Deno.serve(async (req) => {
           asset: {
             type: "video",
             src: clipUrls[i],
-            volume: audioUrl ? 0.15 : 1, // duck original audio if music is added
+            volume: audioUrl ? 0.15 : 1,
           },
           start: videoStart,
           length: clipUrls.length === 1 ? totalDuration : sceneDur,
-          fit: "contain", // ← KEY: no crop, letterbox/pillarbox to fit target aspect
+          fit: "contain",
           transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
         });
         videoStart += sceneDur;
       }
       tracks.push({ clips: videoClips });
 
-      // === Background track ===
       const bgColor = brandColors?.[0] || "#0f0f23";
       tracks.push({
         clips: [
@@ -357,7 +590,6 @@ Deno.serve(async (req) => {
         ],
       });
 
-      // === Soundtrack ===
       const soundtrack: any = {};
       if (audioUrl) {
         soundtrack.src = audioUrl;
@@ -374,19 +606,30 @@ Deno.serve(async (req) => {
           format: "mp4",
           resolution: outputConfig.resolution,
           fps: 30,
-          ...(orientation === "portrait" || orientation === "9:16"
-            ? { size: { width: 1080, height: 1920 } }
-            : {}),
+          size: { width: outputConfig.width, height: outputConfig.height },
         },
       };
 
+      const debugObject = {
+        orientation: orientation || "landscape",
+        outputSize: { width: outputConfig.width, height: outputConfig.height },
+        sourceSize: {
+          width: Number(sourceWidth) || null,
+          height: Number(sourceHeight) || null,
+        },
+        contentRectPx: {
+          x: round2(contentRect.x),
+          y: round2(contentRect.y),
+          w: round2(contentRect.w),
+          h: round2(contentRect.h),
+        },
+        logo: logoDebug,
+        subtitleCount: subtitleSegments?.length || 0,
+      };
+
       console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 1200));
-      console.log("Render debug: orientation=" + (orientation || "default/landscape") +
-        " output=" + outputConfig.width + "x" + outputConfig.height +
-        " clips=" + clipUrls.length +
-        " subtitleSegs=" + (subtitleSegments?.length || 0) +
-        " logoUrl=" + (logoUrl ? "yes" : "no") +
-        " logoPlacement=" + JSON.stringify(logoPlacement || null));
+      console.log("Compose debug object:", JSON.stringify(debugObject));
+      console.log("Compose debug export (timeline snippet):", JSON.stringify(renderBody).slice(0, 4000));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -407,14 +650,11 @@ Deno.serve(async (req) => {
               status: "rendering",
               shotstackEnv: env,
               debug: {
-                orientation: orientation || "landscape",
-                outputSize: `${outputConfig.width}x${outputConfig.height}`,
-                logoPlacement: logoPlacement || null,
-                subtitleCount: subtitleSegments?.length || 0,
+                ...debugObject,
                 timelineJson: JSON.stringify(renderBody).slice(0, 2000),
               },
             }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
@@ -429,11 +669,10 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ error: `שגיאה בהרכבת הסרטון: ${renderErrors.join(" | ")}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // ====== Check render status ======
     if (action === "check_status") {
       const { renderId } = params;
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
@@ -461,12 +700,11 @@ Deno.serve(async (req) => {
       if (!data) {
         return new Response(
           JSON.stringify({ error: `שגיאה בבדיקת סטטוס הרכבה: ${statusErrors.join(" | ")}` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       const r = data.response;
-
       const isDone = r.status === "done" || r.status === "rendered";
       const normalizedStatus = isDone ? "done" : r.status;
 
@@ -479,7 +717,7 @@ Deno.serve(async (req) => {
             r.status === "rendering" ? 50 :
             r.status === "fetching" ? 20 : 10,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -491,7 +729,7 @@ Deno.serve(async (req) => {
     console.error("compose-video error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה בהרכבת סרטון" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
