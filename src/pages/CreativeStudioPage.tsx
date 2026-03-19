@@ -24,7 +24,20 @@ export default function CreativeStudioPage() {
   const [newBrand, setNewBrand] = useState<Partial<Brand>>({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
   const [newDepartment, setNewDepartment] = useState('');
 
-  useEffect(() => { setBrands(brandService.getAll()); }, []);
+  useEffect(() => {
+    brandService.getAllAsync().then(dbBrands => {
+      if (dbBrands.length > 0) {
+        setBrands(dbBrands);
+        // Also sync to localStorage for backward compat
+        brandService.save(dbBrands);
+      } else {
+        // Fallback to localStorage + migrate
+        const local = brandService.getAll();
+        setBrands(local);
+        if (local.length > 0) brandService.migrateLocalToDb();
+      }
+    });
+  }, []);
 
   const activeBrand = brands.find(b => b.id === activeBrandId);
 
