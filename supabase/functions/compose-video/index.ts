@@ -197,7 +197,7 @@ function buildSubtitleHtmlAsset(
   style: SubtitleStyle,
   width: number,
   height: number,
-  fontBase64: string,
+  fontUrl: string,
 ): string {
   const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
@@ -213,7 +213,7 @@ function buildSubtitleHtmlAsset(
   return `<style>
       @font-face {
         font-family: 'HebrewEmbedded';
-        src: url(data:font/ttf;base64,${fontBase64}) format('truetype');
+        src: url('${fontUrl}') format('truetype');
         font-style: normal;
         font-weight: 100 900;
       }
