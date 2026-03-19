@@ -1423,11 +1423,21 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const stepInfo = getStepInfo();
   const totalSteps = getTotalSteps();
   const currentStepNum = step + 1;
+  const preventSubtitleAccidentalClose = selectedAction === 'subtitles';
 
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] md:max-h-[85vh] overflow-y-auto w-[95vw] md:w-full" dir="rtl">
+      <DialogContent
+        className="sm:max-w-lg max-h-[90vh] md:max-h-[85vh] overflow-y-auto w-[95vw] md:w-full"
+        dir="rtl"
+        onInteractOutside={(event) => {
+          if (preventSubtitleAccidentalClose) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (preventSubtitleAccidentalClose) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <div className="flex items-center gap-3">
             {step > 0 && (

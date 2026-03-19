@@ -167,10 +167,28 @@ interface SubtitleTranscribeDebug {
   status: number;
   videoUrl: string;
   sourceAudioUrl: string;
+  sourceAudioHttpStatus: number | null;
+  sourceAudioCheckedAt: string;
   videoDuration: number;
   totalCueCount: number;
   firstCues: CaptionCue[];
   providerBody?: string;
+}
+
+interface SubtitleTranscribeFailure {
+  provider: string;
+  status: number | null;
+  message: string;
+}
+
+type TranscriptionHealthState = 'idle' | 'testing' | 'ok' | 'fail';
+
+interface SubtitleTranscriptionHealth {
+  state: TranscriptionHealthState;
+  provider: string;
+  status: number | null;
+  reason: string;
+  checkedAt: string | null;
 }
 
 interface SubtitlePlaybackDebug {
@@ -208,6 +226,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [transcribeDebug, setTranscribeDebug] = useState<SubtitleTranscribeDebug | null>(null);
+  const [transcribeFailure, setTranscribeFailure] = useState<SubtitleTranscribeFailure | null>(null);
+  const [transcriptionHealth, setTranscriptionHealth] = useState<SubtitleTranscriptionHealth>({
+    state: 'idle',
+    provider: 'elevenlabs/scribe_v2',
+    status: null,
+    reason: 'טרם נבדק',
+    checkedAt: null,
+  });
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
 
   // Style
@@ -416,7 +442,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           currentTime: boundedEnd,
           startSec: null,
           endSec: null,
-          activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+          activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
           timeupdateEventsPerSecond: frameWindowRef.current.fps,
         });
         return;
@@ -426,7 +452,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     updatePlaybackDebug({
       readyState: video.readyState,
       currentTime,
-      activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+      activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
       timeupdateEventsPerSecond: frameWindowRef.current.fps,
     });
   }, [ACTIVE_CUE_TOLERANCE_SEC, clearCuePlaybackState, updatePlaybackDebug]);
@@ -660,6 +686,202 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return remoteUrl;
   }, [uploadedVideoUrl, videoFile]);
 
+  const probeTranscriptionSourceUrl = useCallback(async (url: string) => {
+    const fetchProbe = async (method: 'HEAD' | 'GET') => {
+      const headers: Record<string, string> = {};
+      if (method === 'GET') headers.Range = 'bytes=0-1';
+      return fetch(url, {
+        method,
+        headers,
+        cache: 'no-store',
+      });
+    };
+
+    try {
+      let response: Response;
+      try {
+        response = await fetchProbe('HEAD');
+        if (response.status === 405 || response.status === 501) {
+          response = await fetchProbe('GET');
+        }
+      } catch {
+        response = await fetchProbe('GET');
+      }
+
+      if (response.ok || response.status === 206) {
+        return { ok: true, status: response.status, reason: 'OK' };
+      }
+
+      return {
+        ok: false,
+        status: response.status,
+        reason: `מקור האודיו לא נגיש (HTTP ${response.status})`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        status: null,
+        reason: `כשל בבדיקת מקור האודיו: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`,
+      };
+    }
+  }, []);
+
+  const ensureValidTranscriptionSourceUrl = useCallback(async () => {
+    const initialUrl = await ensureUploadedVideoUrl();
+    let sourceAudioUrl = initialUrl;
+    let probe = await probeTranscriptionSourceUrl(sourceAudioUrl);
+
+    const looksSigned = /[?&](token|signature|expires|x-amz-signature|x-amz-expires)=/i.test(sourceAudioUrl);
+
+    if (!probe.ok && videoFile && (probe.status === 401 || probe.status === 403 || probe.status === 404 || looksSigned)) {
+      const refreshedUrl = await storageService.upload(videoFile);
+      setUploadedVideoUrl(refreshedUrl);
+      sourceAudioUrl = refreshedUrl;
+      probe = await probeTranscriptionSourceUrl(sourceAudioUrl);
+    }
+
+    if (!probe.ok) {
+      throw new Error(`${probe.reason}. סטטוס: ${probe.status ?? 'לא ידוע'}`);
+    }
+
+    return {
+      sourceAudioUrl,
+      sourceAudioHttpStatus: probe.status ?? 200,
+      checkedAt: new Date().toISOString(),
+    };
+  }, [ensureUploadedVideoUrl, probeTranscriptionSourceUrl, videoFile]);
+
+  const createSilentWavBase64 = useCallback((durationMs: number = 350) => {
+    const sampleRate = 16000;
+    const numSamples = Math.max(1, Math.floor((durationMs / 1000) * sampleRate));
+    const blockAlign = 2;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = numSamples * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeAscii = (offset: number, value: string) => {
+      for (let i = 0; i < value.length; i += 1) {
+        view.setUint8(offset + i, value.charCodeAt(i));
+      }
+    };
+
+    writeAscii(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeAscii(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+
+    return btoa(binary);
+  }, []);
+
+  const handleHealthTest = useCallback(async () => {
+    setTranscriptionHealth((prev) => ({
+      ...prev,
+      state: 'testing',
+      reason: 'בודק זמינות...',
+      checkedAt: new Date().toISOString(),
+    }));
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-audio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          audioBase64: createSilentWavBase64(350),
+          audioMimeType: 'audio/wav',
+          language: 'עברית',
+          videoDuration: 1,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      const provider = typeof payload?.provider === 'string' ? payload.provider : 'elevenlabs/scribe_v2';
+      const providerStatus = Number.isFinite(Number(payload?.status)) ? Number(payload.status) : response.status;
+      const providerReachable = response.ok || (
+        response.status === 422 &&
+        provider === 'elevenlabs/scribe_v2' &&
+        providerStatus === 200
+      );
+
+      if (providerReachable) {
+        setTranscriptionHealth({
+          state: 'ok',
+          provider,
+          status: providerStatus,
+          reason: 'כלי התמלול זמין',
+          checkedAt: new Date().toISOString(),
+        });
+        toast.success('בדיקת כלי התמלול עברה בהצלחה');
+        return;
+      }
+
+      const reason = typeof payload?.error === 'string'
+        ? payload.error
+        : `כלי התמלול לא זמין (HTTP ${response.status})`;
+
+      setTranscriptionHealth({
+        state: 'fail',
+        provider,
+        status: providerStatus,
+        reason,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(`בדיקת כלי התמלול נכשלה: ${reason}`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'שגיאה לא ידועה';
+      setTranscriptionHealth({
+        state: 'fail',
+        provider: 'transcribe-audio',
+        status: null,
+        reason,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(`בדיקת כלי התמלול נכשלה: ${reason}`);
+    }
+  }, [createSilentWavBase64]);
+
+  const handleVideoSelected = useCallback((file: File) => {
+    setVideoFile(file);
+    setUploadedVideoUrl(null);
+    setSubtitleSegments([]);
+    setTranscribeDebug(null);
+    setTranscribeFailure(null);
+    setTranscriptionHealth({
+      state: 'idle',
+      provider: 'elevenlabs/scribe_v2',
+      status: null,
+      reason: 'טרם נבדק',
+      checkedAt: null,
+    });
+    setVideoLoadError(null);
+    setCurrentSubtitle('');
+    setShowPreview(true);
+    activeCueIndexRef.current = null;
+    setActiveCueIndex(null);
+    setPlayingSegIndex(null);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setStep(1);
+  }, []);
+
   const seekToSegment = async (seg: SubtitleSegment, index: number) => {
     const video = videoPreviewRef.current;
     if (!video) {
@@ -781,15 +1003,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // ── Transcribe ──
   const handleTranscribe = async () => {
     if (!videoFile) return;
+
+    if (transcriptionHealth.state === 'fail') {
+      toast.error(`בדיקת בריאות נכשלה: ${transcriptionHealth.reason}`);
+      return;
+    }
+
     setLoading(true);
-    setSubtitleSegments([]);
     setEditingIndex(null);
     setPlayingSegIndex(null);
     setTranscribeDebug(null);
+    setTranscribeFailure(null);
 
     try {
-      const sourceVideoUrl = await ensureUploadedVideoUrl();
-
       const videoEl = videoPreviewRef.current;
       if (!videoEl) throw new Error('נגן הווידאו לא זמין כרגע');
       await waitForVideoMetadata(videoEl);
@@ -799,8 +1025,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         throw new Error('אורך הווידאו לא תקין ולכן אי אפשר לתמלל');
       }
 
+      const sourceCheck = await ensureValidTranscriptionSourceUrl();
+
       const result = await subtitleService.transcribe({
-        sourceAudioUrl: sourceVideoUrl,
+        sourceAudioUrl: sourceCheck.sourceAudioUrl,
         language: 'עברית',
         videoDuration,
       });
@@ -816,16 +1044,38 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       setShowPreview(true);
       setTranscribeDebug({
         ...result.debug,
-        videoUrl: sourceVideoUrl,
-        sourceAudioUrl: result.debug.sourceAudioUrl,
+        videoUrl: sourceCheck.sourceAudioUrl,
+        sourceAudioUrl: result.debug.sourceAudioUrl || sourceCheck.sourceAudioUrl,
+        sourceAudioHttpStatus: sourceCheck.sourceAudioHttpStatus,
+        sourceAudioCheckedAt: sourceCheck.checkedAt,
         videoDuration,
         totalCueCount: result.captions.length,
         firstCues: result.captions.slice(0, 5),
       });
+      setTranscriptionHealth({
+        state: 'ok',
+        provider: result.debug.provider,
+        status: result.debug.status,
+        reason: 'כלי התמלול זמין',
+        checkedAt: new Date().toISOString(),
+      });
       toast.success(`התמלול מוכן! ${result.captions.length} כתוביות תקינות`);
     } catch (e: any) {
-      setSubtitleSegments([]);
-      toast.error(e?.message || 'שגיאה בתמלול');
+      const message = typeof e?.message === 'string' ? e.message : 'שגיאה בתמלול';
+      const statusMatch = message.match(/HTTP\s*(\d{3})|סטטוס\s*[:\)]?\s*(\d{3})/);
+      const providerMatch = message.match(/\(([^,]+),\s*סטטוס/);
+      const status = statusMatch ? Number(statusMatch[1] || statusMatch[2]) : null;
+      const provider = providerMatch?.[1] || (message.includes('מקור האודיו') ? 'source-audio' : 'transcribe-audio');
+
+      setTranscribeFailure({ provider, status, message });
+      setTranscriptionHealth({
+        state: 'fail',
+        provider,
+        status,
+        reason: message,
+        checkedAt: new Date().toISOString(),
+      });
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -1025,7 +1275,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             const video = e.currentTarget;
             setVideoLoadError(null);
             updatePlaybackDebug({
-              activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+              activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
               readyState: video.readyState,
               currentTime: video.currentTime,
             });
@@ -1140,12 +1390,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           setIsDragging(false);
           const file = e.dataTransfer.files[0];
           if (file && file.type.startsWith('video/')) {
-            setVideoFile(file);
-            setUploadedVideoUrl(null);
-            setSubtitleSegments([]);
-            setTranscribeDebug(null);
-            setVideoPreviewUrl(URL.createObjectURL(file));
-            setStep(1);
+            handleVideoSelected(file);
           } else {
             toast.error('יש להעלות קובץ וידאו');
           }
@@ -1160,12 +1405,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           onChange={e => {
             const f = e.target.files?.[0];
             if (f) {
-              setVideoFile(f);
-              setUploadedVideoUrl(null);
-              setSubtitleSegments([]);
-              setTranscribeDebug(null);
-              setVideoPreviewUrl(URL.createObjectURL(f));
-              setStep(1);
+              handleVideoSelected(f);
             }
           }}
         />
@@ -1199,16 +1439,50 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       )}
 
-      {/* Transcribe + controls */}
+      {/* Transcribe health + controls */}
+      <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs" dir="rtl">
+          <span className="font-semibold">מצב כלי תמלול:</span>
+          <span className={cn(
+            'px-2 py-0.5 rounded-full border',
+            transcriptionHealth.state === 'ok' && 'border-primary/40 text-primary bg-primary/10',
+            transcriptionHealth.state === 'fail' && 'border-destructive/40 text-destructive bg-destructive/10',
+            transcriptionHealth.state === 'testing' && 'border-border text-foreground bg-background/60',
+            transcriptionHealth.state === 'idle' && 'border-border text-muted-foreground bg-background/60',
+          )}>
+            {transcriptionHealth.state === 'ok' ? 'OK' : transcriptionHealth.state === 'fail' ? 'FAIL' : transcriptionHealth.state === 'testing' ? 'בודק...' : 'לא נבדק'}
+          </span>
+          <span className="text-muted-foreground" dir="ltr">
+            {transcriptionHealth.provider} • {transcriptionHealth.status ?? '—'}
+          </span>
+          {transcriptionHealth.checkedAt && (
+            <span className="text-muted-foreground" dir="ltr">
+              {new Date(transcriptionHealth.checkedAt).toLocaleTimeString('he-IL')}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground" dir="rtl">{transcriptionHealth.reason}</div>
+      </div>
+
       <div className="flex gap-2 flex-wrap">
         <button
+          onClick={handleHealthTest}
+          disabled={loading || transcriptionHealth.state === 'testing'}
+          className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
+        >
+          {transcriptionHealth.state === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          {transcriptionHealth.state === 'testing' ? 'בודק כלי תמלול...' : 'Test Transcription Tool'}
+        </button>
+
+        <button
           onClick={handleTranscribe}
-          disabled={loading}
+          disabled={loading || transcriptionHealth.state === 'fail'}
           className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Subtitles className="w-4 h-4" />}
           {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
         </button>
+
         {subtitleSegments.length > 0 && (
           <>
             <button
@@ -1243,16 +1517,35 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         )}
       </div>
 
+      {transcribeFailure && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-xs space-y-1" dir="rtl">
+          <div className="font-semibold text-destructive">שגיאת תמלול</div>
+          <div className="text-destructive break-words">{transcribeFailure.message}</div>
+          <div className="text-muted-foreground" dir="ltr">
+            provider: {transcribeFailure.provider} • status: {transcribeFailure.status ?? '—'}
+          </div>
+        </div>
+      )}
+
       {transcribeDebug && (
         <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs">
           <div className="font-semibold text-foreground">דיבאג תמלול</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5" dir="ltr">
             <div><span className="text-muted-foreground">provider:</span> {transcribeDebug.provider}</div>
             <div><span className="text-muted-foreground">status:</span> {transcribeDebug.status}</div>
+            <div><span className="text-muted-foreground">captions:</span> {transcribeDebug.totalCueCount}</div>
+            <div><span className="text-muted-foreground">source HTTP:</span> {transcribeDebug.sourceAudioHttpStatus ?? '—'}</div>
             <div className="md:col-span-2 break-all"><span className="text-muted-foreground">videoUrl:</span> {transcribeDebug.videoUrl}</div>
             <div className="md:col-span-2 break-all"><span className="text-muted-foreground">sourceAudioUrl:</span> {transcribeDebug.sourceAudioUrl}</div>
             <div><span className="text-muted-foreground">videoDuration:</span> {transcribeDebug.videoDuration.toFixed(3)}s</div>
-            <div><span className="text-muted-foreground">totalCues:</span> {transcribeDebug.totalCueCount}</div>
+            <div><span className="text-muted-foreground">checkedAt:</span> {new Date(transcribeDebug.sourceAudioCheckedAt).toLocaleTimeString('he-IL')}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-muted-foreground">First cue preview:</div>
+            <div className="bg-background border border-border rounded px-2 py-1" dir="rtl">
+              {transcribeDebug.firstCues[0]?.text || 'אין טקסט'}
+            </div>
           </div>
 
           <div className="space-y-1">
