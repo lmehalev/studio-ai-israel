@@ -1364,6 +1364,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         videoUrl,
         scenes,
         logoUrl: logoUrl || undefined,
+        logoPlacement: logoUrl ? { xPct: logoXPct, yPct: logoYPct, scalePct: logoSize, opacity: logoOpacity / 100 } : undefined,
         brandColors: activeBrand?.colors || [],
         audioUrl,
         subtitleStyle: {
