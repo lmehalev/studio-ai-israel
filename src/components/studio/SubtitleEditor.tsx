@@ -167,10 +167,28 @@ interface SubtitleTranscribeDebug {
   status: number;
   videoUrl: string;
   sourceAudioUrl: string;
+  sourceAudioHttpStatus: number | null;
+  sourceAudioCheckedAt: string;
   videoDuration: number;
   totalCueCount: number;
   firstCues: CaptionCue[];
   providerBody?: string;
+}
+
+interface SubtitleTranscribeFailure {
+  provider: string;
+  status: number | null;
+  message: string;
+}
+
+type TranscriptionHealthState = 'idle' | 'testing' | 'ok' | 'fail';
+
+interface SubtitleTranscriptionHealth {
+  state: TranscriptionHealthState;
+  provider: string;
+  status: number | null;
+  reason: string;
+  checkedAt: string | null;
 }
 
 interface SubtitlePlaybackDebug {
@@ -208,6 +226,14 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [transcribeDebug, setTranscribeDebug] = useState<SubtitleTranscribeDebug | null>(null);
+  const [transcribeFailure, setTranscribeFailure] = useState<SubtitleTranscribeFailure | null>(null);
+  const [transcriptionHealth, setTranscriptionHealth] = useState<SubtitleTranscriptionHealth>({
+    state: 'idle',
+    provider: 'elevenlabs/scribe_v2',
+    status: null,
+    reason: 'טרם נבדק',
+    checkedAt: null,
+  });
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
 
   // Style
