@@ -267,6 +267,33 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [captionPosition, setCaptionPosition] = useState<'bottom' | 'middle' | 'top'>('bottom');
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Video orientation & content rect
+  const [videoNativeWidth, setVideoNativeWidth] = useState(0);
+  const [videoNativeHeight, setVideoNativeHeight] = useState(0);
+  const [orientationOverride, setOrientationOverride] = useState<'auto' | 'portrait' | 'landscape'>('auto');
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  const detectedOrientation = videoNativeHeight > videoNativeWidth ? 'portrait' : 'landscape';
+  const effectiveOrientation = orientationOverride === 'auto' ? detectedOrientation : orientationOverride;
+
+  // Compute the displayed content rect inside the player (letterbox/pillarbox math)
+  const contentRect = (() => {
+    const cw = containerSize.width;
+    const ch = containerSize.height;
+    const vw = videoNativeWidth || cw;
+    const vh = videoNativeHeight || ch;
+    if (!cw || !ch || !vw || !vh) return { x: 0, y: 0, w: cw || 300, h: ch || 200 };
+
+    const scaleX = cw / vw;
+    const scaleY = ch / vh;
+    const scale = Math.min(scaleX, scaleY);
+    const contentW = vw * scale;
+    const contentH = vh * scale;
+    const offsetX = (cw - contentW) / 2;
+    const offsetY = (ch - contentH) / 2;
+    return { x: offsetX, y: offsetY, w: contentW, h: contentH };
+  })();
+
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -1273,11 +1300,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
   // ── Preview subtitle CSS ──
   const getPreviewSubtitleStyle = (): React.CSSProperties => {
-    // Responsive: scale font relative to container, clamp between 12–28px
-    const basePx = Math.max(12, Math.min(customFontSize * 0.55, 28));
+    // Responsive: scale font relative to content area height, clamp between 12–28px
+    const refH = contentRect.h || 200;
+    const scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
     return {
       fontFamily: currentFont.font,
-      fontSize: `clamp(12px, ${basePx}px, 28px)`,
+      fontSize: `${scaledPx}px`,
       lineHeight: 1.3,
       color: (currentFont as any).textColor || customColor,
       background: currentFont.bgColor,
@@ -1287,7 +1315,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       padding: '4px 10px',
       direction: 'rtl',
       textAlign: 'center' as const,
-      maxWidth: '88%',
+      maxWidth: '92%',
       wordBreak: 'break-word' as const,
       overflowWrap: 'break-word' as const,
       display: '-webkit-box',
@@ -1297,11 +1325,46 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     };
   };
 
-  // Position alignment classes
-  const captionPositionClass =
-    captionPosition === 'top' ? 'items-start pt-3' :
-    captionPosition === 'middle' ? 'items-center' :
-    'items-end pb-10'; // bottom: stay above native controls
+  // Position alignment inside content rect
+  const captionPositionStyle = (): React.CSSProperties => {
+    const safeMargin = Math.max(4, contentRect.h * 0.03);
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      left: `${contentRect.x}px`,
+      width: `${contentRect.w}px`,
+      height: `${contentRect.h}px`,
+      top: `${contentRect.y}px`,
+      display: 'flex',
+      justifyContent: 'center',
+      pointerEvents: 'none',
+      zIndex: 30,
+      padding: `${safeMargin}px`,
+    };
+    if (captionPosition === 'top') {
+      base.alignItems = 'flex-start';
+      base.paddingTop = `${safeMargin + 4}px`;
+    } else if (captionPosition === 'middle') {
+      base.alignItems = 'center';
+    } else {
+      base.alignItems = 'flex-end';
+      base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.1)}px`; // above controls
+    }
+    return base;
+  };
+
+  // Track container size via ResizeObserver
+  useEffect(() => {
+    const el = videoContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [videoPreviewUrl]);
 
   // ── Video preview with overlays inside same container ──
   const videoPreviewJSX = videoPreviewUrl ? (
@@ -1315,12 +1378,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
           setVideoLoadError(null);
+          setVideoNativeWidth(video.videoWidth);
+          setVideoNativeHeight(video.videoHeight);
           updatePlaybackDebug({
             activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
             readyState: video.readyState,
             currentTime: video.currentTime,
           });
           syncPlaybackFromVisibleVideo();
+          // Force container size read
+          if (videoContainerRef.current) {
+            const rect = videoContainerRef.current.getBoundingClientRect();
+            setContainerSize({ width: rect.width, height: rect.height });
+          }
         }}
         onError={(e) => {
           const video = e.currentTarget;
@@ -1332,18 +1402,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-      {/* Caption overlay — inside video container */}
+      {/* Caption overlay — positioned to real content rect */}
       {showPreview && currentSubtitle && (
-        <div
-          className={cn('absolute inset-0 z-30 pointer-events-none flex justify-center px-3', captionPositionClass)}
-          dir="rtl"
-        >
+        <div style={captionPositionStyle()} dir="rtl">
           <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
         </div>
       )}
-      {/* Logo overlay — inside video container */}
+      {/* Logo overlay — inside content rect */}
       {logoUrl && (
-        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+        <div
+          className="absolute z-20 pointer-events-none"
+          style={{
+            top: `${contentRect.y + 8}px`,
+            right: `${(containerSize.width - contentRect.x - contentRect.w) + 8}px`,
+          }}
+        >
           <img src={logoUrl} alt="logo" className="w-8 h-8 object-contain rounded-lg opacity-90" />
         </div>
       )}
@@ -1840,7 +1913,42 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       </div>
 
-      <NavButtons />
+      {/* Orientation */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">כיוון וידאו</h4>
+        <div className="flex gap-2 items-center">
+          {([
+            { value: 'auto' as const, label: `אוטומטי (${detectedOrientation === 'portrait' ? 'דיוקן' : 'לרוחב'})` },
+            { value: 'portrait' as const, label: 'דיוקן (9:16)' },
+            { value: 'landscape' as const, label: 'לרוחב (16:9)' },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setOrientationOverride(opt.value)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex-1',
+                orientationOverride === opt.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {videoNativeWidth > 0 && (
+          <p className="text-[10px] text-muted-foreground" dir="ltr">
+            Native: {videoNativeWidth}×{videoNativeHeight} • Content rect: {Math.round(contentRect.w)}×{Math.round(contentRect.h)} @ ({Math.round(contentRect.x)},{Math.round(contentRect.y)})
+          </p>
+        )}
+      </div>
+
+      {/* Debug: Next status */}
+      <div className="text-[10px] text-muted-foreground" dir="ltr">
+        step={step} | selectedFont={selectedFont} | nextEnabled=true
+      </div>
+
+      <NavButtons canNext={true} />
     </div>
   );
 
