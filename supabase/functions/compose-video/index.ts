@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const embeddedFontBase64 = await getEmbeddedHebrewFontBase64();
+      const hebrewFontUrl = await ensureHebrewFontUrl();
 
       if (subtitleSegments && subtitleSegments.length > 0) {
         const subClips = buildSubtitleClips(
@@ -486,7 +486,7 @@ Deno.serve(async (req) => {
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
-          embeddedFontBase64,
+          hebrewFontUrl,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
@@ -506,7 +506,7 @@ Deno.serve(async (req) => {
               style,
               outputConfig.width,
               outputConfig.height,
-              embeddedFontBase64,
+              hebrewFontUrl,
             );
             textClips.push(...subClips);
           }
@@ -526,7 +526,7 @@ Deno.serve(async (req) => {
               },
               titleWidth,
               titleHeight,
-              embeddedFontBase64,
+              hebrewFontUrl,
             );
 
             textClips.push({
