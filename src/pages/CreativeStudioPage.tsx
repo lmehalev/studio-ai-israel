@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
 } from 'lucide-react';
+import { DomainMigrationBanner } from '@/components/DataMigration';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { brandService, type Brand } from '@/services/creativeService';
