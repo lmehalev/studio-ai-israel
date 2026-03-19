@@ -250,6 +250,7 @@ export const composeService = {
     videoUrls?: string[];
     scenes: any[];
     logoUrl?: string;
+    logoPlacement?: { xPct: number; yPct: number; scalePct: number; opacity: number };
     brandColors?: string[];
     audioUrl?: string;
     subtitleStyle?: Record<string, any>;
