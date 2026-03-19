@@ -1252,7 +1252,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             const video = e.currentTarget;
             setVideoLoadError(null);
             updatePlaybackDebug({
-              activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+              activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
               readyState: video.readyState,
               currentTime: video.currentTime,
             });
