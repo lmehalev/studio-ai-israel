@@ -69,36 +69,55 @@ Deno.serve(async (req) => {
     }
 
     // ===== BULK IMPORT =====
-    if (action === "import_brands") {
-      const brands = data.brands || [];
-      for (const b of brands) {
-        await supabase.from("brands").upsert({
-          id: b.id,
-          name: b.name,
-          logo: b.logo || null,
-          colors: b.colors || [],
-          tone: b.tone || '',
-          target_audience: b.targetAudience || b.target_audience || '',
-          industry: b.industry || '',
-          departments: b.departments || [],
-        }, { onConflict: "id" });
+    if (action === "import_all") {
+      const results: string[] = [];
+      
+      // Import brands
+      if (data.brands && data.brands.length > 0) {
+        for (const b of data.brands) {
+          const { error } = await supabase.from("brands").upsert({
+            id: b.id,
+            name: b.name,
+            logo: b.logo || null,
+            colors: b.colors || [],
+            tone: b.tone || '',
+            target_audience: b.targetAudience || b.target_audience || '',
+            industry: b.industry || '',
+            departments: b.departments || [],
+          }, { onConflict: "id" });
+          if (error) results.push(`Brand ${b.name}: ${error.message}`);
+        }
       }
-      return new Response(JSON.stringify({ ok: true, count: brands.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      
+      // Import scripts
+      if (data.scripts && data.scripts.length > 0) {
+        for (const s of data.scripts) {
+          const { error } = await supabase.from("scripts").upsert({
+            id: s.id,
+            name: s.name,
+            content: s.content || '',
+          }, { onConflict: "id" });
+          if (error) results.push(`Script ${s.name}: ${error.message}`);
+        }
+      }
+
+      return new Response(JSON.stringify({ 
+        ok: true, 
+        imported: { brands: data.brands?.length || 0, scripts: data.scripts?.length || 0 },
+        errors: results 
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (action === "import_scripts") {
-      const scripts = data.scripts || [];
-      for (const s of scripts) {
-        await supabase.from("scripts").upsert({
-          id: s.id,
-          name: s.name,
-          content: s.content || '',
-        }, { onConflict: "id" });
-      }
-      return new Response(JSON.stringify({ ok: true, count: scripts.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // ===== EXPORT ALL =====
+    if (action === "export_all") {
+      const { data: brands } = await supabase.from("brands").select("*").order("created_at");
+      const { data: scripts } = await supabase.from("scripts").select("*").order("created_at");
+      return new Response(JSON.stringify({ brands: brands || [], scripts: scripts || [] }), { 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Unknown action: " + action }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
