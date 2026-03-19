@@ -1,5 +1,6 @@
 // Deno.serve used natively
 import opentype from "npm:opentype.js@1.3.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
