@@ -85,64 +85,126 @@ interface ComposeRenderResponse {
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
-let cachedHebrewFontUrl: string | null = null;
+let cachedHebrewFont: any | null = null;
+const subtitleAssetUrlCache = new Map<string, string>();
 
-async function ensureHebrewFontUrl(): Promise<string> {
-  if (cachedHebrewFontUrl) return cachedHebrewFontUrl;
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const fontStoragePath = "fonts/NotoSansHebrew-Regular.ttf";
+async function loadHebrewFont(): Promise<any> {
+  if (cachedHebrewFont) return cachedHebrewFont;
 
-  // If we have Supabase credentials, try storage first
-  if (supabaseUrl && serviceKey) {
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/media/${fontStoragePath}`;
+  try {
+    const localBytes = await Deno.readFile(new URL("./NotoSansHebrew-Regular.ttf", import.meta.url));
+    cachedHebrewFont = opentype.parse(toArrayBuffer(localBytes));
+    return cachedHebrewFont;
+  } catch (error) {
+    console.warn("Failed loading bundled Hebrew font, trying fallback URLs", error);
+  }
 
-    // Check if already uploaded
+  for (const url of HEBREW_FONT_URLS) {
     try {
-      const head = await fetch(publicUrl, { method: "HEAD" });
-      if (head.ok) {
-        cachedHebrewFontUrl = publicUrl;
-        console.log("Hebrew font already in storage:", publicUrl);
-        return publicUrl;
-      }
-    } catch (_) { /* continue to upload */ }
-
-    // Fetch from CDN and upload to storage
-    for (const cdnUrl of HEBREW_FONT_URLS) {
-      try {
-        const res = await fetch(cdnUrl);
-        if (!res.ok) continue;
-        const fontBytes = new Uint8Array(await res.arrayBuffer());
-
-        const uploadRes = await fetch(
-          `${supabaseUrl}/storage/v1/object/media/${fontStoragePath}`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${serviceKey}`,
-              "Content-Type": "font/ttf",
-              "x-upsert": "true",
-            },
-            body: fontBytes,
-          },
-        );
-
-        if (uploadRes.ok || uploadRes.status === 200) {
-          cachedHebrewFontUrl = publicUrl;
-          console.log("Hebrew font uploaded to storage:", publicUrl);
-          return publicUrl;
-        }
-        // consume body
-        await uploadRes.text();
-      } catch (_) { /* try next */ }
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      cachedHebrewFont = opentype.parse(toArrayBuffer(bytes));
+      return cachedHebrewFont;
+    } catch (_) {
+      // try next source
     }
   }
 
-  // Fallback: use CDN URL directly (Shotstack HTML renderer should fetch it)
-  cachedHebrewFontUrl = HEBREW_FONT_URLS[0];
-  console.log("Using CDN font URL fallback:", cachedHebrewFontUrl);
-  return cachedHebrewFontUrl;
+  throw new Error("Failed to load Hebrew font for subtitle vector rendering");
+}
+
+function toPathData(commands: any[]): string {
+  return commands.map((cmd: any) => {
+    if (cmd.type === "M" || cmd.type === "L") return `${cmd.type}${round2(cmd.x)} ${round2(cmd.y)}`;
+    if (cmd.type === "C") {
+      return `C${round2(cmd.x1)} ${round2(cmd.y1)} ${round2(cmd.x2)} ${round2(cmd.y2)} ${round2(cmd.x)} ${round2(cmd.y)}`;
+    }
+    if (cmd.type === "Q") return `Q${round2(cmd.x1)} ${round2(cmd.y1)} ${round2(cmd.x)} ${round2(cmd.y)}`;
+    if (cmd.type === "Z") return "Z";
+    return "";
+  }).filter(Boolean).join(" ");
+}
+
+function measureRtlTextWidth(text: string, font: any, fontSize: number): number {
+  const glyphs = font.stringToGlyphs(text);
+  const unitsPerEm = font.unitsPerEm || 1000;
+
+  return glyphs.reduce((sum: number, glyph: any) => {
+    const advanceUnits = Number.isFinite(glyph?.advanceWidth) ? glyph.advanceWidth : unitsPerEm;
+    return sum + (advanceUnits / unitsPerEm) * fontSize;
+  }, 0);
+}
+
+function buildRtlPathData(text: string, font: any, fontSize: number, baselineY: number, centerX: number): string {
+  const glyphs = font.stringToGlyphs(text);
+  const totalWidth = measureRtlTextWidth(text, font, fontSize);
+  const unitsPerEm = font.unitsPerEm || 1000;
+  let cursor = centerX + totalWidth / 2;
+  const pathChunks: string[] = [];
+
+  for (const glyph of glyphs) {
+    const advanceUnits = Number.isFinite(glyph?.advanceWidth) ? glyph.advanceWidth : unitsPerEm;
+    const advancePx = (advanceUnits / unitsPerEm) * fontSize;
+    cursor -= advancePx;
+
+    const path = glyph.getPath(cursor, baselineY, fontSize);
+    const d = toPathData(path.commands || []);
+    if (d) pathChunks.push(d);
+  }
+
+  return pathChunks.join(" ");
+}
+
+async function sha1Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-1", data);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getStorageConfig(): { supabaseUrl: string; serviceKey: string } {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Missing storage config for subtitle graphic upload");
+  }
+
+  return { supabaseUrl, serviceKey };
+}
+
+function buildPublicStorageUrl(supabaseUrl: string, objectPath: string): string {
+  return `${supabaseUrl}/storage/v1/object/public/media/${objectPath}`;
+}
+
+async function uploadSubtitleSvg(svg: string, objectPath: string): Promise<string> {
+  const cached = subtitleAssetUrlCache.get(objectPath);
+  if (cached) return cached;
+
+  const { supabaseUrl, serviceKey } = getStorageConfig();
+  const publicUrl = buildPublicStorageUrl(supabaseUrl, objectPath);
+
+  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/media/${objectPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "x-upsert": "true",
+    },
+    body: new TextEncoder().encode(svg),
+  });
+
+  if (!uploadRes.ok) {
+    await uploadRes.text();
+    throw new Error(`Failed uploading subtitle overlay (${uploadRes.status})`);
+  }
+
+  subtitleAssetUrlCache.set(objectPath, publicUrl);
+  return publicUrl;
 }
 
 function escapeXml(value: string): string {
