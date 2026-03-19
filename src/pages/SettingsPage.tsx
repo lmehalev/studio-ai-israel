@@ -337,7 +337,17 @@ export default function SettingsPage() {
             </Dialog>
           </TabsContent>
 
-          <TabsContent value="system" className="mt-4 space-y-4">
+          <TabsContent value="data" className="mt-4 space-y-4">
+            <DomainMigrationBanner />
+            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <h2 className="font-rubik font-semibold">ייצוא / ייבוא נתונים</h2>
+              <p className="text-sm text-muted-foreground">ייצא את כל החברות, המותגים והתסריטים שלך לקובץ JSON, או ייבא מדומיין אחר.</p>
+              <div className="flex gap-3">
+                <DataExportButton />
+              </div>
+            </div>
+          </TabsContent>
+
             <div className="bg-card border border-border rounded-xl p-5 space-y-4">
               <h2 className="font-rubik font-semibold">הגדרות כלליות</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
