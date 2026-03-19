@@ -1,4 +1,6 @@
 // Deno.serve used natively
+import opentype from "npm:opentype.js@1.3.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,64 +86,145 @@ interface ComposeRenderResponse {
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
-let cachedHebrewFontUrl: string | null = null;
+let cachedHebrewFont: any | null = null;
+const subtitleAssetUrlCache = new Map<string, string>();
 
-async function ensureHebrewFontUrl(): Promise<string> {
-  if (cachedHebrewFontUrl) return cachedHebrewFontUrl;
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const fontStoragePath = "fonts/NotoSansHebrew-Regular.ttf";
+async function loadHebrewFont(): Promise<any> {
+  if (cachedHebrewFont) return cachedHebrewFont;
 
-  // If we have Supabase credentials, try storage first
-  if (supabaseUrl && serviceKey) {
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/media/${fontStoragePath}`;
+  try {
+    const localBytes = await Deno.readFile(new URL("./NotoSansHebrew-Regular.ttf", import.meta.url));
+    cachedHebrewFont = opentype.parse(toArrayBuffer(localBytes));
+    return cachedHebrewFont;
+  } catch (error) {
+    console.warn("Failed loading bundled Hebrew font, trying fallback URLs", error);
+  }
 
-    // Check if already uploaded
+  for (const url of HEBREW_FONT_URLS) {
     try {
-      const head = await fetch(publicUrl, { method: "HEAD" });
-      if (head.ok) {
-        cachedHebrewFontUrl = publicUrl;
-        console.log("Hebrew font already in storage:", publicUrl);
-        return publicUrl;
-      }
-    } catch (_) { /* continue to upload */ }
-
-    // Fetch from CDN and upload to storage
-    for (const cdnUrl of HEBREW_FONT_URLS) {
-      try {
-        const res = await fetch(cdnUrl);
-        if (!res.ok) continue;
-        const fontBytes = new Uint8Array(await res.arrayBuffer());
-
-        const uploadRes = await fetch(
-          `${supabaseUrl}/storage/v1/object/media/${fontStoragePath}`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${serviceKey}`,
-              "Content-Type": "font/ttf",
-              "x-upsert": "true",
-            },
-            body: fontBytes,
-          },
-        );
-
-        if (uploadRes.ok || uploadRes.status === 200) {
-          cachedHebrewFontUrl = publicUrl;
-          console.log("Hebrew font uploaded to storage:", publicUrl);
-          return publicUrl;
-        }
-        // consume body
-        await uploadRes.text();
-      } catch (_) { /* try next */ }
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      cachedHebrewFont = opentype.parse(toArrayBuffer(bytes));
+      return cachedHebrewFont;
+    } catch (_) {
+      // try next source
     }
   }
 
-  // Fallback: use CDN URL directly (Shotstack HTML renderer should fetch it)
-  cachedHebrewFontUrl = HEBREW_FONT_URLS[0];
-  console.log("Using CDN font URL fallback:", cachedHebrewFontUrl);
-  return cachedHebrewFontUrl;
+  throw new Error("Failed to load Hebrew font for subtitle vector rendering");
+}
+
+function toPathData(commands: any[]): string {
+  return commands.map((cmd: any) => {
+    if (cmd.type === "M" || cmd.type === "L") return `${cmd.type}${round2(cmd.x)} ${round2(cmd.y)}`;
+    if (cmd.type === "C") {
+      return `C${round2(cmd.x1)} ${round2(cmd.y1)} ${round2(cmd.x2)} ${round2(cmd.y2)} ${round2(cmd.x)} ${round2(cmd.y)}`;
+    }
+    if (cmd.type === "Q") return `Q${round2(cmd.x1)} ${round2(cmd.y1)} ${round2(cmd.x)} ${round2(cmd.y)}`;
+    if (cmd.type === "Z") return "Z";
+    return "";
+  }).filter(Boolean).join(" ");
+}
+
+function measureRtlTextWidth(text: string, font: any, fontSize: number): number {
+  const glyphs = font.stringToGlyphs(text);
+  const unitsPerEm = font.unitsPerEm || 1000;
+
+  return glyphs.reduce((sum: number, glyph: any) => {
+    const advanceUnits = Number.isFinite(glyph?.advanceWidth) ? glyph.advanceWidth : unitsPerEm;
+    return sum + (advanceUnits / unitsPerEm) * fontSize;
+  }, 0);
+}
+
+function buildRtlPathData(text: string, font: any, fontSize: number, baselineY: number, centerX: number): string {
+  const glyphs = font.stringToGlyphs(text);
+  const totalWidth = measureRtlTextWidth(text, font, fontSize);
+  const unitsPerEm = font.unitsPerEm || 1000;
+  let cursor = centerX + totalWidth / 2;
+  const pathChunks: string[] = [];
+
+  for (const glyph of glyphs) {
+    const advanceUnits = Number.isFinite(glyph?.advanceWidth) ? glyph.advanceWidth : unitsPerEm;
+    const advancePx = (advanceUnits / unitsPerEm) * fontSize;
+    cursor -= advancePx;
+
+    const path = glyph.getPath(cursor, baselineY, fontSize);
+    const d = toPathData(path.commands || []);
+    if (d) pathChunks.push(d);
+  }
+
+  return pathChunks.join(" ");
+}
+
+async function sha1Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-1", data);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getStorageConfig(): { supabaseUrl: string; serviceKey: string } {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Missing storage config for subtitle graphic upload");
+  }
+
+  return { supabaseUrl, serviceKey };
+}
+
+function buildPublicStorageUrl(supabaseUrl: string, objectPath: string): string {
+  return `${supabaseUrl}/storage/v1/object/public/media/${objectPath}`;
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function uploadSubtitleSvg(svg: string, objectPath: string): Promise<string> {
+  const cached = subtitleAssetUrlCache.get(objectPath);
+  if (cached) return cached;
+
+  const svgBytes = new TextEncoder().encode(svg);
+
+  try {
+    const { supabaseUrl, serviceKey } = getStorageConfig();
+    const publicUrl = buildPublicStorageUrl(supabaseUrl, objectPath);
+
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/media/${objectPath}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "image/svg+xml; charset=utf-8",
+        "x-upsert": "true",
+      },
+      body: svgBytes,
+    });
+
+    if (uploadRes.ok) {
+      subtitleAssetUrlCache.set(objectPath, publicUrl);
+      return publicUrl;
+    }
+
+    const storageError = await uploadRes.text();
+    console.error(`Subtitle SVG upload failed (${uploadRes.status})`, storageError.slice(0, 180));
+  } catch (error) {
+    console.error("Subtitle SVG upload threw error, using data URI fallback", error);
+  }
+
+  const dataUri = `data:image/svg+xml;base64,${toBase64(svgBytes)}`;
+  subtitleAssetUrlCache.set(objectPath, dataUri);
+  return dataUri;
 }
 
 function escapeXml(value: string): string {
@@ -218,7 +301,6 @@ function buildSubtitleHtmlAsset(
   style: SubtitleStyle,
   width: number,
   height: number,
-  fontUrl: string,
 ): string {
   const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
@@ -231,15 +313,7 @@ function buildSubtitleHtmlAsset(
   const lines = wrapText(text, maxCharsPerLine, 3);
   const safeLines = (lines.length > 0 ? lines : [text]).map(escapeXml).join("<br />");
 
-  return `<style>
-      @font-face {
-        font-family: 'HebrewEmbedded';
-        src: url('${fontUrl}') format('truetype');
-        font-style: normal;
-        font-weight: 100 900;
-      }
-    </style>
-    <div style="
+  return `<div style="
       width:${width}px;
       height:${height}px;
       box-sizing:border-box;
@@ -249,7 +323,7 @@ function buildSubtitleHtmlAsset(
       text-align:center;
       direction:rtl;
       unicode-bidi:bidi-override;
-      font-family:'HebrewEmbedded','Arial',sans-serif;
+      font-family:'Arial',sans-serif;
       font-size:${fontSize}px;
       font-weight:${fontWeight};
       color:${color};
@@ -264,34 +338,71 @@ function buildSubtitleHtmlAsset(
     ">${safeLines}</div>`;
 }
 
-function buildSubtitleClips(
+function buildSubtitleSvgAsset(
+  text: string,
+  style: SubtitleStyle,
+  width: number,
+  height: number,
+  font: any,
+): string {
+  const fontSize = style.fontSize || 30;
+  const color = style.color || "#FFFFFF";
+  const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
+  const borderRadius = style.borderRadius ?? 16;
+  const padding = parsePadding(style.padding);
+
+  const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
+  const lines = wrapText(text, maxCharsPerLine, 3);
+  const safeLines = lines.length > 0 ? lines : [text];
+
+  const lineHeight = fontSize * 1.35;
+  const textBlockHeight = safeLines.length * lineHeight;
+  const firstBaseline = (height - textBlockHeight) / 2 + fontSize;
+
+  const pathElements = safeLines.map((line, index) => {
+    const baselineY = firstBaseline + index * lineHeight;
+    const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
+    return d ? `<path d="${d}" fill="${color}" />` : "";
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
+    ${pathElements}
+  </svg>`;
+}
+
+async function buildSubtitleClips(
   segments: SubtitleSegment[],
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
-  fontUrl: string,
-): any[] {
+): Promise<any[]> {
   const subWidth = Math.round(outputWidth * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
+  const font = await loadHebrewFont();
 
   return segments
     .filter((seg) => seg.text && seg.text.trim())
-    .map((seg) => ({
-      asset: {
-        type: "html",
-        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontUrl),
-        width: subWidth,
-        height: subHeight,
-      },
-      start: seg.start,
-      length: Math.max(0.5, seg.end - seg.start),
-      position: "bottom",
-      offset: { y: 0.08 },
-      transition: {
-        in: "slideUp",
-        out: "fade",
-      },
-    }));
+    .map((seg) => {
+      const svgMarkup = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
+
+      return {
+        asset: {
+          type: "html",
+          html: svgMarkup,
+          width: subWidth,
+          height: subHeight,
+        },
+        start: seg.start,
+        length: Math.max(0.5, seg.end - seg.start),
+        position: "bottom",
+        offset: { y: 0.08 },
+        transition: {
+          in: "slideUp",
+          out: "fade",
+        },
+      };
+    });
 }
 
 function buildStickerClips(stickers: StickerItem[]): any[] {
@@ -493,21 +604,19 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const hebrewFontUrl = await ensureHebrewFontUrl();
-
       if (subtitleSegments && subtitleSegments.length > 0) {
-        const subClips = buildSubtitleClips(
+        const subClips = await buildSubtitleClips(
           subtitleSegments,
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
-          hebrewFontUrl,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
         }
       } else if (scenes && scenes.length > 0) {
         const textClips: any[] = [];
+        const sceneSubtitleSegments: SubtitleSegment[] = [];
         let cumulativeTime = 0;
 
         for (const scene of scenes) {
@@ -515,15 +624,11 @@ Deno.serve(async (req) => {
           const subtitle = scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
 
           if (subtitle) {
-            const style = subtitleStyle || {};
-            const subClips = buildSubtitleClips(
-              [{ start: cumulativeTime + 0.3, end: cumulativeTime + dur - 0.3, text: subtitle }],
-              style,
-              outputConfig.width,
-              outputConfig.height,
-              hebrewFontUrl,
-            );
-            textClips.push(...subClips);
+            sceneSubtitleSegments.push({
+              start: cumulativeTime + 0.3,
+              end: cumulativeTime + dur - 0.3,
+              text: subtitle,
+            });
           }
 
           if (scene.title && dur > 2) {
@@ -541,7 +646,6 @@ Deno.serve(async (req) => {
               },
               titleWidth,
               titleHeight,
-              hebrewFontUrl,
             );
 
             textClips.push({
@@ -580,6 +684,16 @@ Deno.serve(async (req) => {
           }
 
           cumulativeTime += dur;
+        }
+
+        if (sceneSubtitleSegments.length > 0) {
+          const subClips = await buildSubtitleClips(
+            sceneSubtitleSegments,
+            subtitleStyle || {},
+            outputConfig.width,
+            outputConfig.height,
+          );
+          textClips.push(...subClips);
         }
 
         if (textClips.length > 0) {
@@ -679,9 +793,9 @@ Deno.serve(async (req) => {
         }
 
         // Always consume provider body but never echo it back to the client
-        await response.text();
+        const providerError = await response.text();
         renderErrors.push(`${env}:${response.status}`);
-        console.error(`Shotstack render error (${env}):`, response.status);
+        console.error(`Shotstack render error (${env}):`, response.status, providerError.slice(0, 220));
 
         if (![401, 403, 404].includes(response.status)) {
           break;
@@ -714,9 +828,9 @@ Deno.serve(async (req) => {
           break;
         }
 
-        const errText = await response.text();
-        statusErrors.push(`${env}:${response.status} ${errText}`);
-        console.error(`Shotstack status error (${env}):`, response.status, errText);
+        await response.text();
+        statusErrors.push(`${env}:${response.status}`);
+        console.error(`Shotstack status error (${env}):`, response.status);
 
         if (![401, 403, 404].includes(response.status)) {
           break;
