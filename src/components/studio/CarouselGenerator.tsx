@@ -316,6 +316,9 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
           description: `${slide.title}: ${slide.body}`,
           thumbnail_url: finalUrl,
           prompt: prompt || null,
+          script: null,
+          video_url: null,
+          provider: null,
         });
       }
       toast.success(`${generatedSlides.length} תמונות נשמרו בפרויקט "${brandObj.name}"!`);

@@ -154,7 +154,7 @@ export function WebsiteScanPanel({ onApplyContent, onScanComplete, className }: 
         <div className="border border-border rounded-xl overflow-hidden bg-card">
           <div className="px-3 py-2 bg-muted/30 border-b border-border flex items-center justify-between">
             <p className="text-xs font-semibold flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-green-500" /> מה נסרק מהאתר
+              <Check className="w-3.5 h-3.5 text-primary" /> מה נסרק מהאתר
             </p>
             <button onClick={() => setScanResult(null)} className="p-1 hover:bg-muted rounded">
               <X className="w-3.5 h-3.5 text-muted-foreground" />
