@@ -547,7 +547,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     toast.info('מעלה את הסרטון כדי לתמלל מהאודיו המקורי...');
     const remoteUrl = await storageService.upload(videoFile);
     setUploadedVideoUrl(remoteUrl);
-    setVideoPreviewUrl(remoteUrl);
+    // Keep local blob URL for preview — don't replace with remote URL
     return remoteUrl;
   }, [uploadedVideoUrl, videoFile]);
 
