@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      brands: {
+        Row: {
+          colors: string[]
+          created_at: string
+          departments: string[]
+          id: string
+          industry: string
+          logo: string | null
+          name: string
+          target_audience: string
+          tone: string
+        }
+        Insert: {
+          colors?: string[]
+          created_at?: string
+          departments?: string[]
+          id?: string
+          industry?: string
+          logo?: string | null
+          name: string
+          target_audience?: string
+          tone?: string
+        }
+        Update: {
+          colors?: string[]
+          created_at?: string
+          departments?: string[]
+          id?: string
+          industry?: string
+          logo?: string | null
+          name?: string
+          target_audience?: string
+          tone?: string
+        }
+        Relationships: []
+      }
       project_outputs: {
         Row: {
           aspect_ratio: string | null
@@ -275,6 +311,27 @@ export type Database = {
           url?: string
           views?: string
           visual_style?: string
+        }
+        Relationships: []
+      }
+      scripts: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
