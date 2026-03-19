@@ -508,7 +508,7 @@ export const promptEnhanceService = {
   },
 };
 
-// ====== Brand Management (Local Storage) ======
+// ====== Brand Management (Supabase DB via REST) ======
 export interface Brand {
   id: string;
   name: string;
@@ -520,9 +520,54 @@ export interface Brand {
   departments?: string[];
 }
 
-const BRANDS_KEY = "creative_studio_brands";
+const BRANDS_KEY = "creative_studio_brands"; // legacy localStorage key
+
+const REST_BASE = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = {
+  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
+
+function rowToBrand(row: any): Brand {
+  return {
+    id: row.id,
+    name: row.name,
+    logo: row.logo || undefined,
+    colors: row.colors || [],
+    tone: row.tone || '',
+    targetAudience: row.target_audience || '',
+    industry: row.industry || '',
+    departments: row.departments || [],
+  };
+}
+
+function brandToRow(b: Brand) {
+  return {
+    id: b.id,
+    name: b.name,
+    logo: b.logo || null,
+    colors: b.colors || [],
+    tone: b.tone || '',
+    target_audience: b.targetAudience || '',
+    industry: b.industry || '',
+    departments: b.departments || [],
+  };
+}
 
 export const brandService = {
+  getAllAsync: async (): Promise<Brand[]> => {
+    try {
+      const res = await fetch(`${REST_BASE}/brands?select=*&order=created_at.asc`, { headers: REST_HEADERS });
+      if (!res.ok) throw new Error(await res.text());
+      return ((await res.json()) || []).map(rowToBrand);
+    } catch (e) {
+      console.error('Failed to fetch brands from DB', e);
+      return brandService.getAll();
+    }
+  },
+
   getAll: (): Brand[] => {
     try {
       const raw = localStorage.getItem(BRANDS_KEY);
@@ -534,23 +579,89 @@ export const brandService = {
     localStorage.setItem(BRANDS_KEY, JSON.stringify(brands));
   },
 
-  add: (brand: Brand) => {
+  add: async (brand: Brand): Promise<Brand[]> => {
+    try {
+      await fetch(`${REST_BASE}/brands`, {
+        method: 'POST',
+        headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(brandToRow(brand)),
+      });
+    } catch (e) { console.error('Failed to save brand to DB', e); }
     const brands = brandService.getAll();
     brands.push(brand);
     brandService.save(brands);
     return brands;
   },
 
-  update: (id: string, updates: Partial<Brand>) => {
+  update: async (id: string, updates: Partial<Brand>): Promise<Brand[]> => {
+    try {
+      const dbUpdates: any = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
+      if (updates.colors !== undefined) dbUpdates.colors = updates.colors;
+      if (updates.tone !== undefined) dbUpdates.tone = updates.tone;
+      if (updates.targetAudience !== undefined) dbUpdates.target_audience = updates.targetAudience;
+      if (updates.industry !== undefined) dbUpdates.industry = updates.industry;
+      if (updates.departments !== undefined) dbUpdates.departments = updates.departments;
+      await fetch(`${REST_BASE}/brands?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: REST_HEADERS,
+        body: JSON.stringify(dbUpdates),
+      });
+    } catch (e) { console.error('Failed to update brand in DB', e); }
     const brands = brandService.getAll().map(b => b.id === id ? { ...b, ...updates } : b);
     brandService.save(brands);
     return brands;
   },
 
-  remove: (id: string) => {
+  remove: async (id: string): Promise<Brand[]> => {
+    try {
+      await fetch(`${REST_BASE}/brands?id=eq.${id}`, { method: 'DELETE', headers: REST_HEADERS });
+    } catch (e) { console.error('Failed to delete brand from DB', e); }
     const brands = brandService.getAll().filter(b => b.id !== id);
     brandService.save(brands);
     return brands;
+  },
+
+  migrateLocalToDb: async (): Promise<number> => {
+    const local = brandService.getAll();
+    if (local.length === 0) return 0;
+    let count = 0;
+    for (const brand of local) {
+      try {
+        const res = await fetch(`${REST_BASE}/brands`, {
+          method: 'POST',
+          headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(brandToRow(brand)),
+        });
+        if (res.ok) count++;
+      } catch {}
+    }
+    return count;
+  },
+
+  exportAll: async (): Promise<{ brands: Brand[], scripts: any[] }> => {
+    const brands = await brandService.getAllAsync();
+    const localBrands = brandService.getAll();
+    const allBrands = [...brands];
+    for (const lb of localBrands) {
+      if (!allBrands.find(b => b.id === lb.id)) allBrands.push(lb);
+    }
+    let scripts: any[] = [];
+    try { scripts = JSON.parse(localStorage.getItem('studio-scripts') || '[]'); } catch {}
+    // Also fetch from DB
+    try {
+      const res = await fetch(`${REST_BASE}/scripts?select=*&order=created_at.desc`, { headers: REST_HEADERS });
+      if (res.ok) {
+        const dbScripts = await res.json();
+        for (const ds of dbScripts) {
+          if (!scripts.find((s: any) => s.id === ds.id)) {
+            scripts.push({ id: ds.id, name: ds.name, content: ds.content, createdAt: ds.created_at });
+          }
+        }
+      }
+    } catch {}
+    return { brands: allBrands, scripts };
   },
 };
 

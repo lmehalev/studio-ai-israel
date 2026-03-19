@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, Building2, Wand2, Sparkles
 } from 'lucide-react';
+import { DomainMigrationBanner } from '@/components/DataMigration';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { brandService, type Brand } from '@/services/creativeService';
@@ -14,6 +15,7 @@ import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
 export default function CreativeStudioPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [showMigrationBanner, setShowMigrationBanner] = useState(false);
   const [searchParams] = useSearchParams();
 
   // Brand management
@@ -24,7 +26,24 @@ export default function CreativeStudioPage() {
   const [newBrand, setNewBrand] = useState<Partial<Brand>>({ name: '', tone: '', targetAudience: '', industry: '', colors: [], departments: [] });
   const [newDepartment, setNewDepartment] = useState('');
 
-  useEffect(() => { setBrands(brandService.getAll()); }, []);
+  useEffect(() => {
+    brandService.getAllAsync().then(dbBrands => {
+      if (dbBrands.length > 0) {
+        setBrands(dbBrands);
+        brandService.save(dbBrands);
+      } else {
+        const local = brandService.getAll();
+        setBrands(local);
+        if (local.length > 0) {
+          brandService.migrateLocalToDb();
+        } else {
+          // No brands anywhere — show migration banner on custom domains
+          const isCustomDomain = !window.location.hostname.includes('lovable.app');
+          if (isCustomDomain) setShowMigrationBanner(true);
+        }
+      }
+    });
+  }, []);
 
   const activeBrand = brands.find(b => b.id === activeBrandId);
 
@@ -90,7 +109,7 @@ export default function CreativeStudioPage() {
     return prompt;
   };
 
-  const handleAddBrand = () => {
+  const handleAddBrand = async () => {
     if (!newBrand.name?.trim()) { toast.error('יש להזין שם'); return; }
     const brand: Brand = {
       id: crypto.randomUUID(),
@@ -101,7 +120,7 @@ export default function CreativeStudioPage() {
       colors: newBrand.colors || [],
       departments: newBrand.departments || [],
     };
-    const updated = brandService.add(brand);
+    const updated = await brandService.add(brand);
     setBrands(updated);
     setActiveBrandId(brand.id);
     setActiveSubActivity('');
@@ -116,8 +135,8 @@ export default function CreativeStudioPage() {
     setNewDepartment('');
   };
 
-  const handleRemoveBrand = (id: string) => {
-    const updated = brandService.remove(id);
+  const handleRemoveBrand = async (id: string) => {
+    const updated = await brandService.remove(id);
     setBrands(updated);
     if (activeBrandId === id) {
       setActiveBrandId(null);
@@ -130,6 +149,9 @@ export default function CreativeStudioPage() {
     <AppLayout>
       <GuidedTour />
       <div className="space-y-6">
+        {/* Migration Banner */}
+        {showMigrationBanner && <DomainMigrationBanner />}
+
         {/* Header */}
         <div>
           <h1 className="text-2xl font-rubik font-bold flex items-center gap-2">

@@ -1,5 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Plus, Trash2, X, Copy, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
@@ -13,42 +13,87 @@ interface SavedScript {
 }
 
 const STORAGE_KEY = 'studio-scripts';
+const REST_BASE = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = {
+  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+};
 
-function getScripts(): SavedScript[] {
+function getLocalScripts(): SavedScript[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-function saveScriptsToStorage(scripts: SavedScript[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scripts));
 }
 
 export default function ScriptsManagePage() {
-  const [scripts, setScripts] = useState<SavedScript[]>(getScripts());
+  const [scripts, setScripts] = useState<SavedScript[]>([]);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [generating, setGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleSave = () => {
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`${REST_BASE}/scripts?select=*&order=created_at.desc`, { headers: REST_HEADERS });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const dbScripts: SavedScript[] = (data || []).map((r: any) => ({
+          id: r.id, name: r.name, content: r.content, createdAt: r.created_at,
+        }));
+
+        // Migrate localStorage scripts to DB
+        const localScripts = getLocalScripts();
+        let merged = [...dbScripts];
+        for (const ls of localScripts) {
+          if (!merged.find(s => s.id === ls.id)) {
+            try {
+              await fetch(`${REST_BASE}/scripts`, {
+                method: 'POST',
+                headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify({ id: ls.id, name: ls.name, content: ls.content }),
+              });
+              merged.push(ls);
+            } catch {}
+          }
+        }
+        if (localScripts.length > 0) localStorage.removeItem(STORAGE_KEY);
+        setScripts(merged);
+      } catch (e) {
+        console.error('Failed to load scripts from DB', e);
+        setScripts(getLocalScripts());
+      }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const handleSave = async () => {
     if (!name.trim()) { toast.error('יש להזין שם לתסריט'); return; }
     if (!content.trim()) { toast.error('יש להזין תוכן'); return; }
 
     if (editingId) {
-      const updated = scripts.map(s => s.id === editingId ? { ...s, name, content } : s);
-      setScripts(updated);
-      saveScriptsToStorage(updated);
+      try {
+        await fetch(`${REST_BASE}/scripts?id=eq.${editingId}`, {
+          method: 'PATCH', headers: REST_HEADERS, body: JSON.stringify({ name, content }),
+        });
+      } catch {}
+      setScripts(prev => prev.map(s => s.id === editingId ? { ...s, name, content } : s));
       setEditingId(null);
       toast.success('התסריט עודכן');
     } else {
-      const newScript: SavedScript = {
-        id: crypto.randomUUID(),
-        name,
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [...scripts, newScript];
-      setScripts(updated);
-      saveScriptsToStorage(updated);
+      const id = crypto.randomUUID();
+      const newScript: SavedScript = { id, name, content, createdAt: new Date().toISOString() };
+      try {
+        await fetch(`${REST_BASE}/scripts`, {
+          method: 'POST',
+          headers: { ...REST_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify({ id, name, content }),
+        });
+      } catch {}
+      setScripts(prev => [newScript, ...prev]);
       toast.success('התסריט נשמר!');
     }
     setCreating(false);
@@ -67,10 +112,9 @@ export default function ScriptsManagePage() {
     finally { setGenerating(false); }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = scripts.filter(s => s.id !== id);
-    setScripts(updated);
-    saveScriptsToStorage(updated);
+  const handleDelete = async (id: string) => {
+    try { await fetch(`${REST_BASE}/scripts?id=eq.${id}`, { method: 'DELETE', headers: REST_HEADERS }); } catch {}
+    setScripts(prev => prev.filter(s => s.id !== id));
     toast.success('התסריט הוסר');
   };
 
@@ -139,7 +183,12 @@ export default function ScriptsManagePage() {
           </div>
         )}
 
-        {scripts.length === 0 && !creating ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm mt-2">טוען תסריטים...</p>
+          </div>
+        ) : scripts.length === 0 && !creating ? (
           <div className="text-center py-16 text-muted-foreground">
             <FileText className="w-16 h-16 mx-auto mb-4 opacity-30" />
             <p className="text-lg font-medium">אין תסריטים עדיין</p>

@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Trash2, Download, Plug, Eye, X } from 'lucide-react';
+import { Loader2, Trash2, Download, Plug, Eye, X, Database } from 'lucide-react';
 import { ConnectionsTab } from '@/components/settings/ConnectionsTab';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { DataExportButton, DomainMigrationBanner } from '@/components/DataMigration';
 
 interface StoredFile {
   name: string;
@@ -154,9 +155,10 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="connections" dir="rtl">
-          <TabsList className="bg-muted/50">
+        <TabsList className="bg-muted/50">
             <TabsTrigger value="connections" className="flex items-center gap-2"><Plug className="w-4 h-4" /> חיבורים</TabsTrigger>
             <TabsTrigger value="storage" className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> אחסון</TabsTrigger>
+            <TabsTrigger value="data" className="flex items-center gap-2"><Database className="w-4 h-4" /> נתונים</TabsTrigger>
             <TabsTrigger value="system" className="flex items-center gap-2"><Shield className="w-4 h-4" /> מערכת</TabsTrigger>
           </TabsList>
 
@@ -333,6 +335,17 @@ export default function SettingsPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </TabsContent>
+
+          <TabsContent value="data" className="mt-4 space-y-4">
+            <DomainMigrationBanner />
+            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <h2 className="font-rubik font-semibold">ייצוא / ייבוא נתונים</h2>
+              <p className="text-sm text-muted-foreground">ייצא את כל החברות, המותגים והתסריטים שלך לקובץ JSON, או ייבא מדומיין אחר.</p>
+              <div className="flex gap-3">
+                <DataExportButton />
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="system" className="mt-4 space-y-4">
