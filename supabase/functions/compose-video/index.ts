@@ -630,6 +630,7 @@ Deno.serve(async (req) => {
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
+          contentRect,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
