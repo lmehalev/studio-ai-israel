@@ -599,7 +599,18 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
     );
   }
 
-  return null;
+  return (
+    <>
+      {null}
+      <CostApprovalDialog
+        open={showCostApproval}
+        onOpenChange={setShowCostApproval}
+        estimates={costEstimates}
+        onApprove={handleGenerate}
+        title="אישור יצירת סט תמונות בתשלום"
+      />
+    </>
+  );
 }
 
 // Needed for globe icon reference
