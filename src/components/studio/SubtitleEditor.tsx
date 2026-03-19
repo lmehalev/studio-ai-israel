@@ -195,6 +195,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [transcribeDebug, setTranscribeDebug] = useState<SubtitleTranscribeDebug | null>(null);
 
   // Style
   const [selectedFont, setSelectedFont] = useState('impact');
