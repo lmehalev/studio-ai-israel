@@ -1586,24 +1586,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       )}
 
-      {videoPreviewUrl && (
-        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs" dir="ltr">
-          <div className="font-semibold text-foreground" dir="rtl">דיבאג נגן חי</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
-            <div><span className="text-muted-foreground">readyState:</span> {playbackDebug.readyState}</div>
-            <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
-            <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
-            <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
-            <div><span className="text-muted-foreground">activeListeners:</span> {playbackDebug.activeTimeupdateListeners}</div>
-            <div><span className="text-muted-foreground">timeupdate/sec:</span> {playbackDebug.timeupdateEventsPerSecond.toFixed(1)}</div>
-          </div>
-          {playbackDebug.playError && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
-              {playbackDebug.playError}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Subtitle segments with gap controls */}
       {subtitleSegments.length > 0 ? (
