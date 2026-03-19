@@ -174,14 +174,37 @@ const stickerOptions = [
   '💪', '❤️', '👏', '🤩', '😎', '🤔', '💯', '🎊', '📊', '🛒',
 ];
 
+type OverlayPosition = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | 'center' | 'nearSubtitle' | 'sideCenter';
+type StickerAnimation = 'none' | 'pop' | 'slide' | 'fade';
+
 interface StickerOverlay {
   id: string;
   emoji: string;
-  position: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | 'center';
+  position: OverlayPosition;
   startTime: number;
   duration: number;
   scale: number;
+  animationIn: StickerAnimation;
 }
+
+type LogoPosition = 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft';
+
+const STICKER_POSITION_LABELS: Record<OverlayPosition, string> = {
+  topLeft: 'שמאל עליון',
+  topRight: 'ימין עליון',
+  bottomLeft: 'שמאל תחתון',
+  bottomRight: 'ימין תחתון',
+  center: 'מרכז',
+  nearSubtitle: 'ליד כתובית',
+  sideCenter: 'צד מרכזי',
+};
+
+const STICKER_ANIM_OPTIONS: { value: StickerAnimation; label: string }[] = [
+  { value: 'none', label: 'ללא' },
+  { value: 'pop', label: 'Pop' },
+  { value: 'slide', label: 'Slide' },
+  { value: 'fade', label: 'Fade' },
+];
 
 interface SubtitleEditorProps {
   activeBrand: Brand | undefined;
