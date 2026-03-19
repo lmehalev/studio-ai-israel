@@ -299,7 +299,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       }
     };
     // Clean any previous listener
-    video.removeEventListener('timeupdate', video.__segListener as any);
+    const prev = (video as any).__segListener;
+    if (prev) video.removeEventListener('timeupdate', prev);
     (video as any).__segListener = onTimeUpdate;
     video.addEventListener('timeupdate', onTimeUpdate);
 
