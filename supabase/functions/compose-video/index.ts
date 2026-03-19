@@ -1,4 +1,5 @@
 // Deno.serve used natively
+import opentype from "npm:opentype.js@1.3.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
