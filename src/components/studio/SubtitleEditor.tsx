@@ -801,7 +801,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                       editingIndex === i ? 'border-primary/50 bg-primary/5' : 'border-border/50'
                     )}
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5" dir="ltr">
                       <input type="number" step="0.1" min="0" value={seg.start}
                         onChange={e => updateSegment(i, { start: Number(e.target.value) })}
                         className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
