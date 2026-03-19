@@ -471,6 +471,14 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
             💰 צור סט ({slides.length} תמונות)
           </button>
         </div>
+
+        <CostApprovalDialog
+          open={showCostApproval}
+          onOpenChange={setShowCostApproval}
+          estimates={costEstimates}
+          onApprove={handleGenerate}
+          title="אישור יצירת סט תמונות בתשלום"
+        />
       </div>
     );
   }
@@ -599,18 +607,7 @@ The text on the image should be in Hebrew. Make it visually engaging and profess
     );
   }
 
-  return (
-    <>
-      {null}
-      <CostApprovalDialog
-        open={showCostApproval}
-        onOpenChange={setShowCostApproval}
-        estimates={costEstimates}
-        onApprove={handleGenerate}
-        title="אישור יצירת סט תמונות בתשלום"
-      />
-    </>
-  );
+  return null;
 }
 
 // Needed for globe icon reference
