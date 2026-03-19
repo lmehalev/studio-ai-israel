@@ -373,6 +373,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const handleTranscribe = async () => {
     if (!videoFile) return;
     setLoading(true);
+    // CLEAR old captions before new transcription
+    setSubtitleSegments([]);
+    setEditingIndex(null);
+    setPlayingSegIndex(null);
     try {
       // For small files (<5MB), send directly as base64
       // For larger files, extract audio first to reduce payload size
@@ -411,10 +415,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         }
       }
 
-      const data = await subtitleService.transcribe(base64);
-      setSubtitleSegments(data.segments);
+      const videoDuration = videoPreviewRef.current?.duration || undefined;
+      const result = await subtitleService.transcribe(base64, 'עברית', videoDuration);
+      setSubtitleSegments(result.segments);
       setShowPreview(true);
-      toast.success('התמלול מוכן!');
+      console.log('[SubtitleEditor] Transcription debug:', result.debug);
+      toast.success(`התמלול מוכן! ${result.segments.length} כתוביות (מתוך ${result.debug.rawCount} גולמיות)`);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בתמלול');
     } finally {
