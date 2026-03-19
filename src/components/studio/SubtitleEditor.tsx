@@ -1402,10 +1402,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
       if (!renderId) throw new Error('לא התקבל מזהה הרכבה מ-Shotstack');
 
-      // Log debug info for troubleshooting
-      if (renderResult.debug) {
-        console.log('Compose debug:', JSON.stringify(renderResult.debug, null, 2));
-      }
+      // Log tiny compose summary for troubleshooting
+      console.log('Compose summary:', {
+        subtitleCount: renderResult.subtitleCount,
+        logoPlacementSummary: renderResult.logoPlacementSummary,
+      });
 
       setRenderProgress(40);
       toast.info('מרכיב סרטון... זה עשוי לקחת כמה דקות');
