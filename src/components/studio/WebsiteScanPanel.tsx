@@ -65,8 +65,20 @@ export function WebsiteScanPanel({ onApplyContent, onScanComplete, className }: 
       const { data, error } = await supabase.functions.invoke('scrape-website-content', {
         body: { url: url.trim() },
       });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Scan failed');
+
+      if (error) {
+        // Structured error from Supabase client (e.g. network / CORS / 404)
+        const status = (error as any)?.status || (error as any)?.context?.status;
+        const detail = error.message || 'שגיאה בשליחה ל-Edge Function';
+        console.error('[WebsiteScan] Edge Function error', { functionName: 'scrape-website-content', status, detail });
+        throw new Error(`שגיאה (${status || '?'}): ${detail}`);
+      }
+
+      if (!data?.success) {
+        const errMsg = data?.error || 'סריקה נכשלה ללא פרטים';
+        console.error('[WebsiteScan] Function returned error', { functionName: 'scrape-website-content', error: errMsg });
+        throw new Error(errMsg);
+      }
 
       const result: WebsiteScanResult = {
         brand: data.brand,
