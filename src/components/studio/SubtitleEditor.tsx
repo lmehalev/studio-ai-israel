@@ -1398,7 +1398,9 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       base.alignItems = 'flex-start';
       base.paddingTop = `${safeMargin + 4}px`;
     } else if (captionPosition === 'middle') {
-      base.alignItems = 'center';
+      // "Safe Face Zone": clamp to lower-center (60% from top) to avoid covering face
+      base.alignItems = 'flex-end';
+      base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.3)}px`;
     } else {
       base.alignItems = 'flex-end';
       base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.1)}px`; // above controls
