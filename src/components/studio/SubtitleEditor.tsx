@@ -1272,19 +1272,30 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   };
 
   // ── Preview subtitle CSS ──
-  const getPreviewSubtitleStyle = (): React.CSSProperties => ({
-    fontFamily: currentFont.font,
-    fontSize: `${Math.min(customFontSize * 0.6, 22)}px`,
-    color: (currentFont as any).textColor || customColor,
-    background: currentFont.bgColor,
-    borderRadius: `${currentFont.borderRadius}px`,
-    textShadow: currentFont.shadow,
-    fontWeight: currentFont.fontWeight as any,
-    padding: '6px 14px',
-    direction: 'rtl',
-    textAlign: 'center' as const,
-    maxWidth: '90%',
-  });
+  const getPreviewSubtitleStyle = (): React.CSSProperties => {
+    // Responsive: scale font relative to container, clamp between 12–28px
+    const basePx = Math.max(12, Math.min(customFontSize * 0.55, 28));
+    return {
+      fontFamily: currentFont.font,
+      fontSize: `clamp(12px, ${basePx}px, 28px)`,
+      lineHeight: 1.3,
+      color: (currentFont as any).textColor || customColor,
+      background: currentFont.bgColor,
+      borderRadius: `${currentFont.borderRadius}px`,
+      textShadow: currentFont.shadow,
+      fontWeight: currentFont.fontWeight as any,
+      padding: '4px 10px',
+      direction: 'rtl',
+      textAlign: 'center' as const,
+      maxWidth: '88%',
+      wordBreak: 'break-word' as const,
+      overflowWrap: 'break-word' as const,
+      display: '-webkit-box',
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: 'vertical' as any,
+      overflow: 'hidden',
+    };
+  };
 
   // ── Video preview (inline JSX — NOT a function component, to prevent remounting) ──
   const videoPreviewJSX = videoPreviewUrl ? (
