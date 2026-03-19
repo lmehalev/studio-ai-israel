@@ -664,10 +664,6 @@ export const brandService = {
     return { brands: allBrands, scripts };
   },
 };
-    try { scripts = JSON.parse(localStorage.getItem('studio-scripts') || '[]'); } catch {}
-    return { brands: allBrands, scripts };
-  },
-};
 
 // ====== Website Scraper Service (Firecrawl) ======
 export interface WebsiteScrapeResult {
