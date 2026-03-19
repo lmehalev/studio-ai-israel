@@ -1300,11 +1300,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
 
   // ── Preview subtitle CSS ──
   const getPreviewSubtitleStyle = (): React.CSSProperties => {
-    // Responsive: scale font relative to container, clamp between 12–28px
-    const basePx = Math.max(12, Math.min(customFontSize * 0.55, 28));
+    // Responsive: scale font relative to content area height, clamp between 12–28px
+    const refH = contentRect.h || 200;
+    const scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
     return {
       fontFamily: currentFont.font,
-      fontSize: `clamp(12px, ${basePx}px, 28px)`,
+      fontSize: `${scaledPx}px`,
       lineHeight: 1.3,
       color: (currentFont as any).textColor || customColor,
       background: currentFont.bgColor,
@@ -1314,7 +1315,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       padding: '4px 10px',
       direction: 'rtl',
       textAlign: 'center' as const,
-      maxWidth: '88%',
+      maxWidth: '92%',
       wordBreak: 'break-word' as const,
       overflowWrap: 'break-word' as const,
       display: '-webkit-box',
@@ -1324,11 +1325,46 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     };
   };
 
-  // Position alignment classes
-  const captionPositionClass =
-    captionPosition === 'top' ? 'items-start pt-3' :
-    captionPosition === 'middle' ? 'items-center' :
-    'items-end pb-10'; // bottom: stay above native controls
+  // Position alignment inside content rect
+  const captionPositionStyle = (): React.CSSProperties => {
+    const safeMargin = Math.max(4, contentRect.h * 0.03);
+    const base: React.CSSProperties = {
+      position: 'absolute',
+      left: `${contentRect.x}px`,
+      width: `${contentRect.w}px`,
+      height: `${contentRect.h}px`,
+      top: `${contentRect.y}px`,
+      display: 'flex',
+      justifyContent: 'center',
+      pointerEvents: 'none',
+      zIndex: 30,
+      padding: `${safeMargin}px`,
+    };
+    if (captionPosition === 'top') {
+      base.alignItems = 'flex-start';
+      base.paddingTop = `${safeMargin + 4}px`;
+    } else if (captionPosition === 'middle') {
+      base.alignItems = 'center';
+    } else {
+      base.alignItems = 'flex-end';
+      base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.1)}px`; // above controls
+    }
+    return base;
+  };
+
+  // Track container size via ResizeObserver
+  useEffect(() => {
+    const el = videoContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [videoPreviewUrl]);
 
   // ── Video preview with overlays inside same container ──
   const videoPreviewJSX = videoPreviewUrl ? (
@@ -1342,12 +1378,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
           setVideoLoadError(null);
+          setVideoNativeWidth(video.videoWidth);
+          setVideoNativeHeight(video.videoHeight);
           updatePlaybackDebug({
             activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
             readyState: video.readyState,
             currentTime: video.currentTime,
           });
           syncPlaybackFromVisibleVideo();
+          // Force container size read
+          if (videoContainerRef.current) {
+            const rect = videoContainerRef.current.getBoundingClientRect();
+            setContainerSize({ width: rect.width, height: rect.height });
+          }
         }}
         onError={(e) => {
           const video = e.currentTarget;
@@ -1359,18 +1402,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-      {/* Caption overlay — inside video container */}
+      {/* Caption overlay — positioned to real content rect */}
       {showPreview && currentSubtitle && (
-        <div
-          className={cn('absolute inset-0 z-30 pointer-events-none flex justify-center px-3', captionPositionClass)}
-          dir="rtl"
-        >
+        <div style={captionPositionStyle()} dir="rtl">
           <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
         </div>
       )}
-      {/* Logo overlay — inside video container */}
+      {/* Logo overlay — inside content rect */}
       {logoUrl && (
-        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+        <div
+          className="absolute z-20 pointer-events-none"
+          style={{
+            top: `${contentRect.y + 8}px`,
+            right: `${(containerSize.width - contentRect.x - contentRect.w) + 8}px`,
+          }}
+        >
           <img src={logoUrl} alt="logo" className="w-8 h-8 object-contain rounded-lg opacity-90" />
         </div>
       )}
