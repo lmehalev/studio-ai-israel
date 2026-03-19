@@ -133,7 +133,16 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState<string>('');
 
-  const brandDepartments = activeBrand?.departments || [];
+  // Website scan state
+  const [websiteScanResult, setWebsiteScanResult] = useState<WebsiteScanResult | null>(null);
+  const [websiteContentForPrompt, setWebsiteContentForPrompt] = useState<{
+    headline?: string; subheadline?: string; bullets?: string[];
+    cta?: string; keywords?: string[]; brandColors?: string[]; logoUrl?: string;
+  } | null>(null);
+
+  // Carousel mode state
+  const [imageMode, setImageMode] = useState<'single' | 'carousel'>('single');
+  const [showCarousel, setShowCarousel] = useState(false);
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
   // Inline brand selector state (for result view when no brand pre-selected)
