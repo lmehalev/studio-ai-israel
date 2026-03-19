@@ -383,7 +383,7 @@ export const subtitleService = {
 
     const issues: string[] = [];
     const captions: CaptionCue[] = [];
-    let prevStart = -1;
+    let prevEnd = 0;
 
     for (let i = 0; i < rawCaptions.length; i += 1) {
       const cue = rawCaptions[i];
@@ -404,8 +404,8 @@ export const subtitleService = {
         issues.push(`#${i + 1}: endSec חייב להיות גדול מ-startSec (${startSec} -> ${endSec})`);
       }
 
-      if (startSec < prevStart) {
-        issues.push(`#${i + 1}: זמנים לא מונוטוניים (${startSec} < ${prevStart})`);
+      if (i > 0 && startSec < prevEnd) {
+        issues.push(`#${i + 1}: זמנים לא מונוטוניים (${startSec} < ${prevEnd})`);
       }
 
       if (endSec > videoDuration + 0.05) {
@@ -416,7 +416,7 @@ export const subtitleService = {
         issues.push(`#${i + 1}: טקסט ריק`);
       }
 
-      prevStart = startSec;
+      prevEnd = endSec;
       captions.push({
         startSec: Number(startSec.toFixed(3)),
         endSec: Number(endSec.toFixed(3)),
