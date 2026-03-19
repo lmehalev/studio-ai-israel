@@ -273,12 +273,41 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     updateSegment(index, { text: subtitleSegments[index].text + ' ' + emoji });
   };
 
-  const seekToSegment = (seg: SubtitleSegment) => {
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.currentTime = Math.max(0, seg.start + subtitleOffset);
-      videoPreviewRef.current.play();
-      setShowPreview(true);
+  const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
+  const segEndRef = useRef<number | null>(null);
+
+  const seekToSegment = (seg: SubtitleSegment, index: number) => {
+    const video = videoPreviewRef.current;
+    if (!video) {
+      toast.error('הווידאו עדיין לא נטען');
+      return;
     }
+    const startTime = Math.max(0, seg.start + subtitleOffset);
+    const endTime = Math.max(startTime + 0.1, seg.end + subtitleOffset);
+
+    // Set up end-time listener
+    segEndRef.current = endTime;
+    setPlayingSegIndex(index);
+    setShowPreview(true);
+
+    const onTimeUpdate = () => {
+      if (segEndRef.current !== null && video.currentTime >= segEndRef.current) {
+        video.pause();
+        segEndRef.current = null;
+        setPlayingSegIndex(null);
+        video.removeEventListener('timeupdate', onTimeUpdate);
+      }
+    };
+    // Clean any previous listener
+    video.removeEventListener('timeupdate', video.__segListener as any);
+    (video as any).__segListener = onTimeUpdate;
+    video.addEventListener('timeupdate', onTimeUpdate);
+
+    video.currentTime = startTime;
+    video.play().catch(err => {
+      toast.error(`שגיאת ניגון: ${err.message}`);
+      setPlayingSegIndex(null);
+    });
   };
 
   // ── Extract audio from video for transcription (smaller payload) ──
