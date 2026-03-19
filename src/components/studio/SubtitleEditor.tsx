@@ -1451,12 +1451,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 1) return (
     <div className="space-y-3">
       <StepIndicator />
-      <div className="relative">
-        {videoPreviewJSX}
-        {overlayDebugJSX}
-        {captionOverlayJSX}
-        {logoOverlayJSX}
-      </div>
+      {videoPreviewJSX}
 
       {videoLoadError && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive" dir="rtl">
