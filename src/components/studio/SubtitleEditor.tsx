@@ -859,6 +859,29 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
   }, [createSilentWavBase64]);
 
+  const handleVideoSelected = useCallback((file: File) => {
+    setVideoFile(file);
+    setUploadedVideoUrl(null);
+    setSubtitleSegments([]);
+    setTranscribeDebug(null);
+    setTranscribeFailure(null);
+    setTranscriptionHealth({
+      state: 'idle',
+      provider: 'elevenlabs/scribe_v2',
+      status: null,
+      reason: 'טרם נבדק',
+      checkedAt: null,
+    });
+    setVideoLoadError(null);
+    setCurrentSubtitle('');
+    setShowPreview(true);
+    activeCueIndexRef.current = null;
+    setActiveCueIndex(null);
+    setPlayingSegIndex(null);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setStep(1);
+  }, []);
+
   const seekToSegment = async (seg: SubtitleSegment, index: number) => {
     const video = videoPreviewRef.current;
     if (!video) {
