@@ -1095,6 +1095,16 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       <StepIndicator />
       <VideoPreview />
 
+      {videoLoadError && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive" dir="rtl">
+          <div className="font-semibold mb-1">⚠️ שגיאת טעינת וידאו</div>
+          <div className="break-words">{videoLoadError}</div>
+          <div className="text-xs mt-1 text-muted-foreground" dir="ltr">
+            src type: {videoPreviewUrl?.startsWith('blob:') ? 'local blob' : 'remote URL'}
+          </div>
+        </div>
+      )}
+
       {/* Transcribe + controls */}
       <div className="flex gap-2 flex-wrap">
         <button
