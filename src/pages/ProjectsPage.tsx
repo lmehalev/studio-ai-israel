@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -7,6 +7,16 @@ import { cn } from '@/lib/utils';
 import { projectService, getProjectSubActivity, type ProjectRow, type ProjectOutputRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
+
+const ThumbnailImg = ({ src, alt, className }: { src: string; alt: string; className?: string }) => {
+  const [broken, setBroken] = useState(false);
+  const handleError = useCallback(() => {
+    if (import.meta.env.DEV) console.warn('[Thumbnail] Broken URL:', src);
+    setBroken(true);
+  }, [src]);
+  if (broken) return <ImageIcon className="w-5 h-5 text-muted-foreground" />;
+  return <img src={src} alt={alt} className={className} onError={handleError} />;
+};
 
 export default function ProjectsPage() {
   const [view, setView] = useState<'grid' | 'list'>('list');
@@ -147,7 +157,7 @@ export default function ProjectsPage() {
                         <td className="px-3 py-2">
                           <div className="w-10 h-10 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
                             {thumb ? (
-                              <img src={thumb} alt="" className="w-full h-full object-cover" />
+                              <ThumbnailImg src={thumb} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <ImageIcon className="w-4 h-4 text-muted-foreground" />
                             )}
@@ -208,7 +218,7 @@ export default function ProjectsPage() {
                   >
                     <div className="w-12 h-12 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
                       {thumb ? (
-                        <img src={thumb} alt="" className="w-full h-full object-cover" />
+                        <ThumbnailImg src={thumb} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <ImageIcon className="w-5 h-5 text-muted-foreground" />
                       )}
@@ -239,7 +249,7 @@ export default function ProjectsPage() {
                   {/* Thumbnail */}
                   <div className="aspect-video bg-muted/30 flex items-center justify-center overflow-hidden">
                     {thumb ? (
-                      <img src={thumb} alt={p.name} className="w-full h-full object-cover" />
+                      <ThumbnailImg src={thumb} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <ImageIcon className="w-10 h-10 text-muted-foreground/40" />
                     )}
