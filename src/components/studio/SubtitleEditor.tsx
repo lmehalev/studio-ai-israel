@@ -261,9 +261,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
 
   // Style
-  const [selectedFont, setSelectedFont] = useState('impact');
+  const [selectedFont, setSelectedFont] = useState('clean');
   const [customColor, setCustomColor] = useState('#FFFFFF');
-  const [customFontSize, setCustomFontSize] = useState(32);
+  const [customFontSize, setCustomFontSize] = useState(26);
+  const [captionPosition, setCaptionPosition] = useState<'bottom' | 'middle' | 'top'>('bottom');
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
