@@ -1439,16 +1439,50 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       )}
 
-      {/* Transcribe + controls */}
+      {/* Transcribe health + controls */}
+      <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs" dir="rtl">
+          <span className="font-semibold">מצב כלי תמלול:</span>
+          <span className={cn(
+            'px-2 py-0.5 rounded-full border',
+            transcriptionHealth.state === 'ok' && 'border-primary/40 text-primary bg-primary/10',
+            transcriptionHealth.state === 'fail' && 'border-destructive/40 text-destructive bg-destructive/10',
+            transcriptionHealth.state === 'testing' && 'border-border text-foreground bg-background/60',
+            transcriptionHealth.state === 'idle' && 'border-border text-muted-foreground bg-background/60',
+          )}>
+            {transcriptionHealth.state === 'ok' ? 'OK' : transcriptionHealth.state === 'fail' ? 'FAIL' : transcriptionHealth.state === 'testing' ? 'בודק...' : 'לא נבדק'}
+          </span>
+          <span className="text-muted-foreground" dir="ltr">
+            {transcriptionHealth.provider} • {transcriptionHealth.status ?? '—'}
+          </span>
+          {transcriptionHealth.checkedAt && (
+            <span className="text-muted-foreground" dir="ltr">
+              {new Date(transcriptionHealth.checkedAt).toLocaleTimeString('he-IL')}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground" dir="rtl">{transcriptionHealth.reason}</div>
+      </div>
+
       <div className="flex gap-2 flex-wrap">
         <button
+          onClick={handleHealthTest}
+          disabled={loading || transcriptionHealth.state === 'testing'}
+          className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
+        >
+          {transcriptionHealth.state === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          {transcriptionHealth.state === 'testing' ? 'בודק כלי תמלול...' : 'Test Transcription Tool'}
+        </button>
+
+        <button
           onClick={handleTranscribe}
-          disabled={loading}
+          disabled={loading || transcriptionHealth.state === 'fail'}
           className="gradient-gold text-primary-foreground px-5 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Subtitles className="w-4 h-4" />}
           {loading ? 'מתמלל...' : 'תמלל אוטומטית'}
         </button>
+
         {subtitleSegments.length > 0 && (
           <>
             <button
@@ -1483,16 +1517,35 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         )}
       </div>
 
+      {transcribeFailure && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-xs space-y-1" dir="rtl">
+          <div className="font-semibold text-destructive">שגיאת תמלול</div>
+          <div className="text-destructive break-words">{transcribeFailure.message}</div>
+          <div className="text-muted-foreground" dir="ltr">
+            provider: {transcribeFailure.provider} • status: {transcribeFailure.status ?? '—'}
+          </div>
+        </div>
+      )}
+
       {transcribeDebug && (
         <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs">
           <div className="font-semibold text-foreground">דיבאג תמלול</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5" dir="ltr">
             <div><span className="text-muted-foreground">provider:</span> {transcribeDebug.provider}</div>
             <div><span className="text-muted-foreground">status:</span> {transcribeDebug.status}</div>
+            <div><span className="text-muted-foreground">captions:</span> {transcribeDebug.totalCueCount}</div>
+            <div><span className="text-muted-foreground">source HTTP:</span> {transcribeDebug.sourceAudioHttpStatus ?? '—'}</div>
             <div className="md:col-span-2 break-all"><span className="text-muted-foreground">videoUrl:</span> {transcribeDebug.videoUrl}</div>
             <div className="md:col-span-2 break-all"><span className="text-muted-foreground">sourceAudioUrl:</span> {transcribeDebug.sourceAudioUrl}</div>
             <div><span className="text-muted-foreground">videoDuration:</span> {transcribeDebug.videoDuration.toFixed(3)}s</div>
-            <div><span className="text-muted-foreground">totalCues:</span> {transcribeDebug.totalCueCount}</div>
+            <div><span className="text-muted-foreground">checkedAt:</span> {new Date(transcribeDebug.sourceAudioCheckedAt).toLocaleTimeString('he-IL')}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-muted-foreground">First cue preview:</div>
+            <div className="bg-background border border-border rounded px-2 py-1" dir="rtl">
+              {transcribeDebug.firstCues[0]?.text || 'אין טקסט'}
+            </div>
           </div>
 
           <div className="space-y-1">
