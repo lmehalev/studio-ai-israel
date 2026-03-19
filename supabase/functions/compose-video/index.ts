@@ -734,17 +734,18 @@ Deno.serve(async (req) => {
       const isDone = r.status === "done" || r.status === "rendered";
       const normalizedStatus = isDone ? "done" : r.status;
 
-      return new Response(
-        JSON.stringify({
-          status: normalizedStatus,
-          url: r.url || null,
-          progress:
-            isDone ? 100 :
-            r.status === "rendering" ? 50 :
-            r.status === "fetching" ? 20 : 10,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      const statusResponse: ComposeRenderResponse = {
+        renderId: String(renderId),
+        status: normalizedStatus,
+        outputUrl: r.url || null,
+        thumbnailUrl: r.poster || null,
+        subtitleCount: Number(params.subtitleCount) || 0,
+        logoPlacementSummary: null,
+      };
+
+      return new Response(JSON.stringify(statusResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ error: "פעולה לא מוכרת" }), {
