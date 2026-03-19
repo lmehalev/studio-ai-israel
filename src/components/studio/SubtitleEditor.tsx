@@ -813,8 +813,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                         title="סיום" />
                       <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
                       <div className="mr-auto flex items-center gap-0.5">
-                        <button onClick={() => seekToSegment(seg)} title="נגן"
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                        <button onClick={() => seekToSegment(seg, i)} title="נגן"
+                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", playingSegIndex === i && "text-primary bg-primary/10")}>
                           <Play className="w-3 h-3" />
                         </button>
                         <button onClick={() => splitSegment(i)} title="פצל"
