@@ -179,6 +179,8 @@ interface SubtitlePlaybackDebug {
   startSec: number | null;
   endSec: number | null;
   playError: string | null;
+  activeTimeupdateListeners: number;
+  timeupdateEventsPerSecond: number;
 }
 
 // Step names
@@ -295,14 +297,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   };
 
   const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
-  const segEndRef = useRef<number | null>(null);
+  const [activeCueIndex, setActiveCueIndex] = useState<number | null>(null);
+  const cuePlaybackRef = useRef<{ index: number; startSec: number; endSec: number } | null>(null);
+  const activeCueIndexRef = useRef<number | null>(null);
+  const adjustedSegmentsRef = useRef<SubtitleSegment[]>([]);
   const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
+  const timeupdateWindowRef = useRef({ startedAt: 0, count: 0 });
+  const debugThrottleRef = useRef(0);
   const [playbackDebug, setPlaybackDebug] = useState<SubtitlePlaybackDebug>({
     readyState: 0,
     currentTime: 0,
     startSec: null,
     endSec: null,
     playError: null,
+    activeTimeupdateListeners: 0,
+    timeupdateEventsPerSecond: 0,
   });
 
   const updatePlaybackDebug = useCallback((patch: Partial<SubtitlePlaybackDebug>) => {
@@ -327,25 +336,132 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return `שגיאת ניגון: ${String(error)}`;
   }, []);
 
-  const clearSegmentPlayback = useCallback((video?: HTMLVideoElement | null) => {
+  const clearCuePlaybackState = useCallback(() => {
+    cuePlaybackRef.current = null;
+    setPlayingSegIndex(null);
+  }, []);
+
+  useEffect(() => {
+    adjustedSegmentsRef.current = getAdjustedSegments();
+  }, [getAdjustedSegments]);
+
+  const detachTimeupdateListener = useCallback((video?: HTMLVideoElement | null) => {
     const targetVideo = video ?? videoPreviewRef.current;
     if (targetVideo && playbackListenerRef.current) {
       targetVideo.removeEventListener('timeupdate', playbackListenerRef.current);
     }
 
     playbackListenerRef.current = null;
-    segEndRef.current = null;
-    setPlayingSegIndex(null);
-  }, []);
+    timeupdateWindowRef.current = { startedAt: 0, count: 0 };
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 0,
+      timeupdateEventsPerSecond: 0,
+    });
+  }, [updatePlaybackDebug]);
+
+  const attachTimeupdateListener = useCallback((video: HTMLVideoElement) => {
+    if (playbackListenerRef.current) {
+      video.removeEventListener('timeupdate', playbackListenerRef.current);
+      playbackListenerRef.current = null;
+    }
+
+    timeupdateWindowRef.current = { startedAt: performance.now(), count: 0 };
+
+    const onTimeUpdate = () => {
+      const now = performance.now();
+      const currentTime = video.currentTime;
+
+      timeupdateWindowRef.current.count += 1;
+      const elapsed = now - timeupdateWindowRef.current.startedAt;
+      if (elapsed >= 1000) {
+        const eventsPerSecond = Number((timeupdateWindowRef.current.count / (elapsed / 1000)).toFixed(1));
+        timeupdateWindowRef.current = { startedAt: now, count: 0 };
+        updatePlaybackDebug({
+          activeTimeupdateListeners: 1,
+          timeupdateEventsPerSecond: eventsPerSecond,
+        });
+      }
+
+      const segments = adjustedSegmentsRef.current;
+      const nextCueIdx = segments.findIndex((s) => currentTime >= s.start && currentTime <= s.end);
+      const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
+
+      if (normalizedCueIdx !== activeCueIndexRef.current) {
+        activeCueIndexRef.current = normalizedCueIdx;
+        setActiveCueIndex(normalizedCueIdx);
+        setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
+      }
+
+      const playbackWindow = cuePlaybackRef.current;
+      if (playbackWindow) {
+        const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - 0.05);
+        if (currentTime >= stopAt) {
+          video.pause();
+          const boundedEnd = Number.isFinite(video.duration)
+            ? Math.min(playbackWindow.endSec, video.duration)
+            : playbackWindow.endSec;
+          video.currentTime = boundedEnd;
+          clearCuePlaybackState();
+          updatePlaybackDebug({
+            readyState: video.readyState,
+            currentTime: boundedEnd,
+            startSec: null,
+            endSec: null,
+          });
+          return;
+        }
+      }
+
+      if (now - debugThrottleRef.current >= 250) {
+        debugThrottleRef.current = now;
+        updatePlaybackDebug({
+          readyState: video.readyState,
+          currentTime,
+        });
+      }
+    };
+
+    playbackListenerRef.current = onTimeUpdate;
+    video.addEventListener('timeupdate', onTimeUpdate);
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 1,
+      readyState: video.readyState,
+      currentTime: video.currentTime,
+    });
+  }, [clearCuePlaybackState, updatePlaybackDebug]);
+
+  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
+    const previousVideo = videoPreviewRef.current;
+
+    if (previousVideo && playbackListenerRef.current) {
+      previousVideo.removeEventListener('timeupdate', playbackListenerRef.current);
+      playbackListenerRef.current = null;
+    }
+
+    videoPreviewRef.current = node;
+
+    if (!node) {
+      timeupdateWindowRef.current = { startedAt: 0, count: 0 };
+      updatePlaybackDebug({
+        activeTimeupdateListeners: 0,
+        timeupdateEventsPerSecond: 0,
+      });
+      return;
+    }
+
+    attachTimeupdateListener(node);
+  }, [attachTimeupdateListener, updatePlaybackDebug]);
 
   useEffect(() => {
     return () => {
-      clearSegmentPlayback(videoPreviewRef.current);
+      detachTimeupdateListener(videoPreviewRef.current);
+      clearCuePlaybackState();
+      activeCueIndexRef.current = null;
       if (videoPreviewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(videoPreviewUrl);
       }
     };
-  }, [clearSegmentPlayback, videoPreviewUrl]);
+  }, [clearCuePlaybackState, detachTimeupdateListener, videoPreviewUrl]);
 
   const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
     if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
