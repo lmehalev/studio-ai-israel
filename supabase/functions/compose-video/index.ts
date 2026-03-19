@@ -713,6 +713,7 @@ Deno.serve(async (req) => {
             subtitleStyle || {},
             outputConfig.width,
             outputConfig.height,
+            contentRect,
           );
           textClips.push(...subClips);
         }
