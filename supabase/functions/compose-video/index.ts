@@ -794,9 +794,9 @@ Deno.serve(async (req) => {
         }
 
         // Always consume provider body but never echo it back to the client
-        await response.text();
+        const providerError = await response.text();
         renderErrors.push(`${env}:${response.status}`);
-        console.error(`Shotstack render error (${env}):`, response.status);
+        console.error(`Shotstack render error (${env}):`, response.status, providerError.slice(0, 220));
 
         if (![401, 403, 404].includes(response.status)) {
           break;
