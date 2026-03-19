@@ -807,12 +807,43 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           ref={videoPreviewRef}
           src={videoPreviewUrl}
           controls
+          preload="metadata"
           className="w-full max-h-[240px]"
+          onLoadedMetadata={() => {
+            if (!videoPreviewRef.current) return;
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
+          }}
           onTimeUpdate={() => {
             if (!videoPreviewRef.current) return;
             const t = videoPreviewRef.current.currentTime;
             const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
             setCurrentSubtitle(active?.text || '');
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: t,
+            });
+          }}
+          onPause={() => {
+            if (!videoPreviewRef.current) return;
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
+
+            if (playbackListenerRef.current) {
+              clearSegmentPlayback(videoPreviewRef.current);
+            }
+          }}
+          onEnded={() => {
+            if (!videoPreviewRef.current) return;
+            clearSegmentPlayback(videoPreviewRef.current);
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
           }}
         />
         {showPreview && currentSubtitle && (
