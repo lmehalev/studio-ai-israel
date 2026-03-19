@@ -282,8 +282,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       toast.error('הווידאו עדיין לא נטען');
       return;
     }
-    const startTime = Math.max(0, seg.start + subtitleOffset);
-    const endTime = Math.max(startTime + 0.1, seg.end + subtitleOffset);
+    // Normalize: always use min/max to prevent reversed ranges
+    const rawStart = Math.max(0, Math.min(seg.start, seg.end) + subtitleOffset);
+    const rawEnd = Math.max(seg.start, seg.end) + subtitleOffset;
+    const startTime = Math.max(0, rawStart);
+    const endTime = Math.max(startTime + 0.1, rawEnd);
 
     // Set up end-time listener
     segEndRef.current = endTime;
@@ -304,11 +307,20 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     (video as any).__segListener = onTimeUpdate;
     video.addEventListener('timeupdate', onTimeUpdate);
 
-    video.currentTime = startTime;
-    video.play().catch(err => {
-      toast.error(`שגיאת ניגון: ${err.message}`);
-      setPlayingSegIndex(null);
-    });
+    const doSeekAndPlay = () => {
+      video.currentTime = startTime;
+      video.play().catch(err => {
+        toast.error(`שגיאת ניגון: ${err.message}`);
+        setPlayingSegIndex(null);
+      });
+    };
+
+    // Wait for metadata if not loaded yet
+    if (video.readyState < 1) {
+      video.addEventListener('loadedmetadata', doSeekAndPlay, { once: true });
+    } else {
+      doSeekAndPlay();
+    }
   };
 
   // ── Extract audio from video for transcription (smaller payload) ──
@@ -801,7 +813,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                       editingIndex === i ? 'border-primary/50 bg-primary/5' : 'border-border/50'
                     )}
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5" dir="ltr">
                       <input type="number" step="0.1" min="0" value={seg.start}
                         onChange={e => updateSegment(i, { start: Number(e.target.value) })}
                         className="w-14 bg-background border border-border rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"

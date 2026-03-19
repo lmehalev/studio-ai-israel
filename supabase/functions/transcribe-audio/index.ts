@@ -91,16 +91,9 @@ Deno.serve(async (req) => {
     }
 
     if (!response) {
-      // Fallback: generate mock subtitles
       return new Response(
-        JSON.stringify({
-          segments: [
-            { start: 0, end: 3, text: "תמלול אוטומטי לא זמין כרגע" },
-            { start: 3, end: 6, text: "נא להזין כתוביות ידנית" },
-          ],
-          note: "התמלול האוטומטי אינו זמין כרגע. ניתן לערוך ידנית."
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "התמלול האוטומטי נכשל — כל המודלים לא זמינים כרגע. נסה שוב מאוחר יותר." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -109,14 +102,8 @@ Deno.serve(async (req) => {
       console.error("Transcription error:", response.status, errText);
       
       return new Response(
-        JSON.stringify({
-          segments: [
-            { start: 0, end: 3, text: "תמלול אוטומטי לא זמין כרגע" },
-            { start: 3, end: 6, text: "נא להזין כתוביות ידנית" },
-          ],
-          note: "התמלול האוטומטי אינו זמין כרגע. ניתן לערוך ידנית."
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `התמלול נכשל (סטטוס ${response.status}). פרטים: ${errText.slice(0, 200)}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
