@@ -586,21 +586,19 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const hebrewFontUrl = await ensureHebrewFontUrl();
-
       if (subtitleSegments && subtitleSegments.length > 0) {
-        const subClips = buildSubtitleClips(
+        const subClips = await buildSubtitleClips(
           subtitleSegments,
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
-          hebrewFontUrl,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
         }
       } else if (scenes && scenes.length > 0) {
         const textClips: any[] = [];
+        const sceneSubtitleSegments: SubtitleSegment[] = [];
         let cumulativeTime = 0;
 
         for (const scene of scenes) {
@@ -608,15 +606,11 @@ Deno.serve(async (req) => {
           const subtitle = scene.subtitleText || scene.spokenText?.slice(0, 80) || "";
 
           if (subtitle) {
-            const style = subtitleStyle || {};
-            const subClips = buildSubtitleClips(
-              [{ start: cumulativeTime + 0.3, end: cumulativeTime + dur - 0.3, text: subtitle }],
-              style,
-              outputConfig.width,
-              outputConfig.height,
-              hebrewFontUrl,
-            );
-            textClips.push(...subClips);
+            sceneSubtitleSegments.push({
+              start: cumulativeTime + 0.3,
+              end: cumulativeTime + dur - 0.3,
+              text: subtitle,
+            });
           }
 
           if (scene.title && dur > 2) {
@@ -634,7 +628,6 @@ Deno.serve(async (req) => {
               },
               titleWidth,
               titleHeight,
-              hebrewFontUrl,
             );
 
             textClips.push({
@@ -673,6 +666,16 @@ Deno.serve(async (req) => {
           }
 
           cumulativeTime += dur;
+        }
+
+        if (sceneSubtitleSegments.length > 0) {
+          const subClips = await buildSubtitleClips(
+            sceneSubtitleSegments,
+            subtitleStyle || {},
+            outputConfig.width,
+            outputConfig.height,
+          );
+          textClips.push(...subClips);
         }
 
         if (textClips.length > 0) {
