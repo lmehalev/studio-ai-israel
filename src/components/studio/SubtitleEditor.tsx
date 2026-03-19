@@ -339,9 +339,15 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPosition, setLogoPosition] = useState<LogoPosition>('topRight');
+  const [logoSize, setLogoSize] = useState(8); // percent of video width
+  const [logoMargin, setLogoMargin] = useState(4); // percent
+  const [logoOpacity, setLogoOpacity] = useState(90); // 0-100
+  const [showStoragePicker, setShowStoragePicker] = useState(false);
 
   // Stickers
   const [stickers, setStickers] = useState<StickerOverlay[]>([]);
+  const [editingStickerIdx, setEditingStickerIdx] = useState<number | null>(null);
 
   // Music
   const [selectedMusic, setSelectedMusic] = useState('none');
@@ -349,6 +355,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(30); // 0-100
+  const [musicDucking, setMusicDucking] = useState(true);
+  const musicUploadRef = useRef<HTMLInputElement | null>(null);
+  const [customMusicName, setCustomMusicName] = useState<string | null>(null);
 
   // Rendering
   const [rendering, setRendering] = useState(false);
