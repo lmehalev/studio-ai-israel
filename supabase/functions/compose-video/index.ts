@@ -642,25 +642,17 @@ Deno.serve(async (req) => {
         },
       };
 
-      const debugObject = {
-        orientation: orientation || "landscape",
-        outputSize: { width: outputConfig.width, height: outputConfig.height },
-        sourceSize: {
-          width: Number(sourceWidth) || null,
-          height: Number(sourceHeight) || null,
-        },
-        contentRectPx: {
-          x: round2(contentRect.x),
-          y: round2(contentRect.y),
-          w: round2(contentRect.w),
-          h: round2(contentRect.h),
-        },
-        logo: logoDebug,
-        subtitleCount: subtitleSegments?.length || 0,
+      const subtitleCount = subtitleSegments?.length || 0;
+      const logoPlacementSummary = logoDebug as LogoPlacementSummary | null;
+
+      const responseSummary: Omit<ComposeRenderResponse, "renderId" | "status"> = {
+        outputUrl: null,
+        thumbnailUrl: null,
+        subtitleCount,
+        logoPlacementSummary,
       };
 
       console.log("Submitting Shotstack render (payload KB):", Math.round(JSON.stringify(renderBody).length / 1024));
-      console.log("Compose debug object:", JSON.stringify(debugObject));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
