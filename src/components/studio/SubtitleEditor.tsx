@@ -1338,16 +1338,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return line1 + '\n' + line2;
   };
 
-  // ── Preview subtitle CSS ──
-  const getPreviewSubtitleStyle = (text: string): React.CSSProperties => {
-    // Responsive: scale font relative to content area height, clamp between 12–28px
+  // ── Preview subtitle CSS (FIXED per style selection — never changes per cue) ──
+  const getPreviewSubtitleStyle = (): React.CSSProperties => {
     const refH = contentRect.h || 200;
-    let scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
-    // Downscale for long captions so they fit
-    if (text.length > MAX_CHARS_PER_LINE) {
-      const ratio = Math.max(0.65, MAX_CHARS_PER_LINE / text.length);
-      scaledPx = Math.max(12, scaledPx * ratio);
-    }
+    const scaledPx = Math.max(12, Math.min(customFontSize * (refH / 400), 28));
     return {
       fontFamily: currentFont.font,
       fontSize: `${scaledPx}px`,
@@ -1367,19 +1361,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     };
   };
 
-  // ── Caption animation CSS ──
-  const getCaptionAnimationStyle = (): string => {
+  // ── Caption animation class (transform+opacity ONLY — no layout mutation) ──
+  const getCaptionAnimationClass = (): string => {
     switch (captionAnimation) {
       case 'pop': return 'animate-caption-pop';
       case 'slideUp': return 'animate-caption-slide-up';
       case 'bounce': return 'animate-caption-bounce';
       case 'dynamic': return 'animate-caption-dynamic';
-      case 'karaoke': return ''; // handled differently
+      case 'karaoke': return '';
       default: return '';
     }
   };
 
-  // Position alignment inside content rect
+  // Position alignment inside content rect — FIXED container, never changes per cue
   const captionPositionStyle = (): React.CSSProperties => {
     const safeMargin = Math.max(4, contentRect.h * 0.03);
     const base: React.CSSProperties = {
@@ -1398,12 +1392,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       base.alignItems = 'flex-start';
       base.paddingTop = `${safeMargin + 4}px`;
     } else if (captionPosition === 'middle') {
-      // "Safe Face Zone": clamp to lower-center (60% from top) to avoid covering face
       base.alignItems = 'flex-end';
       base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.3)}px`;
     } else {
       base.alignItems = 'flex-end';
-      base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.1)}px`; // above controls
+      base.paddingBottom = `${Math.max(safeMargin, contentRect.h * 0.1)}px`;
     }
     return base;
   };
@@ -1422,7 +1415,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return () => ro.disconnect();
   }, [videoPreviewUrl]);
 
-  // ── Video preview with overlays inside same container ──
+  // ── Video preview with overlays ──
   const videoPreviewJSX = videoPreviewUrl ? (
     <div ref={videoContainerRef} className="rounded-xl overflow-hidden border border-border relative bg-black">
       <video
@@ -1442,7 +1435,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             currentTime: video.currentTime,
           });
           syncPlaybackFromVisibleVideo();
-          // Force container size read
           if (videoContainerRef.current) {
             const rect = videoContainerRef.current.getBoundingClientRect();
             setContainerSize({ width: rect.width, height: rect.height });
@@ -1458,18 +1450,19 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           updatePlaybackDebug({ readyState: video.readyState, playError: msg });
         }}
       />
-      {/* Caption overlay — positioned to real content rect */}
+      {/* Caption overlay — FIXED outer container + FIXED style wrapper + animated inner */}
       {showPreview && currentSubtitle && (
         <div style={captionPositionStyle()} dir="rtl">
-          <div
-            key={`${activeCueIndex ?? 'idle'}-${captionAnimation}`}
-            className={cn(getCaptionAnimationStyle())}
-            style={{
-              ...getPreviewSubtitleStyle(currentSubtitle),
-              animationFillMode: 'both',
-            }}
-          >
-            {getDisplayCaption(currentSubtitle)}
+          {/* Style container — locked layout, never changes between cues */}
+          <div style={getPreviewSubtitleStyle()}>
+            {/* Animated inner — ONLY transform+opacity, key resets animation per cue */}
+            <div
+              key={`${activeCueIndex ?? 'idle'}-${captionAnimation}`}
+              className={getCaptionAnimationClass()}
+              style={{ animationFillMode: 'both' }}
+            >
+              {getDisplayCaption(currentSubtitle)}
+            </div>
           </div>
         </div>
       )}
