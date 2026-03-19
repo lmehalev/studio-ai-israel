@@ -303,9 +303,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const cuePlaybackRef = useRef<{ index: number; startSec: number; endSec: number } | null>(null);
   const activeCueIndexRef = useRef<number | null>(null);
   const adjustedSegmentsRef = useRef<SubtitleSegment[]>([]);
-  const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
-  const timeupdateWindowRef = useRef({ startedAt: 0, count: 0 });
-  const debugThrottleRef = useRef(0);
+  const attachedVideoRef = useRef<HTMLVideoElement | null>(null);
+  const playbackListenersCleanupRef = useRef<(() => void) | null>(null);
+  const rafLoopRef = useRef<number | null>(null);
+  const rvfcLoopRef = useRef<number | null>(null);
+  const frameWindowRef = useRef({ startedAt: 0, count: 0, fps: 0 });
   const [playbackDebug, setPlaybackDebug] = useState<SubtitlePlaybackDebug>({
     readyState: 0,
     currentTime: 0,
@@ -315,6 +317,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     activeTimeupdateListeners: 0,
     timeupdateEventsPerSecond: 0,
   });
+
+  const ACTIVE_CUE_TOLERANCE_SEC = 0.05;
 
   const updatePlaybackDebug = useCallback((patch: Partial<SubtitlePlaybackDebug>) => {
     setPlaybackDebug((prev) => ({ ...prev, ...patch }));
@@ -347,123 +351,227 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     adjustedSegmentsRef.current = getAdjustedSegments();
   }, [getAdjustedSegments]);
 
-  const detachTimeupdateListener = useCallback((video?: HTMLVideoElement | null) => {
-    const targetVideo = video ?? videoPreviewRef.current;
-    if (targetVideo && playbackListenerRef.current) {
-      targetVideo.removeEventListener('timeupdate', playbackListenerRef.current);
+  const stopFrameTracking = useCallback(() => {
+    const currentVideo = videoPreviewRef.current as (HTMLVideoElement & {
+      cancelVideoFrameCallback?: (handle: number) => void;
+    }) | null;
+
+    if (rvfcLoopRef.current !== null && currentVideo && typeof currentVideo.cancelVideoFrameCallback === 'function') {
+      currentVideo.cancelVideoFrameCallback(rvfcLoopRef.current);
     }
 
-    playbackListenerRef.current = null;
-    timeupdateWindowRef.current = { startedAt: 0, count: 0 };
-    updatePlaybackDebug({
-      activeTimeupdateListeners: 0,
-      timeupdateEventsPerSecond: 0,
-    });
-  }, [updatePlaybackDebug]);
-
-  const attachTimeupdateListener = useCallback((video: HTMLVideoElement) => {
-    if (playbackListenerRef.current) {
-      video.removeEventListener('timeupdate', playbackListenerRef.current);
-      playbackListenerRef.current = null;
+    if (rafLoopRef.current !== null) {
+      cancelAnimationFrame(rafLoopRef.current);
     }
 
-    timeupdateWindowRef.current = { startedAt: performance.now(), count: 0 };
+    rvfcLoopRef.current = null;
+    rafLoopRef.current = null;
+  }, []);
 
-    const onTimeUpdate = () => {
-      const now = performance.now();
-      const currentTime = video.currentTime;
+  const syncPlaybackFromVisibleVideo = useCallback(() => {
+    const video = videoPreviewRef.current;
+    if (!video) return;
 
-      timeupdateWindowRef.current.count += 1;
-      const elapsed = now - timeupdateWindowRef.current.startedAt;
-      if (elapsed >= 1000) {
-        const eventsPerSecond = Number((timeupdateWindowRef.current.count / (elapsed / 1000)).toFixed(1));
-        timeupdateWindowRef.current = { startedAt: now, count: 0 };
-        updatePlaybackDebug({
-          activeTimeupdateListeners: 1,
-          timeupdateEventsPerSecond: eventsPerSecond,
-        });
-      }
+    const now = performance.now();
+    const currentTime = video.currentTime;
 
-      const segments = adjustedSegmentsRef.current;
-      const nextCueIdx = segments.findIndex((s) => currentTime >= s.start && currentTime <= s.end);
-      const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
+    if (!frameWindowRef.current.startedAt) {
+      frameWindowRef.current.startedAt = now;
+      frameWindowRef.current.count = 0;
+    }
 
-      if (normalizedCueIdx !== activeCueIndexRef.current) {
-        activeCueIndexRef.current = normalizedCueIdx;
-        setActiveCueIndex(normalizedCueIdx);
-        setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
-      }
+    frameWindowRef.current.count += 1;
+    const elapsed = now - frameWindowRef.current.startedAt;
+    if (elapsed >= 1000) {
+      frameWindowRef.current.fps = Number((frameWindowRef.current.count / (elapsed / 1000)).toFixed(1));
+      frameWindowRef.current.startedAt = now;
+      frameWindowRef.current.count = 0;
+    }
 
-      const playbackWindow = cuePlaybackRef.current;
-      if (playbackWindow) {
-        const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - 0.05);
-        if (currentTime >= stopAt) {
-          video.pause();
-          const boundedEnd = Number.isFinite(video.duration)
-            ? Math.min(playbackWindow.endSec, video.duration)
-            : playbackWindow.endSec;
-          video.currentTime = boundedEnd;
-          clearCuePlaybackState();
-          updatePlaybackDebug({
-            readyState: video.readyState,
-            currentTime: boundedEnd,
-            startSec: null,
-            endSec: null,
-          });
-          return;
-        }
-      }
+    const segments = adjustedSegmentsRef.current;
+    const nextCueIdx = segments.findIndex((s) => (
+      (currentTime + ACTIVE_CUE_TOLERANCE_SEC) >= s.start &&
+      (currentTime - ACTIVE_CUE_TOLERANCE_SEC) <= s.end
+    ));
+    const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
 
-      if (now - debugThrottleRef.current >= 250) {
-        debugThrottleRef.current = now;
+    if (normalizedCueIdx !== activeCueIndexRef.current) {
+      activeCueIndexRef.current = normalizedCueIdx;
+      setActiveCueIndex(normalizedCueIdx);
+      setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
+    }
+
+    const playbackWindow = cuePlaybackRef.current;
+    if (playbackWindow) {
+      const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - ACTIVE_CUE_TOLERANCE_SEC);
+      if (currentTime >= stopAt) {
+        video.pause();
+        const boundedEnd = Number.isFinite(video.duration)
+          ? Math.min(playbackWindow.endSec, video.duration)
+          : playbackWindow.endSec;
+        video.currentTime = boundedEnd;
+        clearCuePlaybackState();
         updatePlaybackDebug({
           readyState: video.readyState,
-          currentTime,
+          currentTime: boundedEnd,
+          startSec: null,
+          endSec: null,
+          activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+          timeupdateEventsPerSecond: frameWindowRef.current.fps,
         });
+        return;
       }
-    };
-
-    playbackListenerRef.current = onTimeUpdate;
-    video.addEventListener('timeupdate', onTimeUpdate);
-    updatePlaybackDebug({
-      activeTimeupdateListeners: 1,
-      readyState: video.readyState,
-      currentTime: video.currentTime,
-    });
-  }, [clearCuePlaybackState, updatePlaybackDebug]);
-
-  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
-    const previousVideo = videoPreviewRef.current;
-
-    if (previousVideo && playbackListenerRef.current) {
-      previousVideo.removeEventListener('timeupdate', playbackListenerRef.current);
-      playbackListenerRef.current = null;
     }
 
-    videoPreviewRef.current = node;
+    updatePlaybackDebug({
+      readyState: video.readyState,
+      currentTime,
+      activeTimeupdateListeners: attachedVideoRef.current ? 1 : 0,
+      timeupdateEventsPerSecond: frameWindowRef.current.fps,
+    });
+  }, [ACTIVE_CUE_TOLERANCE_SEC, clearCuePlaybackState, updatePlaybackDebug]);
 
-    if (!node) {
-      timeupdateWindowRef.current = { startedAt: 0, count: 0 };
-      updatePlaybackDebug({
-        activeTimeupdateListeners: 0,
-        timeupdateEventsPerSecond: 0,
+  const scheduleFrameTracking = useCallback(() => {
+    const video = videoPreviewRef.current as (HTMLVideoElement & {
+      requestVideoFrameCallback?: (callback: () => void) => number;
+    }) | null;
+
+    if (!video || video.paused || video.ended) {
+      stopFrameTracking();
+      return;
+    }
+
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      rvfcLoopRef.current = video.requestVideoFrameCallback(() => {
+        syncPlaybackFromVisibleVideo();
+        scheduleFrameTracking();
       });
       return;
     }
 
-    attachTimeupdateListener(node);
-  }, [attachTimeupdateListener, updatePlaybackDebug]);
+    rafLoopRef.current = requestAnimationFrame(() => {
+      syncPlaybackFromVisibleVideo();
+      scheduleFrameTracking();
+    });
+  }, [stopFrameTracking, syncPlaybackFromVisibleVideo]);
+
+  const startFrameTracking = useCallback(() => {
+    frameWindowRef.current = { startedAt: performance.now(), count: 0, fps: 0 };
+    stopFrameTracking();
+    syncPlaybackFromVisibleVideo();
+    scheduleFrameTracking();
+  }, [scheduleFrameTracking, stopFrameTracking, syncPlaybackFromVisibleVideo]);
+
+  const attachPlaybackLifecycleListeners = useCallback((video: HTMLVideoElement) => {
+    if (attachedVideoRef.current === video && playbackListenersCleanupRef.current) {
+      updatePlaybackDebug({
+        activeTimeupdateListeners: 1,
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+      });
+      return;
+    }
+
+    playbackListenersCleanupRef.current?.();
+
+    const handlePlay = () => {
+      updatePlaybackDebug({ activeTimeupdateListeners: 1, playError: null });
+      startFrameTracking();
+    };
+
+    const handlePause = () => {
+      stopFrameTracking();
+      const activePlayback = cuePlaybackRef.current;
+      if (activePlayback && video.currentTime < activePlayback.endSec - ACTIVE_CUE_TOLERANCE_SEC) {
+        clearCuePlaybackState();
+        updatePlaybackDebug({ startSec: null, endSec: null });
+      }
+      syncPlaybackFromVisibleVideo();
+    };
+
+    const handleSeeked = () => {
+      syncPlaybackFromVisibleVideo();
+    };
+
+    const handleEnded = () => {
+      stopFrameTracking();
+      clearCuePlaybackState();
+      activeCueIndexRef.current = null;
+      setActiveCueIndex(null);
+      setCurrentSubtitle('');
+      syncPlaybackFromVisibleVideo();
+      updatePlaybackDebug({ startSec: null, endSec: null });
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeked', handleSeeked);
+    video.addEventListener('ended', handleEnded);
+
+    attachedVideoRef.current = video;
+    playbackListenersCleanupRef.current = () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('ended', handleEnded);
+      if (attachedVideoRef.current === video) {
+        attachedVideoRef.current = null;
+      }
+      stopFrameTracking();
+    };
+
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 1,
+      readyState: video.readyState,
+      currentTime: video.currentTime,
+      timeupdateEventsPerSecond: frameWindowRef.current.fps,
+    });
+
+    if (!video.paused && !video.ended) {
+      startFrameTracking();
+    } else {
+      syncPlaybackFromVisibleVideo();
+    }
+  }, [
+    ACTIVE_CUE_TOLERANCE_SEC,
+    clearCuePlaybackState,
+    startFrameTracking,
+    stopFrameTracking,
+    syncPlaybackFromVisibleVideo,
+    updatePlaybackDebug,
+  ]);
+
+  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
+    videoPreviewRef.current = node;
+    if (!node) return;
+    attachPlaybackLifecycleListeners(node);
+    syncPlaybackFromVisibleVideo();
+  }, [attachPlaybackLifecycleListeners, syncPlaybackFromVisibleVideo]);
+
+  useEffect(() => {
+    const nextBlobUrl = videoPreviewUrl?.startsWith('blob:') ? videoPreviewUrl : null;
+    const previousBlobUrl = previewBlobUrlRef.current;
+    if (previousBlobUrl && previousBlobUrl !== nextBlobUrl) {
+      URL.revokeObjectURL(previousBlobUrl);
+    }
+    previewBlobUrlRef.current = nextBlobUrl;
+  }, [videoPreviewUrl]);
 
   useEffect(() => {
     return () => {
-      detachTimeupdateListener(videoPreviewRef.current);
+      playbackListenersCleanupRef.current?.();
+      playbackListenersCleanupRef.current = null;
+      stopFrameTracking();
       clearCuePlaybackState();
       activeCueIndexRef.current = null;
-      if (videoPreviewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(videoPreviewUrl);
+      updatePlaybackDebug({ activeTimeupdateListeners: 0, timeupdateEventsPerSecond: 0 });
+
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
       }
     };
-  }, [clearCuePlaybackState, detachTimeupdateListener, videoPreviewUrl]);
+  }, [clearCuePlaybackState, stopFrameTracking, updatePlaybackDebug]);
 
   const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
     if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
