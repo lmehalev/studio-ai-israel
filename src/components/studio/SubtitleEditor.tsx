@@ -4,9 +4,11 @@ import {
   Subtitles, Check, X, Plus, Trash2, Scissors, Music,
   Smile, Type, Palette, Image, Sparkles, Play, Pause,
   Film, Sticker, Crown, Layers, ChevronLeft, ChevronRight,
-  Clock, PlusCircle,
+  Clock, PlusCircle, Volume2, VolumeX, AlertTriangle,
+  Move, Maximize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StoragePicker } from '@/components/StoragePicker';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
