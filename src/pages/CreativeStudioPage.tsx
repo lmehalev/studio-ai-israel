@@ -15,6 +15,7 @@ import { StudioWizardDialog } from '@/components/studio/StudioWizardDialog';
 
 export default function CreativeStudioPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [showMigrationBanner, setShowMigrationBanner] = useState(false);
   const [searchParams] = useSearchParams();
 
   // Brand management
