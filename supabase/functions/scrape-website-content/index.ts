@@ -39,39 +39,93 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Step 1: Scrape with Firecrawl
+    // Step 1: Try Firecrawl, fall back to direct fetch
     const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!firecrawlKey) {
-      return new Response(JSON.stringify({ success: false, error: 'Firecrawl not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    let markdown = '';
+    let branding = null;
+    let screenshot = null;
+    let metadata: Record<string, any> = {};
+    let links: string[] = [];
+
+    if (firecrawlKey) {
+      console.log('Scraping URL with Firecrawl:', formattedUrl);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const scrapeRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${firecrawlKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: formattedUrl,
+            formats: ['markdown', 'screenshot', 'branding', 'links'],
+            onlyMainContent: false,
+            waitFor: 5000,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (scrapeRes.ok) {
+          const scrapeData = await scrapeRes.json();
+          markdown = scrapeData?.data?.markdown || scrapeData?.markdown || '';
+          branding = scrapeData?.data?.branding || scrapeData?.branding || null;
+          screenshot = scrapeData?.data?.screenshot || scrapeData?.screenshot || null;
+          metadata = scrapeData?.data?.metadata || scrapeData?.metadata || {};
+          links = scrapeData?.data?.links || scrapeData?.links || [];
+        } else {
+          const errText = await scrapeRes.text();
+          console.warn('Firecrawl failed, falling back to direct fetch:', scrapeRes.status, errText);
+        }
+      } catch (fcErr) {
+        console.warn('Firecrawl error, falling back to direct fetch:', fcErr);
+      }
+    } else {
+      console.warn('FIRECRAWL_API_KEY not configured, using direct fetch fallback');
     }
 
-    console.log('Scraping URL for content extraction:', formattedUrl);
+    // Fallback: direct fetch if Firecrawl didn't produce content
+    if (!markdown) {
+      console.log('Using direct HTML fetch fallback for:', formattedUrl);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const htmlRes = await fetch(formattedUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StudioBot/1.0)' },
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        const html = await htmlRes.text();
 
-    const scrapeRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${firecrawlKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: ['markdown', 'screenshot', 'branding', 'links'],
-        onlyMainContent: false,
-        waitFor: 5000,
-      }),
-    });
+        // Extract basic metadata from HTML
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+        const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+        const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+        const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
 
-    if (!scrapeRes.ok) {
-      const errData = await scrapeRes.text();
-      console.error('Firecrawl error:', errData);
-      return new Response(JSON.stringify({ success: false, error: `Scraping failed: ${scrapeRes.status}` }),
-        { status: scrapeRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        metadata = {
+          title: titleMatch?.[1]?.trim() || '',
+          description: descMatch?.[1]?.trim() || '',
+          ogTitle: ogTitleMatch?.[1]?.trim() || '',
+          ogDescription: ogDescMatch?.[1]?.trim() || '',
+          ogImage: ogImageMatch?.[1]?.trim() || '',
+        };
+
+        // Strip tags to get text content
+        const stripped = html
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/\s+/g, ' ')
+          .trim();
+        markdown = stripped.slice(0, 8000);
+      } catch (fallbackErr) {
+        console.error('Direct fetch fallback also failed:', fallbackErr);
+        return new Response(JSON.stringify({ success: false, error: 'לא ניתן להגיע לאתר — בדוק שהכתובת נכונה' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
-
-    const scrapeData = await scrapeRes.json();
-    const markdown = scrapeData?.data?.markdown || scrapeData?.markdown || '';
-    const branding = scrapeData?.data?.branding || scrapeData?.branding || null;
-    const screenshot = scrapeData?.data?.screenshot || scrapeData?.screenshot || null;
-    const metadata = scrapeData?.data?.metadata || scrapeData?.metadata || {};
-    const links = scrapeData?.data?.links || scrapeData?.links || [];
 
     // Truncate markdown to prevent excessive AI costs
     const truncatedMarkdown = markdown.slice(0, 8000);
