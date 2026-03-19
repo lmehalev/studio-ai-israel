@@ -334,13 +334,67 @@ export interface SubtitleSegment {
 }
 
 export const subtitleService = {
-  transcribe: async (audioBase64: string, language: string = 'עברית'): Promise<{ segments: SubtitleSegment[] }> => {
+  transcribe: async (audioBase64: string, language: string = 'עברית', videoDuration?: number): Promise<{ segments: SubtitleSegment[]; debug: { provider: string; rawCount: number; mergedCount: number } }> => {
     const { data, error } = await supabase.functions.invoke("transcribe-audio", {
       body: { audioBase64, language },
     });
     if (error) throw new Error(error.message || "שגיאה בתמלול");
     if (data?.error) throw new Error(data.error);
-    return data;
+
+    // Strict validation of response shape
+    const rawSegments: any[] = data?.segments;
+    if (!Array.isArray(rawSegments) || rawSegments.length === 0) {
+      throw new Error('התמלול לא החזיר כתוביות תקינות. נסה שוב.');
+    }
+
+    // Validate & clean each segment
+    const maxEnd = videoDuration || Infinity;
+    const validated: SubtitleSegment[] = [];
+    for (const seg of rawSegments) {
+      const start = Number(seg?.start);
+      const end = Number(seg?.end);
+      const text = typeof seg?.text === 'string' ? seg.text.trim() : '';
+      if (isNaN(start) || isNaN(end) || !text) continue;
+      if (end <= start) continue;
+      if (start < 0) continue;
+      const clampedEnd = Math.min(end, maxEnd);
+      if (clampedEnd <= start) continue;
+      validated.push({ start, end: clampedEnd, text });
+    }
+
+    if (validated.length === 0) {
+      throw new Error('כל הכתוביות שהתקבלו היו לא תקינות (זמנים שגויים או טקסט ריק).');
+    }
+
+    // Sort monotonically
+    validated.sort((a, b) => a.start - b.start);
+
+    // Smart merge: combine tiny adjacent segments (< 1s or < 15 chars) 
+    const merged: SubtitleSegment[] = [];
+    const MAX_CHARS_PER_LINE = 80;
+    const MIN_DURATION = 0.4;
+
+    for (const seg of validated) {
+      const prev = merged[merged.length - 1];
+      if (prev) {
+        const gap = seg.start - prev.end;
+        const combinedLen = prev.text.length + seg.text.length + 1;
+        const prevDuration = prev.end - prev.start;
+        const segDuration = seg.end - seg.start;
+        // Merge if: tiny gap AND combined text not too long AND either segment is very short
+        if (gap < 0.5 && combinedLen <= MAX_CHARS_PER_LINE && (prevDuration < MIN_DURATION || segDuration < MIN_DURATION || gap < 0.15)) {
+          prev.end = seg.end;
+          prev.text = prev.text + ' ' + seg.text;
+          continue;
+        }
+      }
+      merged.push({ ...seg });
+    }
+
+    return {
+      segments: merged,
+      debug: { provider: 'gemini-transcribe', rawCount: rawSegments.length, mergedCount: merged.length },
+    };
   },
 
   toSRT: (segments: SubtitleSegment[]): string => {

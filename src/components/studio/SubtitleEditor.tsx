@@ -273,12 +273,42 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     updateSegment(index, { text: subtitleSegments[index].text + ' ' + emoji });
   };
 
-  const seekToSegment = (seg: SubtitleSegment) => {
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.currentTime = Math.max(0, seg.start + subtitleOffset);
-      videoPreviewRef.current.play();
-      setShowPreview(true);
+  const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
+  const segEndRef = useRef<number | null>(null);
+
+  const seekToSegment = (seg: SubtitleSegment, index: number) => {
+    const video = videoPreviewRef.current;
+    if (!video) {
+      toast.error('הווידאו עדיין לא נטען');
+      return;
     }
+    const startTime = Math.max(0, seg.start + subtitleOffset);
+    const endTime = Math.max(startTime + 0.1, seg.end + subtitleOffset);
+
+    // Set up end-time listener
+    segEndRef.current = endTime;
+    setPlayingSegIndex(index);
+    setShowPreview(true);
+
+    const onTimeUpdate = () => {
+      if (segEndRef.current !== null && video.currentTime >= segEndRef.current) {
+        video.pause();
+        segEndRef.current = null;
+        setPlayingSegIndex(null);
+        video.removeEventListener('timeupdate', onTimeUpdate);
+      }
+    };
+    // Clean any previous listener
+    const prev = (video as any).__segListener;
+    if (prev) video.removeEventListener('timeupdate', prev);
+    (video as any).__segListener = onTimeUpdate;
+    video.addEventListener('timeupdate', onTimeUpdate);
+
+    video.currentTime = startTime;
+    video.play().catch(err => {
+      toast.error(`שגיאת ניגון: ${err.message}`);
+      setPlayingSegIndex(null);
+    });
   };
 
   // ── Extract audio from video for transcription (smaller payload) ──
@@ -344,6 +374,10 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const handleTranscribe = async () => {
     if (!videoFile) return;
     setLoading(true);
+    // CLEAR old captions before new transcription
+    setSubtitleSegments([]);
+    setEditingIndex(null);
+    setPlayingSegIndex(null);
     try {
       // For small files (<5MB), send directly as base64
       // For larger files, extract audio first to reduce payload size
@@ -382,10 +416,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         }
       }
 
-      const data = await subtitleService.transcribe(base64);
-      setSubtitleSegments(data.segments);
+      const videoDuration = videoPreviewRef.current?.duration || undefined;
+      const result = await subtitleService.transcribe(base64, 'עברית', videoDuration);
+      setSubtitleSegments(result.segments);
       setShowPreview(true);
-      toast.success('התמלול מוכן!');
+      console.log('[SubtitleEditor] Transcription debug:', result.debug);
+      toast.success(`התמלול מוכן! ${result.segments.length} כתוביות (מתוך ${result.debug.rawCount} גולמיות)`);
     } catch (e: any) {
       toast.error(e.message || 'שגיאה בתמלול');
     } finally {
@@ -777,8 +813,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                         title="סיום" />
                       <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
                       <div className="mr-auto flex items-center gap-0.5">
-                        <button onClick={() => seekToSegment(seg)} title="נגן"
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                        <button onClick={() => seekToSegment(seg, i)} title="נגן"
+                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", playingSegIndex === i && "text-primary bg-primary/10")}>
                           <Play className="w-3 h-3" />
                         </button>
                         <button onClick={() => splitSegment(i)} title="פצל"
