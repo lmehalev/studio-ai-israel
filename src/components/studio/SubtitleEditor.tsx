@@ -2572,12 +2572,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           </a>
         </div>
       )}
-    </div>
-  );
 
-  return (
-    <>
-      {null}
+      {/* Cost approval dialog - MUST be inside step 3 return */}
       <CostApprovalDialog
         open={showCostApproval}
         onOpenChange={setShowCostApproval}
@@ -2585,6 +2581,9 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         onApprove={() => { setShowCostApproval(false); handleRenderVideo(); }}
         title="אישור הרכבת סרטון בתשלום"
       />
-    </>
+    </div>
   );
+
+  // Fallback (should never reach here)
+  return null;
 }
