@@ -495,7 +495,9 @@ Deno.serve(async (req) => {
           }
 
           if (scene.title && dur > 2) {
-            const titleSvg = buildSubtitleSvgDataUri(
+            const titleWidth = 520;
+            const titleHeight = 70;
+            const titleHtml = buildSubtitleHtmlAsset(
               scene.title,
               {
                 fontSize: 22,
@@ -505,15 +507,17 @@ Deno.serve(async (req) => {
                 fontWeight: 800,
                 padding: "10px 24px",
               },
-              520,
-              70,
+              titleWidth,
+              titleHeight,
               embeddedFontBase64,
             );
 
             textClips.push({
               asset: {
-                type: "image",
-                src: titleSvg,
+                type: "html",
+                html: titleHtml,
+                width: titleWidth,
+                height: titleHeight,
               },
               start: cumulativeTime + 0.15,
               length: Math.min(dur - 0.3, 3),
