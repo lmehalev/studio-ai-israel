@@ -963,16 +963,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               });
             }}
           />
-          {showPreview && currentSubtitle && (
-            <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none px-4">
-              <div style={getPreviewSubtitleStyle()}>{currentSubtitle}</div>
-            </div>
-          )}
-          {logoUrl && (
-            <div className="absolute top-3 right-3 pointer-events-none">
-              <img src={logoUrl} alt="logo" className="w-10 h-10 object-contain rounded-lg opacity-90" />
-            </div>
-          )}
         </div>
       );
     };
