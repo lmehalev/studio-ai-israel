@@ -942,6 +942,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               currentTime: videoPreviewRef.current.currentTime,
               startSec: null,
               endSec: null,
+              timeupdateEventsPerSecond: 0,
             });
           }}
         />
