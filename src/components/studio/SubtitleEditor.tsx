@@ -2339,7 +2339,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             <h5 className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
               <Layers className="w-3 h-3" /> שכבות ({stickers.length})
               {stickers.length > 4 && (
-                <span className="text-amber-500 flex items-center gap-0.5">
+                <span className="text-destructive flex items-center gap-0.5">
                   <AlertTriangle className="w-3 h-3" /> עומס ויזואלי
                 </span>
               )}
