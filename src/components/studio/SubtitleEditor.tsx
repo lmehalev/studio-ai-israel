@@ -1390,12 +1390,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           setIsDragging(false);
           const file = e.dataTransfer.files[0];
           if (file && file.type.startsWith('video/')) {
-            setVideoFile(file);
-            setUploadedVideoUrl(null);
-            setSubtitleSegments([]);
-            setTranscribeDebug(null);
-            setVideoPreviewUrl(URL.createObjectURL(file));
-            setStep(1);
+            handleVideoSelected(file);
           } else {
             toast.error('יש להעלות קובץ וידאו');
           }
@@ -1410,12 +1405,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           onChange={e => {
             const f = e.target.files?.[0];
             if (f) {
-              setVideoFile(f);
-              setUploadedVideoUrl(null);
-              setSubtitleSegments([]);
-              setTranscribeDebug(null);
-              setVideoPreviewUrl(URL.createObjectURL(f));
-              setStep(1);
+              handleVideoSelected(f);
             }
           }}
         />
