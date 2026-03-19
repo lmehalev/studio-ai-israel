@@ -116,8 +116,8 @@ export default function CreativeStudioPage() {
     setNewDepartment('');
   };
 
-  const handleRemoveBrand = (id: string) => {
-    const updated = brandService.remove(id);
+  const handleRemoveBrand = async (id: string) => {
+    const updated = await brandService.remove(id);
     setBrands(updated);
     if (activeBrandId === id) {
       setActiveBrandId(null);
