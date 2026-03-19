@@ -1386,6 +1386,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         })),
         subtitleSegments: adjusted,
         totalDuration: videoDuration,
+        orientation: effectiveOrientation === 'portrait' ? 'portrait' : 'landscape',
       };
 
       const renderResult = await composeService.render(renderParams);

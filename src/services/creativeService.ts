@@ -257,7 +257,8 @@ export const composeService = {
     stickers?: any[];
     subtitleSegments?: { start: number; end: number; text: string }[];
     totalDuration?: number;
-  }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage' }> => {
+    orientation?: string;
+  }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage'; debug?: any }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
     });
