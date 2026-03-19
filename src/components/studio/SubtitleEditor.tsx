@@ -1260,40 +1260,37 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     maxWidth: '90%',
   });
 
-  // ── Video preview component (shared across steps) ──
-  const VideoPreview = () => {
-    if (!videoPreviewUrl) return null;
-    return (
-      <div className="rounded-xl overflow-hidden border border-border relative bg-black">
-        <video
-          ref={setVideoPreviewElement}
-          src={videoPreviewUrl}
-          controls
-          preload="metadata"
-          className="w-full max-h-[240px]"
-          onLoadedMetadata={(e) => {
-            const video = e.currentTarget;
-            setVideoLoadError(null);
-            updatePlaybackDebug({
-              activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
-              readyState: video.readyState,
-              currentTime: video.currentTime,
-            });
-            syncPlaybackFromVisibleVideo();
-          }}
-          onError={(e) => {
-            const video = e.currentTarget;
-            const mediaError = video.error;
-            const msg = mediaError
-              ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
-              : 'שגיאת טעינת וידאו לא מזוהה';
-            setVideoLoadError(msg);
-            updatePlaybackDebug({ readyState: video.readyState, playError: msg });
-          }}
-        />
-      </div>
-    );
-  };
+  // ── Video preview (inline JSX — NOT a function component, to prevent remounting) ──
+  const videoPreviewJSX = videoPreviewUrl ? (
+    <div className="rounded-xl overflow-hidden border border-border relative bg-black">
+      <video
+        ref={setVideoPreviewElement}
+        src={videoPreviewUrl}
+        controls
+        preload="metadata"
+        className="w-full max-h-[240px]"
+        onLoadedMetadata={(e) => {
+          const video = e.currentTarget;
+          setVideoLoadError(null);
+          updatePlaybackDebug({
+            activeTimeupdateListeners: videoPreviewRef.current ? 1 : 0,
+            readyState: video.readyState,
+            currentTime: video.currentTime,
+          });
+          syncPlaybackFromVisibleVideo();
+        }}
+        onError={(e) => {
+          const video = e.currentTarget;
+          const mediaError = video.error;
+          const msg = mediaError
+            ? `שגיאת טעינת וידאו (קוד ${mediaError.code}): ${mediaError.message || 'לא ידוע'}`
+            : 'שגיאת טעינת וידאו לא מזוהה';
+          setVideoLoadError(msg);
+          updatePlaybackDebug({ readyState: video.readyState, playError: msg });
+        }}
+      />
+    </div>
+  ) : null;
 
   // Caption overlay - always above the playing video
   const captionOverlayJSX = showPreview && currentSubtitle && videoPreviewUrl ? (
@@ -1423,7 +1420,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     <div className="space-y-3">
       <StepIndicator />
       <div className="relative">
-        <VideoPreview />
+        {videoPreviewJSX}
         {overlayDebugJSX}
         {captionOverlayJSX}
         {logoOverlayJSX}
@@ -1729,7 +1726,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     <div className="space-y-3">
       <StepIndicator />
       <div className="relative">
-        <VideoPreview />
+        {videoPreviewJSX}
         {overlayDebugJSX}
         {captionOverlayJSX}
         {logoOverlayJSX}
@@ -1825,7 +1822,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     <div className="space-y-3">
       <StepIndicator />
       <div className="relative">
-        <VideoPreview />
+        {videoPreviewJSX}
         {overlayDebugJSX}
         {captionOverlayJSX}
         {logoOverlayJSX}
