@@ -581,7 +581,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
 
     try {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       video.pause();
       setShowPreview(true);
 
@@ -596,35 +596,18 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       await waitForVideoMetadata(video);
       await seekVideoTo(video, start);
 
-      segEndRef.current = end;
+      cuePlaybackRef.current = { index, startSec: start, endSec: end };
       setPlayingSegIndex(index);
-
-      const onTimeUpdate = () => {
-        updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
-
-        if (segEndRef.current === null) return;
-        const stopAt = segEndRef.current - 0.05 > start ? segEndRef.current - 0.05 : segEndRef.current;
-
-        if (video.currentTime >= stopAt) {
-          video.pause();
-          const boundedEnd = Number.isFinite(video.duration)
-            ? Math.min(segEndRef.current, video.duration)
-            : segEndRef.current;
-          video.currentTime = boundedEnd;
-          updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
-          clearSegmentPlayback(video);
-        }
-      };
-
-      playbackListenerRef.current = onTimeUpdate;
-      video.addEventListener('timeupdate', onTimeUpdate);
+      activeCueIndexRef.current = index;
+      setActiveCueIndex(index);
+      setCurrentSubtitle(seg.text);
 
       const playPromise = video.play();
       if (playPromise !== undefined) {
         await playPromise;
       }
     } catch (error) {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       const playbackError = formatPlaybackError(error);
       updatePlaybackDebug({
         readyState: video.readyState,
@@ -650,9 +633,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
 
     try {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       setShowPreview(true);
       setCurrentSubtitle('');
+      activeCueIndexRef.current = null;
+      setActiveCueIndex(null);
 
       updatePlaybackDebug({
         readyState: video.readyState,
