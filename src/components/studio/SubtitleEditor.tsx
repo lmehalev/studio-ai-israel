@@ -1752,12 +1752,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   if (step === 2) return (
     <div className="space-y-3">
       <StepIndicator />
-      <div className="relative">
-        {videoPreviewJSX}
-        {overlayDebugJSX}
-        {captionOverlayJSX}
-        {logoOverlayJSX}
-      </div>
+      {videoPreviewJSX}
 
       {/* Font presets grid */}
       <div className="space-y-2">
