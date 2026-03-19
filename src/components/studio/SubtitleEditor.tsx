@@ -1913,7 +1913,42 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       </div>
 
-      <NavButtons />
+      {/* Orientation */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">כיוון וידאו</h4>
+        <div className="flex gap-2 items-center">
+          {([
+            { value: 'auto' as const, label: `אוטומטי (${detectedOrientation === 'portrait' ? 'דיוקן' : 'לרוחב'})` },
+            { value: 'portrait' as const, label: 'דיוקן (9:16)' },
+            { value: 'landscape' as const, label: 'לרוחב (16:9)' },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setOrientationOverride(opt.value)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex-1',
+                orientationOverride === opt.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {videoNativeWidth > 0 && (
+          <p className="text-[10px] text-muted-foreground" dir="ltr">
+            Native: {videoNativeWidth}×{videoNativeHeight} • Content rect: {Math.round(contentRect.w)}×{Math.round(contentRect.h)} @ ({Math.round(contentRect.x)},{Math.round(contentRect.y)})
+          </p>
+        )}
+      </div>
+
+      {/* Debug: Next status */}
+      <div className="text-[10px] text-muted-foreground" dir="ltr">
+        step={step} | selectedFont={selectedFont} | nextEnabled=true
+      </div>
+
+      <NavButtons canNext={true} />
     </div>
   );
 
