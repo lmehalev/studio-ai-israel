@@ -38,11 +38,16 @@ interface StickerItem {
   scale?: number;
 }
 
+// Google Fonts @import for Hebrew fonts — embedded in every HTML asset to guarantee rendering
+const GOOGLE_FONTS_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;700;800;900&family=Heebo:wght@400;500;600;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap');`;
+
 function buildSubtitleClips(
   segments: SubtitleSegment[],
-  style: SubtitleStyle
+  style: SubtitleStyle,
+  outputWidth: number,
+  outputHeight: number,
 ): any[] {
-  const font = style.font || "'Noto Sans Hebrew', sans-serif";
+  const font = style.font || "'Noto Sans Hebrew', 'Arial', sans-serif";
   const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
   const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
@@ -51,14 +56,19 @@ function buildSubtitleClips(
   const fontWeight = style.fontWeight || 800;
   const padding = style.padding || "14px 32px";
 
+  // Scale subtitle box to output resolution
+  const subWidth = Math.round(outputWidth * 0.85);
+  const subHeight = Math.round(outputHeight * 0.15);
+
   return segments
     .filter((seg) => seg.text && seg.text.trim())
     .map((seg) => ({
       asset: {
         type: "html",
-        html: `<div style="
+        html: `<style>${GOOGLE_FONTS_IMPORT}</style><div style="
           font-family: ${font};
           direction: rtl;
+          unicode-bidi: bidi-override;
           text-align: center;
           padding: ${padding};
           background: ${bgColor};
@@ -74,8 +84,8 @@ function buildSubtitleClips(
           word-wrap: break-word;
           border: 1px solid rgba(255,255,255,0.1);
         ">${seg.text}</div>`,
-        width: 900,
-        height: 160,
+        width: subWidth,
+        height: subHeight,
       },
       start: seg.start,
       length: Math.max(0.5, seg.end - seg.start),
@@ -145,6 +155,15 @@ function buildLogoClip(logoUrl: string, totalDuration: number, placement?: LogoP
   };
 }
 
+// Resolve output dimensions from orientation
+function resolveOutputConfig(orientation?: string): { width: number; height: number; resolution: string } {
+  if (orientation === "portrait" || orientation === "9:16") {
+    return { width: 1080, height: 1920, resolution: "1080", };
+  }
+  // Default: landscape 16:9
+  return { width: 1920, height: 1080, resolution: "hd" };
+}
+
 function getShotstackEnvOrder(preferredEnv?: unknown): ShotstackEnv[] {
   const normalized = typeof preferredEnv === "string" ? preferredEnv.toLowerCase() : "";
   if (normalized === "stage") return ["stage", "production"];
@@ -182,6 +201,7 @@ Deno.serve(async (req) => {
         stickers,
         subtitleSegments,
         totalDuration: requestedDuration,
+        orientation,
       } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
@@ -192,6 +212,9 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Resolve output dimensions based on orientation
+      const outputConfig = resolveOutputConfig(orientation);
 
       // Calculate duration
       const sceneDuration = (scenes || []).reduce(
@@ -213,14 +236,12 @@ Deno.serve(async (req) => {
       }
 
       // === Subtitle track ===
-      // Priority: use subtitleSegments (per-segment timing) if available
       if (subtitleSegments && subtitleSegments.length > 0) {
-        const subClips = buildSubtitleClips(subtitleSegments, subtitleStyle || {});
+        const subClips = buildSubtitleClips(subtitleSegments, subtitleStyle || {}, outputConfig.width, outputConfig.height);
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
         }
       } else if (scenes && scenes.length > 0) {
-        // Fallback: build from scenes (legacy behavior)
         const textClips: any[] = [];
         let cumulativeTime = 0;
 
@@ -232,7 +253,9 @@ Deno.serve(async (req) => {
             const style = subtitleStyle || {};
             const subClips = buildSubtitleClips(
               [{ start: cumulativeTime + 0.3, end: cumulativeTime + dur - 0.3, text: subtitle }],
-              style
+              style,
+              outputConfig.width,
+              outputConfig.height,
             );
             textClips.push(...subClips);
           }
@@ -242,9 +265,10 @@ Deno.serve(async (req) => {
             textClips.push({
               asset: {
                 type: "html",
-                html: `<div style="
+                html: `<style>${GOOGLE_FONTS_IMPORT}</style><div style="
                   font-family: 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
                   direction: rtl;
+                  unicode-bidi: bidi-override;
                   text-align: center;
                   padding: 10px 28px;
                   background: linear-gradient(135deg, rgba(255,200,50,0.95), rgba(255,140,0,0.95));
@@ -296,16 +320,21 @@ Deno.serve(async (req) => {
       }
 
       // === Video clips track ===
+      // Use "contain" fit so the video is letterboxed/pillarboxed to match output — no crop
       const videoClips: any[] = [];
       let videoStart = 0;
       for (let i = 0; i < clipUrls.length; i++) {
         const sceneDur = scenes?.[i]?.duration || totalDuration / clipUrls.length;
         videoClips.push({
-          asset: { type: "video", src: clipUrls[i] },
+          asset: {
+            type: "video",
+            src: clipUrls[i],
+            volume: audioUrl ? 0.15 : 1, // duck original audio if music is added
+          },
           start: videoStart,
           length: clipUrls.length === 1 ? totalDuration : sceneDur,
+          fit: "contain", // ← KEY: no crop, letterbox/pillarbox to fit target aspect
           transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
-          effect: clipUrls.length > 1 ? "zoomIn" : undefined,
         });
         videoStart += sceneDur;
       }
@@ -319,8 +348,8 @@ Deno.serve(async (req) => {
             asset: {
               type: "html",
               html: `<div style="width:100%;height:100%;background:linear-gradient(160deg, ${bgColor} 0%, #1a1a2e 50%, #0d0d1a 100%);"></div>`,
-              width: 1920,
-              height: 1080,
+              width: outputConfig.width,
+              height: outputConfig.height,
             },
             start: 0,
             length: totalDuration,
@@ -343,12 +372,21 @@ Deno.serve(async (req) => {
         },
         output: {
           format: "mp4",
-          resolution: "hd",
+          resolution: outputConfig.resolution,
           fps: 30,
+          ...(orientation === "portrait" || orientation === "9:16"
+            ? { size: { width: 1080, height: 1920 } }
+            : {}),
         },
       };
 
-      console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 800));
+      console.log("Submitting Shotstack render:", JSON.stringify(renderBody).slice(0, 1200));
+      console.log("Render debug: orientation=" + (orientation || "default/landscape") +
+        " output=" + outputConfig.width + "x" + outputConfig.height +
+        " clips=" + clipUrls.length +
+        " subtitleSegs=" + (subtitleSegments?.length || 0) +
+        " logoUrl=" + (logoUrl ? "yes" : "no") +
+        " logoPlacement=" + JSON.stringify(logoPlacement || null));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -364,7 +402,18 @@ Deno.serve(async (req) => {
         if (response.ok) {
           const data = await response.json();
           return new Response(
-            JSON.stringify({ renderId: data.response?.id, status: "rendering", shotstackEnv: env }),
+            JSON.stringify({
+              renderId: data.response?.id,
+              status: "rendering",
+              shotstackEnv: env,
+              debug: {
+                orientation: orientation || "landscape",
+                outputSize: `${outputConfig.width}x${outputConfig.height}`,
+                logoPlacement: logoPlacement || null,
+                subtitleCount: subtitleSegments?.length || 0,
+                timelineJson: JSON.stringify(renderBody).slice(0, 2000),
+              },
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -373,7 +422,6 @@ Deno.serve(async (req) => {
         renderErrors.push(`${env}:${response.status} ${errText}`);
         console.error(`Shotstack render error (${env}):`, response.status, errText);
 
-        // Try next environment only for auth / scope mismatch or not found
         if (![401, 403, 404].includes(response.status)) {
           break;
         }
@@ -419,7 +467,6 @@ Deno.serve(async (req) => {
 
       const r = data.response;
 
-      // Shotstack returns "done" or "rendered" for completed renders
       const isDone = r.status === "done" || r.status === "rendered";
       const normalizedStatus = isDone ? "done" : r.status;
 
