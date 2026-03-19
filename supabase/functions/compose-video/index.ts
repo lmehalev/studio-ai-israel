@@ -810,9 +810,9 @@ Deno.serve(async (req) => {
           break;
         }
 
-        const errText = await response.text();
-        statusErrors.push(`${env}:${response.status} ${errText}`);
-        console.error(`Shotstack status error (${env}):`, response.status, errText);
+        await response.text();
+        statusErrors.push(`${env}:${response.status}`);
+        console.error(`Shotstack status error (${env}):`, response.status);
 
         if (![401, 403, 404].includes(response.status)) {
           break;
