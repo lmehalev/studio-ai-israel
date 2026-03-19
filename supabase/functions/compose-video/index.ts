@@ -281,7 +281,6 @@ function buildSubtitleHtmlAsset(
   style: SubtitleStyle,
   width: number,
   height: number,
-  fontUrl: string,
 ): string {
   const fontSize = style.fontSize || 30;
   const color = style.color || "#FFFFFF";
@@ -294,15 +293,7 @@ function buildSubtitleHtmlAsset(
   const lines = wrapText(text, maxCharsPerLine, 3);
   const safeLines = (lines.length > 0 ? lines : [text]).map(escapeXml).join("<br />");
 
-  return `<style>
-      @font-face {
-        font-family: 'HebrewEmbedded';
-        src: url('${fontUrl}') format('truetype');
-        font-style: normal;
-        font-weight: 100 900;
-      }
-    </style>
-    <div style="
+  return `<div style="
       width:${width}px;
       height:${height}px;
       box-sizing:border-box;
@@ -312,7 +303,7 @@ function buildSubtitleHtmlAsset(
       text-align:center;
       direction:rtl;
       unicode-bidi:bidi-override;
-      font-family:'HebrewEmbedded','Arial',sans-serif;
+      font-family:'Arial',sans-serif;
       font-size:${fontSize}px;
       font-weight:${fontWeight};
       color:${color};
@@ -327,34 +318,73 @@ function buildSubtitleHtmlAsset(
     ">${safeLines}</div>`;
 }
 
-function buildSubtitleClips(
+function buildSubtitleSvgAsset(
+  text: string,
+  style: SubtitleStyle,
+  width: number,
+  height: number,
+  font: any,
+): string {
+  const fontSize = style.fontSize || 30;
+  const color = style.color || "#FFFFFF";
+  const bgColor = style.bgColor || "rgba(0,0,0,0.65)";
+  const borderRadius = style.borderRadius ?? 16;
+  const padding = parsePadding(style.padding);
+
+  const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
+  const lines = wrapText(text, maxCharsPerLine, 3);
+  const safeLines = lines.length > 0 ? lines : [text];
+
+  const lineHeight = fontSize * 1.35;
+  const textBlockHeight = safeLines.length * lineHeight;
+  const firstBaseline = (height - textBlockHeight) / 2 + fontSize;
+
+  const pathElements = safeLines.map((line, index) => {
+    const baselineY = firstBaseline + index * lineHeight;
+    const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
+    return d ? `<path d="${d}" fill="${color}" />` : "";
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
+    ${pathElements}
+  </svg>`;
+}
+
+async function buildSubtitleClips(
   segments: SubtitleSegment[],
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
-  fontUrl: string,
-): any[] {
+): Promise<any[]> {
   const subWidth = Math.round(outputWidth * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
+  const font = await loadHebrewFont();
 
-  return segments
-    .filter((seg) => seg.text && seg.text.trim())
-    .map((seg) => ({
+  const cleanSegments = segments.filter((seg) => seg.text && seg.text.trim());
+
+  return Promise.all(cleanSegments.map(async (seg) => {
+    const svg = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
+    const hash = await sha1Hex(`${subWidth}x${subHeight}|${JSON.stringify(style || {})}|${seg.text}`);
+    const objectPath = `uploads/subtitle-overlays/${hash}.svg`;
+    const src = await uploadSubtitleSvg(svg, objectPath);
+
+    return {
       asset: {
-        type: "html",
-        html: buildSubtitleHtmlAsset(seg.text, style, subWidth, subHeight, fontUrl),
-        width: subWidth,
-        height: subHeight,
+        type: "image",
+        src,
       },
       start: seg.start,
       length: Math.max(0.5, seg.end - seg.start),
       position: "bottom",
       offset: { y: 0.08 },
+      scale: round2(subWidth / outputWidth),
       transition: {
         in: "slideUp",
         out: "fade",
       },
-    }));
+    };
+  }));
 }
 
 function buildStickerClips(stickers: StickerItem[]): any[] {
