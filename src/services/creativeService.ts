@@ -260,25 +260,53 @@ export const composeService = {
     orientation?: string;
     sourceWidth?: number;
     sourceHeight?: number;
-  }): Promise<{ renderId: string; status: string; shotstackEnv?: 'production' | 'stage'; debug?: any }> => {
+  }): Promise<{
+    renderId: string | null;
+    status: string;
+    outputUrl: string | null;
+    thumbnailUrl: string | null;
+    subtitleCount: number;
+    logoPlacementSummary: any;
+    shotstackEnv?: 'production' | 'stage';
+  }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
     });
     if (error) throw new Error(error.message || "שגיאה בהרכבת סרטון");
-    if (data?.error) throw new Error(data.error);
-    return data;
+
+    return {
+      renderId: data?.renderId ?? null,
+      status: data?.status ?? "failed:unknown",
+      outputUrl: data?.outputUrl ?? null,
+      thumbnailUrl: data?.thumbnailUrl ?? null,
+      subtitleCount: Number(data?.subtitleCount) || 0,
+      logoPlacementSummary: data?.logoPlacementSummary ?? null,
+      shotstackEnv: data?.shotstackEnv,
+    };
   },
 
   checkStatus: async (
     renderId: string,
     shotstackEnv?: 'production' | 'stage'
-  ): Promise<{ status: string; url: string | null; progress: number }> => {
+  ): Promise<{ status: string; url: string | null; outputUrl: string | null; thumbnailUrl: string | null; progress: number }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "check_status", renderId, shotstackEnv },
     });
     if (error) throw new Error(error.message || "שגיאה בבדיקת סטטוס");
-    if (data?.error) throw new Error(data.error);
-    return data;
+
+    const normalizedStatus = data?.status ?? "failed:unknown";
+    const outputUrl = data?.outputUrl ?? null;
+
+    return {
+      status: normalizedStatus,
+      url: outputUrl,
+      outputUrl,
+      thumbnailUrl: data?.thumbnailUrl ?? null,
+      progress:
+        normalizedStatus === "done" ? 100 :
+        normalizedStatus === "rendering" ? 50 :
+        normalizedStatus === "fetching" ? 20 : 10,
+    };
   },
 };
 
