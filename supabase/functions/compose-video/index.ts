@@ -63,6 +63,27 @@ interface OutputConfig {
   resolution: string;
 }
 
+interface LogoPlacementSummary {
+  outputSize: { width: number; height: number };
+  contentRectPx: { x: number; y: number; w: number; h: number };
+  logoPxX: number;
+  logoPxY: number;
+  logoPxW: number;
+  logoPxH: number;
+}
+
+interface ComposeRenderResponse {
+  renderId: string | null;
+  status: string;
+  outputUrl: string | null;
+  thumbnailUrl: string | null;
+  subtitleCount: number;
+  logoPlacementSummary: LogoPlacementSummary | null;
+}
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
 let cachedHebrewFontUrl: string | null = null;
 
 async function ensureHebrewFontUrl(): Promise<string> {
@@ -383,12 +404,6 @@ function buildLogoClip(
       logoPxY: round2(logoPxY),
       logoPxW: round2(logoPxW),
       logoPxH: round2(logoPxH),
-      normalized: {
-        offsetX: round2(offsetX),
-        offsetY: round2(offsetY),
-        scale: round2(logoPxW / outputWidth),
-      },
-      input: { xPct, yPct, scalePct, opacity },
     },
   };
 }
@@ -627,25 +642,17 @@ Deno.serve(async (req) => {
         },
       };
 
-      const debugObject = {
-        orientation: orientation || "landscape",
-        outputSize: { width: outputConfig.width, height: outputConfig.height },
-        sourceSize: {
-          width: Number(sourceWidth) || null,
-          height: Number(sourceHeight) || null,
-        },
-        contentRectPx: {
-          x: round2(contentRect.x),
-          y: round2(contentRect.y),
-          w: round2(contentRect.w),
-          h: round2(contentRect.h),
-        },
-        logo: logoDebug,
-        subtitleCount: subtitleSegments?.length || 0,
+      const subtitleCount = subtitleSegments?.length || 0;
+      const logoPlacementSummary = logoDebug as LogoPlacementSummary | null;
+
+      const responseSummary: Omit<ComposeRenderResponse, "renderId" | "status"> = {
+        outputUrl: null,
+        thumbnailUrl: null,
+        subtitleCount,
+        logoPlacementSummary,
       };
 
       console.log("Submitting Shotstack render (payload KB):", Math.round(JSON.stringify(renderBody).length / 1024));
-      console.log("Compose debug object:", JSON.stringify(debugObject));
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -660,30 +667,36 @@ Deno.serve(async (req) => {
 
         if (response.ok) {
           const data = await response.json();
-          return new Response(
-            JSON.stringify({
-              renderId: data.response?.id,
-              status: "rendering",
-              shotstackEnv: env,
-              debug: debugObject,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
+          const renderResponse: ComposeRenderResponse = {
+            renderId: data.response?.id ?? null,
+            status: "rendering",
+            ...responseSummary,
+          };
+
+          return new Response(JSON.stringify(renderResponse), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
-        const errText = await response.text();
-        renderErrors.push(`${env}:${response.status} ${errText}`);
-        console.error(`Shotstack render error (${env}):`, response.status, errText);
+        // Always consume provider body but never echo it back to the client
+        await response.text();
+        renderErrors.push(`${env}:${response.status}`);
+        console.error(`Shotstack render error (${env}):`, response.status);
 
         if (![401, 403, 404].includes(response.status)) {
           break;
         }
       }
 
-      return new Response(
-        JSON.stringify({ error: `שגיאה בהרכבת הסרטון: ${renderErrors.join(" | ")}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      const failedResponse: ComposeRenderResponse = {
+        renderId: null,
+        status: `failed:${renderErrors.join(",") || "unknown"}`,
+        ...responseSummary,
+      };
+
+      return new Response(JSON.stringify(failedResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (action === "check_status") {
@@ -721,28 +734,46 @@ Deno.serve(async (req) => {
       const isDone = r.status === "done" || r.status === "rendered";
       const normalizedStatus = isDone ? "done" : r.status;
 
-      return new Response(
-        JSON.stringify({
-          status: normalizedStatus,
-          url: r.url || null,
-          progress:
-            isDone ? 100 :
-            r.status === "rendering" ? 50 :
-            r.status === "fetching" ? 20 : 10,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      const statusResponse: ComposeRenderResponse = {
+        renderId: String(renderId),
+        status: normalizedStatus,
+        outputUrl: r.url || null,
+        thumbnailUrl: r.poster || null,
+        subtitleCount: Number(params.subtitleCount) || 0,
+        logoPlacementSummary: null,
+      };
+
+      return new Response(JSON.stringify(statusResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(JSON.stringify({ error: "פעולה לא מוכרת" }), {
-      status: 400,
+    const unknownActionResponse: ComposeRenderResponse = {
+      renderId: null,
+      status: "failed:unknown_action",
+      outputUrl: null,
+      thumbnailUrl: null,
+      subtitleCount: 0,
+      logoPlacementSummary: null,
+    };
+
+    return new Response(JSON.stringify(unknownActionResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("compose-video error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "שגיאה בהרכבת סרטון" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+
+    const failureResponse: ComposeRenderResponse = {
+      renderId: null,
+      status: `failed:${e instanceof Error ? e.message.slice(0, 80) : "compose_error"}`,
+      outputUrl: null,
+      thumbnailUrl: null,
+      subtitleCount: 0,
+      logoPlacementSummary: null,
+    };
+
+    return new Response(JSON.stringify(failureResponse), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
