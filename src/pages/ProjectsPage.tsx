@@ -249,7 +249,7 @@ export default function ProjectsPage() {
                   {/* Thumbnail */}
                   <div className="aspect-video bg-muted/30 flex items-center justify-center overflow-hidden">
                     {thumb ? (
-                      <img src={thumb} alt={p.name} className="w-full h-full object-cover" />
+                      <ThumbnailImg src={thumb} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <ImageIcon className="w-10 h-10 text-muted-foreground/40" />
                     )}
