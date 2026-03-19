@@ -404,12 +404,6 @@ function buildLogoClip(
       logoPxY: round2(logoPxY),
       logoPxW: round2(logoPxW),
       logoPxH: round2(logoPxH),
-      normalized: {
-        offsetX: round2(offsetX),
-        offsetY: round2(offsetY),
-        scale: round2(logoPxW / outputWidth),
-      },
-      input: { xPct, yPct, scalePct, opacity },
     },
   };
 }
