@@ -808,6 +808,32 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         )}
       </div>
 
+      {transcribeDebug && (
+        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs">
+          <div className="font-semibold text-foreground">דיבאג תמלול</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5" dir="ltr">
+            <div><span className="text-muted-foreground">provider:</span> {transcribeDebug.provider}</div>
+            <div><span className="text-muted-foreground">status:</span> {transcribeDebug.status}</div>
+            <div className="md:col-span-2 break-all"><span className="text-muted-foreground">videoUrl:</span> {transcribeDebug.videoUrl}</div>
+            <div className="md:col-span-2 break-all"><span className="text-muted-foreground">sourceAudioUrl:</span> {transcribeDebug.sourceAudioUrl}</div>
+            <div><span className="text-muted-foreground">videoDuration:</span> {transcribeDebug.videoDuration.toFixed(3)}s</div>
+            <div><span className="text-muted-foreground">totalCues:</span> {transcribeDebug.totalCueCount}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-muted-foreground">First 5 cues:</div>
+            <div className="space-y-1" dir="ltr">
+              {transcribeDebug.firstCues.map((cue, idx) => (
+                <div key={`${cue.startSec}-${cue.endSec}-${idx}`} className="bg-background border border-border rounded px-2 py-1">
+                  <span className="text-muted-foreground">#{idx + 1}</span>{' '}
+                  {cue.startSec.toFixed(3)} → {cue.endSec.toFixed(3)} | {cue.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Subtitle segments with gap controls */}
       {subtitleSegments.length > 0 ? (
         <div className="space-y-1">
