@@ -30,13 +30,17 @@ export default function CreativeStudioPage() {
     brandService.getAllAsync().then(dbBrands => {
       if (dbBrands.length > 0) {
         setBrands(dbBrands);
-        // Also sync to localStorage for backward compat
         brandService.save(dbBrands);
       } else {
-        // Fallback to localStorage + migrate
         const local = brandService.getAll();
         setBrands(local);
-        if (local.length > 0) brandService.migrateLocalToDb();
+        if (local.length > 0) {
+          brandService.migrateLocalToDb();
+        } else {
+          // No brands anywhere — show migration banner on custom domains
+          const isCustomDomain = !window.location.hostname.includes('lovable.app');
+          if (isCustomDomain) setShowMigrationBanner(true);
+        }
       }
     });
   }, []);
