@@ -336,14 +336,80 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return { x: offsetX, y: offsetY, w: contentW, h: contentH };
   })();
 
-  // Logo
+  // Logo — free placement mode
   const [logoUrl, setLogoUrl] = useState<string | null>(activeBrand?.logo || null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPosition, setLogoPosition] = useState<LogoPosition>('topRight');
-  const [logoSize, setLogoSize] = useState(8); // percent of video width
-  const [logoMargin, setLogoMargin] = useState(4); // percent
+  const [logoSize, setLogoSize] = useState(10); // percent of video width (2-30)
+  const [logoMargin, setLogoMargin] = useState(4); // percent (used only for corner presets)
   const [logoOpacity, setLogoOpacity] = useState(90); // 0-100
+  const [logoXPct, setLogoXPct] = useState(88); // 0-100 (left edge of logo as % of contentRect width)
+  const [logoYPct, setLogoYPct] = useState(4);  // 0-100 (top edge of logo as % of contentRect height)
+  const [logoManualMode, setLogoManualMode] = useState(false);
+  const [logoDragging, setLogoDragging] = useState(false);
+  const logoDragStart = useRef<{ mx: number; my: number; sx: number; sy: number } | null>(null);
   const [showStoragePicker, setShowStoragePicker] = useState(false);
+
+  // Snap-to-corner helper: sets logoXPct/logoYPct based on corner + margin
+  const snapLogoToCorner = (corner: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft') => {
+    const m = logoMargin;
+    const s = logoSize;
+    switch (corner) {
+      case 'topRight': setLogoXPct(100 - m - s); setLogoYPct(m); break;
+      case 'topLeft': setLogoXPct(m); setLogoYPct(m); break;
+      case 'bottomRight': setLogoXPct(100 - m - s); setLogoYPct(100 - m - s); break;
+      case 'bottomLeft': setLogoXPct(m); setLogoYPct(100 - m - s); break;
+    }
+    setLogoPosition(corner);
+  };
+
+  // Initialize X/Y from default corner on first mount
+  useEffect(() => {
+    if (!logoManualMode && logoPosition !== 'manual') {
+      snapLogoToCorner(logoPosition as any);
+    }
+  }, []);
+
+  // Logo drag handlers
+  const handleLogoDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    logoDragStart.current = { mx: clientX, my: clientY, sx: logoXPct, sy: logoYPct };
+    setLogoDragging(true);
+    setLogoManualMode(true);
+    setLogoPosition('manual');
+  };
+
+  useEffect(() => {
+    if (!logoDragging) return;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!logoDragStart.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const dx = clientX - logoDragStart.current.mx;
+      const dy = clientY - logoDragStart.current.my;
+      const dxPct = (dx / contentRect.w) * 100;
+      const dyPct = (dy / contentRect.h) * 100;
+      setLogoXPct(Math.max(0, Math.min(100 - logoSize, logoDragStart.current.sx + dxPct)));
+      setLogoYPct(Math.max(0, Math.min(100 - logoSize, logoDragStart.current.sy + dyPct)));
+    };
+    const onUp = () => {
+      setLogoDragging(false);
+      logoDragStart.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, [logoDragging, contentRect.w, contentRect.h, logoSize]);
 
   // Stickers
   const [stickers, setStickers] = useState<StickerOverlay[]>([]);
