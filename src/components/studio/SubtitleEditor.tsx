@@ -179,6 +179,8 @@ interface SubtitlePlaybackDebug {
   startSec: number | null;
   endSec: number | null;
   playError: string | null;
+  activeTimeupdateListeners: number;
+  timeupdateEventsPerSecond: number;
 }
 
 // Step names
@@ -295,14 +297,21 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   };
 
   const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
-  const segEndRef = useRef<number | null>(null);
+  const [activeCueIndex, setActiveCueIndex] = useState<number | null>(null);
+  const cuePlaybackRef = useRef<{ index: number; startSec: number; endSec: number } | null>(null);
+  const activeCueIndexRef = useRef<number | null>(null);
+  const adjustedSegmentsRef = useRef<SubtitleSegment[]>([]);
   const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
+  const timeupdateWindowRef = useRef({ startedAt: 0, count: 0 });
+  const debugThrottleRef = useRef(0);
   const [playbackDebug, setPlaybackDebug] = useState<SubtitlePlaybackDebug>({
     readyState: 0,
     currentTime: 0,
     startSec: null,
     endSec: null,
     playError: null,
+    activeTimeupdateListeners: 0,
+    timeupdateEventsPerSecond: 0,
   });
 
   const updatePlaybackDebug = useCallback((patch: Partial<SubtitlePlaybackDebug>) => {
@@ -327,25 +336,132 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     return `שגיאת ניגון: ${String(error)}`;
   }, []);
 
-  const clearSegmentPlayback = useCallback((video?: HTMLVideoElement | null) => {
+  const clearCuePlaybackState = useCallback(() => {
+    cuePlaybackRef.current = null;
+    setPlayingSegIndex(null);
+  }, []);
+
+  useEffect(() => {
+    adjustedSegmentsRef.current = getAdjustedSegments();
+  }, [getAdjustedSegments]);
+
+  const detachTimeupdateListener = useCallback((video?: HTMLVideoElement | null) => {
     const targetVideo = video ?? videoPreviewRef.current;
     if (targetVideo && playbackListenerRef.current) {
       targetVideo.removeEventListener('timeupdate', playbackListenerRef.current);
     }
 
     playbackListenerRef.current = null;
-    segEndRef.current = null;
-    setPlayingSegIndex(null);
-  }, []);
+    timeupdateWindowRef.current = { startedAt: 0, count: 0 };
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 0,
+      timeupdateEventsPerSecond: 0,
+    });
+  }, [updatePlaybackDebug]);
+
+  const attachTimeupdateListener = useCallback((video: HTMLVideoElement) => {
+    if (playbackListenerRef.current) {
+      video.removeEventListener('timeupdate', playbackListenerRef.current);
+      playbackListenerRef.current = null;
+    }
+
+    timeupdateWindowRef.current = { startedAt: performance.now(), count: 0 };
+
+    const onTimeUpdate = () => {
+      const now = performance.now();
+      const currentTime = video.currentTime;
+
+      timeupdateWindowRef.current.count += 1;
+      const elapsed = now - timeupdateWindowRef.current.startedAt;
+      if (elapsed >= 1000) {
+        const eventsPerSecond = Number((timeupdateWindowRef.current.count / (elapsed / 1000)).toFixed(1));
+        timeupdateWindowRef.current = { startedAt: now, count: 0 };
+        updatePlaybackDebug({
+          activeTimeupdateListeners: 1,
+          timeupdateEventsPerSecond: eventsPerSecond,
+        });
+      }
+
+      const segments = adjustedSegmentsRef.current;
+      const nextCueIdx = segments.findIndex((s) => currentTime >= s.start && currentTime <= s.end);
+      const normalizedCueIdx = nextCueIdx >= 0 ? nextCueIdx : null;
+
+      if (normalizedCueIdx !== activeCueIndexRef.current) {
+        activeCueIndexRef.current = normalizedCueIdx;
+        setActiveCueIndex(normalizedCueIdx);
+        setCurrentSubtitle(normalizedCueIdx !== null ? segments[normalizedCueIdx].text : '');
+      }
+
+      const playbackWindow = cuePlaybackRef.current;
+      if (playbackWindow) {
+        const stopAt = Math.max(playbackWindow.startSec, playbackWindow.endSec - 0.05);
+        if (currentTime >= stopAt) {
+          video.pause();
+          const boundedEnd = Number.isFinite(video.duration)
+            ? Math.min(playbackWindow.endSec, video.duration)
+            : playbackWindow.endSec;
+          video.currentTime = boundedEnd;
+          clearCuePlaybackState();
+          updatePlaybackDebug({
+            readyState: video.readyState,
+            currentTime: boundedEnd,
+            startSec: null,
+            endSec: null,
+          });
+          return;
+        }
+      }
+
+      if (now - debugThrottleRef.current >= 250) {
+        debugThrottleRef.current = now;
+        updatePlaybackDebug({
+          readyState: video.readyState,
+          currentTime,
+        });
+      }
+    };
+
+    playbackListenerRef.current = onTimeUpdate;
+    video.addEventListener('timeupdate', onTimeUpdate);
+    updatePlaybackDebug({
+      activeTimeupdateListeners: 1,
+      readyState: video.readyState,
+      currentTime: video.currentTime,
+    });
+  }, [clearCuePlaybackState, updatePlaybackDebug]);
+
+  const setVideoPreviewElement = useCallback((node: HTMLVideoElement | null) => {
+    const previousVideo = videoPreviewRef.current;
+
+    if (previousVideo && playbackListenerRef.current) {
+      previousVideo.removeEventListener('timeupdate', playbackListenerRef.current);
+      playbackListenerRef.current = null;
+    }
+
+    videoPreviewRef.current = node;
+
+    if (!node) {
+      timeupdateWindowRef.current = { startedAt: 0, count: 0 };
+      updatePlaybackDebug({
+        activeTimeupdateListeners: 0,
+        timeupdateEventsPerSecond: 0,
+      });
+      return;
+    }
+
+    attachTimeupdateListener(node);
+  }, [attachTimeupdateListener, updatePlaybackDebug]);
 
   useEffect(() => {
     return () => {
-      clearSegmentPlayback(videoPreviewRef.current);
+      detachTimeupdateListener(videoPreviewRef.current);
+      clearCuePlaybackState();
+      activeCueIndexRef.current = null;
       if (videoPreviewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(videoPreviewUrl);
       }
     };
-  }, [clearSegmentPlayback, videoPreviewUrl]);
+  }, [clearCuePlaybackState, detachTimeupdateListener, videoPreviewUrl]);
 
   const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
     if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
@@ -465,7 +581,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
 
     try {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       video.pause();
       setShowPreview(true);
 
@@ -480,35 +596,18 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       await waitForVideoMetadata(video);
       await seekVideoTo(video, start);
 
-      segEndRef.current = end;
+      cuePlaybackRef.current = { index, startSec: start, endSec: end };
       setPlayingSegIndex(index);
-
-      const onTimeUpdate = () => {
-        updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
-
-        if (segEndRef.current === null) return;
-        const stopAt = segEndRef.current - 0.05 > start ? segEndRef.current - 0.05 : segEndRef.current;
-
-        if (video.currentTime >= stopAt) {
-          video.pause();
-          const boundedEnd = Number.isFinite(video.duration)
-            ? Math.min(segEndRef.current, video.duration)
-            : segEndRef.current;
-          video.currentTime = boundedEnd;
-          updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
-          clearSegmentPlayback(video);
-        }
-      };
-
-      playbackListenerRef.current = onTimeUpdate;
-      video.addEventListener('timeupdate', onTimeUpdate);
+      activeCueIndexRef.current = index;
+      setActiveCueIndex(index);
+      setCurrentSubtitle(seg.text);
 
       const playPromise = video.play();
       if (playPromise !== undefined) {
         await playPromise;
       }
     } catch (error) {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       const playbackError = formatPlaybackError(error);
       updatePlaybackDebug({
         readyState: video.readyState,
@@ -534,9 +633,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
 
     try {
-      clearSegmentPlayback(video);
+      clearCuePlaybackState();
       setShowPreview(true);
       setCurrentSubtitle('');
+      activeCueIndexRef.current = null;
+      setActiveCueIndex(null);
 
       updatePlaybackDebug({
         readyState: video.readyState,
@@ -804,7 +905,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     videoPreviewUrl ? (
       <div className="rounded-xl overflow-hidden border border-border relative bg-black">
         <video
-          ref={videoPreviewRef}
+          ref={setVideoPreviewElement}
           src={videoPreviewUrl}
           controls
           preload="metadata"
@@ -816,33 +917,32 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               currentTime: videoPreviewRef.current.currentTime,
             });
           }}
-          onTimeUpdate={() => {
-            if (!videoPreviewRef.current) return;
-            const t = videoPreviewRef.current.currentTime;
-            const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
-            setCurrentSubtitle(active?.text || '');
-            updatePlaybackDebug({
-              readyState: videoPreviewRef.current.readyState,
-              currentTime: t,
-            });
-          }}
           onPause={() => {
             if (!videoPreviewRef.current) return;
+            const activePlayback = cuePlaybackRef.current;
+            if (activePlayback && videoPreviewRef.current.currentTime < activePlayback.endSec - 0.05) {
+              clearCuePlaybackState();
+              updatePlaybackDebug({ startSec: null, endSec: null });
+            }
+
             updatePlaybackDebug({
               readyState: videoPreviewRef.current.readyState,
               currentTime: videoPreviewRef.current.currentTime,
+              timeupdateEventsPerSecond: 0,
             });
-
-            if (playbackListenerRef.current) {
-              clearSegmentPlayback(videoPreviewRef.current);
-            }
           }}
           onEnded={() => {
             if (!videoPreviewRef.current) return;
-            clearSegmentPlayback(videoPreviewRef.current);
+            clearCuePlaybackState();
+            activeCueIndexRef.current = null;
+            setActiveCueIndex(null);
+            setCurrentSubtitle('');
             updatePlaybackDebug({
               readyState: videoPreviewRef.current.readyState,
               currentTime: videoPreviewRef.current.currentTime,
+              startSec: null,
+              endSec: null,
+              timeupdateEventsPerSecond: 0,
             });
           }}
         />
@@ -1052,6 +1152,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
             <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
             <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
+            <div><span className="text-muted-foreground">activeListeners:</span> {playbackDebug.activeTimeupdateListeners}</div>
+            <div><span className="text-muted-foreground">timeupdate/sec:</span> {playbackDebug.timeupdateEventsPerSecond.toFixed(1)}</div>
           </div>
           {playbackDebug.playError && (
             <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
@@ -1098,7 +1200,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                       <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
                       <div className="mr-auto flex items-center gap-0.5">
                         <button onClick={() => seekToSegment(seg, i)} title="נגן"
-                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", playingSegIndex === i && "text-primary bg-primary/10")}>
+                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", (playingSegIndex === i || activeCueIndex === i) && "text-primary bg-primary/10")}>
                           <Play className="w-3 h-3" />
                         </button>
                         <button onClick={() => splitSegment(i)} title="פצל"
