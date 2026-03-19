@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -7,6 +7,16 @@ import { cn } from '@/lib/utils';
 import { projectService, getProjectSubActivity, type ProjectRow, type ProjectOutputRow } from '@/services/projectService';
 import { brandService, type Brand } from '@/services/creativeService';
 import { toast } from 'sonner';
+
+const ThumbnailImg = ({ src, alt, className }: { src: string; alt: string; className?: string }) => {
+  const [broken, setBroken] = useState(false);
+  const handleError = useCallback(() => {
+    if (import.meta.env.DEV) console.warn('[Thumbnail] Broken URL:', src);
+    setBroken(true);
+  }, [src]);
+  if (broken) return <ImageIcon className="w-5 h-5 text-muted-foreground" />;
+  return <img src={src} alt={alt} className={className} onError={handleError} />;
+};
 
 export default function ProjectsPage() {
   const [view, setView] = useState<'grid' | 'list'>('list');
