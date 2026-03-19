@@ -162,6 +162,17 @@ interface SubtitleEditorProps {
   onBack: () => void;
 }
 
+interface SubtitleTranscribeDebug {
+  provider: string;
+  status: number;
+  videoUrl: string;
+  sourceAudioUrl: string;
+  videoDuration: number;
+  totalCueCount: number;
+  firstCues: CaptionCue[];
+  providerBody?: string;
+}
+
 // Step names
 const STEPS = [
   { key: 'upload', label: 'העלאה', icon: Upload },
