@@ -1150,6 +1150,8 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
             <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
             <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
             <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
+            <div><span className="text-muted-foreground">activeListeners:</span> {playbackDebug.activeTimeupdateListeners}</div>
+            <div><span className="text-muted-foreground">timeupdate/sec:</span> {playbackDebug.timeupdateEventsPerSecond.toFixed(1)}</div>
           </div>
           {playbackDebug.playError && (
             <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
@@ -1196,7 +1198,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
                       <span className="text-[10px] text-muted-foreground">({(seg.end - seg.start).toFixed(1)}s)</span>
                       <div className="mr-auto flex items-center gap-0.5">
                         <button onClick={() => seekToSegment(seg, i)} title="נגן"
-                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", playingSegIndex === i && "text-primary bg-primary/10")}>
+                          className={cn("p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground", (playingSegIndex === i || activeCueIndex === i) && "text-primary bg-primary/10")}>
                           <Play className="w-3 h-3" />
                         </button>
                         <button onClick={() => splitSegment(i)} title="פצל"
