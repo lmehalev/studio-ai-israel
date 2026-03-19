@@ -182,49 +182,44 @@ function buildPublicStorageUrl(supabaseUrl: string, objectPath: string): string 
   return `${supabaseUrl}/storage/v1/object/public/media/${objectPath}`;
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
+let storageClient: ReturnType<typeof createClient> | null = null;
+
+function getStorageClient() {
+  if (storageClient) return storageClient;
+
+  const { supabaseUrl, serviceKey } = getStorageConfig();
+  storageClient = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return storageClient;
 }
 
 async function uploadSubtitleSvg(svg: string, objectPath: string): Promise<string> {
   const cached = subtitleAssetUrlCache.get(objectPath);
   if (cached) return cached;
 
+  const supabase = getStorageClient();
   const svgBytes = new TextEncoder().encode(svg);
 
-  try {
-    const { supabaseUrl, serviceKey } = getStorageConfig();
-    const publicUrl = buildPublicStorageUrl(supabaseUrl, objectPath);
-
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/media/${objectPath}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${serviceKey}`,
-        "Content-Type": "image/svg+xml; charset=utf-8",
-        "x-upsert": "true",
-      },
-      body: svgBytes,
+  const { error } = await supabase.storage
+    .from("media")
+    .upload(objectPath, svgBytes, {
+      contentType: "image/svg+xml; charset=utf-8",
+      upsert: true,
+      cacheControl: "31536000",
     });
 
-    if (uploadRes.ok) {
-      subtitleAssetUrlCache.set(objectPath, publicUrl);
-      return publicUrl;
-    }
-
-    const storageError = await uploadRes.text();
-    console.error(`Subtitle SVG upload failed (${uploadRes.status})`, storageError.slice(0, 180));
-  } catch (error) {
-    console.error("Subtitle SVG upload threw error, using data URI fallback", error);
+  if (error) {
+    throw new Error(`Failed uploading subtitle overlay (${error.message.slice(0, 120)})`);
   }
 
-  const dataUri = `data:image/svg+xml;base64,${toBase64(svgBytes)}`;
-  subtitleAssetUrlCache.set(objectPath, dataUri);
-  return dataUri;
+  const { data } = supabase.storage.from("media").getPublicUrl(objectPath);
+  if (!data?.publicUrl) {
+    throw new Error("Failed generating public URL for subtitle overlay");
+  }
+
+  subtitleAssetUrlCache.set(objectPath, data.publicUrl);
+  return data.publicUrl;
 }
 
 function escapeXml(value: string): string {
