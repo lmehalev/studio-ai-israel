@@ -173,6 +173,14 @@ interface SubtitleTranscribeDebug {
   providerBody?: string;
 }
 
+interface SubtitlePlaybackDebug {
+  readyState: number;
+  currentTime: number;
+  startSec: number | null;
+  endSec: number | null;
+  playError: string | null;
+}
+
 // Step names
 const STEPS = [
   { key: 'upload', label: 'העלאה', icon: Upload },
@@ -289,14 +297,55 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [playingSegIndex, setPlayingSegIndex] = useState<number | null>(null);
   const segEndRef = useRef<number | null>(null);
   const playbackListenerRef = useRef<((this: HTMLVideoElement, ev: Event) => any) | null>(null);
+  const [playbackDebug, setPlaybackDebug] = useState<SubtitlePlaybackDebug>({
+    readyState: 0,
+    currentTime: 0,
+    startSec: null,
+    endSec: null,
+    playError: null,
+  });
+
+  const updatePlaybackDebug = useCallback((patch: Partial<SubtitlePlaybackDebug>) => {
+    setPlaybackDebug((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const formatPlaybackError = useCallback((error: unknown) => {
+    if (error instanceof DOMException) {
+      if (error.name === 'NotAllowedError') {
+        return `ניגון נחסם על ידי הדפדפן (${error.name}): ${error.message}`;
+      }
+      if (error.name === 'AbortError') {
+        return `הניגון הופסק לפני שהתחיל (${error.name}): ${error.message}`;
+      }
+      return `שגיאת ניגון (${error.name}): ${error.message}`;
+    }
+
+    if (error instanceof Error) {
+      return `שגיאת ניגון (${error.name}): ${error.message}`;
+    }
+
+    return `שגיאת ניגון: ${String(error)}`;
+  }, []);
+
+  const clearSegmentPlayback = useCallback((video?: HTMLVideoElement | null) => {
+    const targetVideo = video ?? videoPreviewRef.current;
+    if (targetVideo && playbackListenerRef.current) {
+      targetVideo.removeEventListener('timeupdate', playbackListenerRef.current);
+    }
+
+    playbackListenerRef.current = null;
+    segEndRef.current = null;
+    setPlayingSegIndex(null);
+  }, []);
 
   useEffect(() => {
     return () => {
+      clearSegmentPlayback(videoPreviewRef.current);
       if (videoPreviewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(videoPreviewUrl);
       }
     };
-  }, [videoPreviewUrl]);
+  }, [clearSegmentPlayback, videoPreviewUrl]);
 
   const waitForVideoMetadata = useCallback(async (video: HTMLVideoElement) => {
     if (video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 0) {
@@ -304,24 +353,75 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
     }
 
     await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('טעינת הווידאו נכשלה - לא התקבל loadedmetadata בזמן'));
+      }, 5000);
+
       const onLoaded = () => {
         cleanup();
         resolve();
       };
+
       const onError = () => {
         cleanup();
         reject(new Error('לא ניתן לטעון את מטא-דאטה של הווידאו'));
       };
+
       const cleanup = () => {
+        clearTimeout(timeoutId);
         video.removeEventListener('loadedmetadata', onLoaded);
         video.removeEventListener('error', onError);
       };
 
       video.addEventListener('loadedmetadata', onLoaded, { once: true });
       video.addEventListener('error', onError, { once: true });
-      video.load();
+      if (video.networkState === HTMLMediaElement.NETWORK_EMPTY) {
+        video.load();
+      }
     });
   }, []);
+
+  const seekVideoTo = useCallback(async (video: HTMLVideoElement, targetSec: number) => {
+    const boundedTarget = Number.isFinite(video.duration) && video.duration > 0
+      ? Math.min(Math.max(0, targetSec), Math.max(video.duration - 0.01, 0))
+      : Math.max(0, targetSec);
+
+    if (Math.abs(video.currentTime - boundedTarget) <= 0.03) {
+      video.currentTime = boundedTarget;
+      updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('הווידאו לא הצליח להגיע לזמן המבוקש'));
+      }, 3000);
+
+      const onSeeked = () => {
+        cleanup();
+        resolve();
+      };
+
+      const onError = () => {
+        cleanup();
+        reject(new Error('אירעה שגיאה בעת קפיצה למקטע'));
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        video.removeEventListener('seeked', onSeeked);
+        video.removeEventListener('error', onError);
+      };
+
+      video.addEventListener('seeked', onSeeked, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      video.currentTime = boundedTarget;
+    });
+
+    updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
+  }, [updatePlaybackDebug]);
 
   const ensureUploadedVideoUrl = useCallback(async () => {
     if (uploadedVideoUrl) return uploadedVideoUrl;
@@ -346,51 +446,124 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
       return;
     }
 
-    const start = Math.max(0, Math.min(seg.start, seg.end) + subtitleOffset);
-    const end = Math.max(seg.start, seg.end) + subtitleOffset;
+    const rawStart = seg.start + subtitleOffset;
+    const rawEnd = seg.end + subtitleOffset;
+    const start = Math.max(0, Math.min(rawStart, rawEnd));
+    const end = Math.max(rawStart, rawEnd);
 
     if (!(end > start)) {
-      toast.error(`טווח לא תקין לכתובית: התחלה ${start.toFixed(3)}, סיום ${end.toFixed(3)}`);
+      const err = `טווח לא תקין לכתובית: התחלה ${start.toFixed(3)}, סיום ${end.toFixed(3)}`;
+      updatePlaybackDebug({
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+        startSec: start,
+        endSec: end,
+        playError: err,
+      });
+      toast.error(err);
       return;
     }
 
-    if (playbackListenerRef.current) {
-      video.removeEventListener('timeupdate', playbackListenerRef.current);
-      playbackListenerRef.current = null;
+    try {
+      clearSegmentPlayback(video);
+      video.pause();
+      setShowPreview(true);
+
+      updatePlaybackDebug({
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+        startSec: start,
+        endSec: end,
+        playError: null,
+      });
+
+      await waitForVideoMetadata(video);
+      await seekVideoTo(video, start);
+
+      segEndRef.current = end;
+      setPlayingSegIndex(index);
+
+      const onTimeUpdate = () => {
+        updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
+
+        if (segEndRef.current === null) return;
+        const stopAt = segEndRef.current - 0.05 > start ? segEndRef.current - 0.05 : segEndRef.current;
+
+        if (video.currentTime >= stopAt) {
+          video.pause();
+          const boundedEnd = Number.isFinite(video.duration)
+            ? Math.min(segEndRef.current, video.duration)
+            : segEndRef.current;
+          video.currentTime = boundedEnd;
+          updatePlaybackDebug({ readyState: video.readyState, currentTime: video.currentTime });
+          clearSegmentPlayback(video);
+        }
+      };
+
+      playbackListenerRef.current = onTimeUpdate;
+      video.addEventListener('timeupdate', onTimeUpdate);
+
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+      }
+    } catch (error) {
+      clearSegmentPlayback(video);
+      const playbackError = formatPlaybackError(error);
+      updatePlaybackDebug({
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+        startSec: start,
+        endSec: end,
+        playError: playbackError,
+      });
+      toast.error(playbackError);
+    }
+  };
+
+  const handlePlayFullVideo = async () => {
+    const video = videoPreviewRef.current;
+    if (!video) {
+      toast.error('הווידאו עדיין לא נטען');
+      return;
     }
 
-    segEndRef.current = end;
-    setPlayingSegIndex(index);
-    setShowPreview(true);
-
-    const onTimeUpdate = () => {
-      if (segEndRef.current !== null && video.currentTime >= segEndRef.current) {
-        video.pause();
-        segEndRef.current = null;
-        setPlayingSegIndex(null);
-        if (playbackListenerRef.current) {
-          video.removeEventListener('timeupdate', playbackListenerRef.current);
-          playbackListenerRef.current = null;
-        }
-      }
-    };
-
-    playbackListenerRef.current = onTimeUpdate;
-    video.addEventListener('timeupdate', onTimeUpdate);
+    if (!video.src) {
+      toast.error('אין מקור וידאו תקין לניגון מלא');
+      return;
+    }
 
     try {
+      clearSegmentPlayback(video);
+      setShowPreview(true);
+      setCurrentSubtitle('');
+
+      updatePlaybackDebug({
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+        startSec: null,
+        endSec: null,
+        playError: null,
+      });
+
       await waitForVideoMetadata(video);
-      video.currentTime = start;
-      await video.play();
-    } catch (err: any) {
-      if (playbackListenerRef.current) {
-        video.removeEventListener('timeupdate', playbackListenerRef.current);
-        playbackListenerRef.current = null;
+
+      if (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.1) {
+        await seekVideoTo(video, 0);
       }
-      segEndRef.current = null;
-      setPlayingSegIndex(null);
-      const details = err instanceof Error ? err.message : String(err);
-      toast.error(`שגיאת ניגון מקטע: ${details}`);
+
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+      }
+    } catch (error) {
+      const playbackError = formatPlaybackError(error);
+      updatePlaybackDebug({
+        readyState: video.readyState,
+        currentTime: video.currentTime,
+        playError: playbackError,
+      });
+      toast.error(playbackError);
     }
   };
 
@@ -634,12 +807,43 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           ref={videoPreviewRef}
           src={videoPreviewUrl}
           controls
+          preload="metadata"
           className="w-full max-h-[240px]"
+          onLoadedMetadata={() => {
+            if (!videoPreviewRef.current) return;
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
+          }}
           onTimeUpdate={() => {
             if (!videoPreviewRef.current) return;
             const t = videoPreviewRef.current.currentTime;
             const active = getAdjustedSegments().find(s => t >= s.start && t <= s.end);
             setCurrentSubtitle(active?.text || '');
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: t,
+            });
+          }}
+          onPause={() => {
+            if (!videoPreviewRef.current) return;
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
+
+            if (playbackListenerRef.current) {
+              clearSegmentPlayback(videoPreviewRef.current);
+            }
+          }}
+          onEnded={() => {
+            if (!videoPreviewRef.current) return;
+            clearSegmentPlayback(videoPreviewRef.current);
+            updatePlaybackDebug({
+              readyState: videoPreviewRef.current.readyState,
+              currentTime: videoPreviewRef.current.currentTime,
+            });
           }}
         />
         {showPreview && currentSubtitle && (
@@ -790,6 +994,12 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               <Eye className="w-4 h-4" /> תצוגה חיה
             </button>
             <button
+              onClick={handlePlayFullVideo}
+              className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted flex items-center gap-1.5"
+            >
+              <Play className="w-3.5 h-3.5" /> נגן וידאו מלא
+            </button>
+            <button
               onClick={() => {
                 const srt = subtitleService.toSRT(getAdjustedSegments());
                 const blob = new Blob(['\uFEFF' + srt], { type: 'text/plain;charset=utf-8' });
@@ -831,6 +1041,23 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {videoPreviewUrl && (
+        <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 text-xs" dir="ltr">
+          <div className="font-semibold text-foreground" dir="rtl">דיבאג נגן חי</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+            <div><span className="text-muted-foreground">readyState:</span> {playbackDebug.readyState}</div>
+            <div><span className="text-muted-foreground">currentTime:</span> {playbackDebug.currentTime.toFixed(3)}</div>
+            <div><span className="text-muted-foreground">startSec:</span> {playbackDebug.startSec !== null ? playbackDebug.startSec.toFixed(3) : '—'}</div>
+            <div><span className="text-muted-foreground">endSec:</span> {playbackDebug.endSec !== null ? playbackDebug.endSec.toFixed(3) : '—'}</div>
+          </div>
+          {playbackDebug.playError && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded px-2 py-1 text-destructive break-words">
+              {playbackDebug.playError}
+            </div>
+          )}
         </div>
       )}
 
