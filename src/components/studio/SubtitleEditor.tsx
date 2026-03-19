@@ -1957,6 +1957,35 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         </div>
       </div>
 
+      {/* Animation */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">אנימציה</h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([
+            { value: 'none' as const, label: 'ללא', emoji: '—' },
+            { value: 'pop' as const, label: 'Pop', emoji: '💥' },
+            { value: 'slideUp' as const, label: 'Slide', emoji: '⬆️' },
+            { value: 'bounce' as const, label: 'Bounce', emoji: '🏀' },
+            { value: 'karaoke' as const, label: 'קריוקי', emoji: '🎤' },
+            { value: 'dynamic' as const, label: 'דינמי', emoji: '🌊' },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setCaptionAnimation(opt.value)}
+              className={cn(
+                'px-2 py-2 rounded-lg text-xs border transition-all text-center',
+                captionAnimation === opt.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border hover:bg-muted'
+              )}
+            >
+              <div className="text-base mb-0.5">{opt.emoji}</div>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Orientation */}
       <div className="space-y-2">
         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">כיוון וידאו</h4>
