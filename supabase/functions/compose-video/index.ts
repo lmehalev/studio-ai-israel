@@ -182,49 +182,44 @@ function buildPublicStorageUrl(supabaseUrl: string, objectPath: string): string 
   return `${supabaseUrl}/storage/v1/object/public/media/${objectPath}`;
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
+let storageClient: ReturnType<typeof createClient> | null = null;
+
+function getStorageClient() {
+  if (storageClient) return storageClient;
+
+  const { supabaseUrl, serviceKey } = getStorageConfig();
+  storageClient = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return storageClient;
 }
 
 async function uploadSubtitleSvg(svg: string, objectPath: string): Promise<string> {
   const cached = subtitleAssetUrlCache.get(objectPath);
   if (cached) return cached;
 
+  const supabase = getStorageClient();
   const svgBytes = new TextEncoder().encode(svg);
 
-  try {
-    const { supabaseUrl, serviceKey } = getStorageConfig();
-    const publicUrl = buildPublicStorageUrl(supabaseUrl, objectPath);
-
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/media/${objectPath}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${serviceKey}`,
-        "Content-Type": "image/svg+xml; charset=utf-8",
-        "x-upsert": "true",
-      },
-      body: svgBytes,
+  const { error } = await supabase.storage
+    .from("media")
+    .upload(objectPath, svgBytes, {
+      contentType: "text/plain",
+      upsert: true,
+      cacheControl: "31536000",
     });
 
-    if (uploadRes.ok) {
-      subtitleAssetUrlCache.set(objectPath, publicUrl);
-      return publicUrl;
-    }
-
-    const storageError = await uploadRes.text();
-    console.error(`Subtitle SVG upload failed (${uploadRes.status})`, storageError.slice(0, 180));
-  } catch (error) {
-    console.error("Subtitle SVG upload threw error, using data URI fallback", error);
+  if (error) {
+    throw new Error(`Failed uploading subtitle overlay (${error.message.slice(0, 120)})`);
   }
 
-  const dataUri = `data:image/svg+xml;base64,${toBase64(svgBytes)}`;
-  subtitleAssetUrlCache.set(objectPath, dataUri);
-  return dataUri;
+  const { data } = supabase.storage.from("media").getPublicUrl(objectPath);
+  if (!data?.publicUrl) {
+    throw new Error("Failed generating public URL for subtitle overlay");
+  }
+
+  subtitleAssetUrlCache.set(objectPath, data.publicUrl);
+  return data.publicUrl;
 }
 
 function escapeXml(value: string): string {
@@ -359,15 +354,29 @@ function buildSubtitleSvgAsset(
   const textBlockHeight = safeLines.length * lineHeight;
   const firstBaseline = (height - textBlockHeight) / 2 + fontSize;
 
-  const pathElements = safeLines.map((line, index) => {
+  const strokePaths = safeLines.map((line, index) => {
+    const baselineY = firstBaseline + index * lineHeight;
+    const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
+    return d
+      ? `<path d="${d}" fill="none" stroke="#000000" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#subtitleShadow)" />`
+      : "";
+  }).join("");
+
+  const fillPaths = safeLines.map((line, index) => {
     const baselineY = firstBaseline + index * lineHeight;
     const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
     return d ? `<path d="${d}" fill="${color}" />` : "";
   }).join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <filter id="subtitleShadow" x="-25%" y="-25%" width="150%" height="150%">
+        <feDropShadow dx="0" dy="2" stdDeviation="1.8" flood-color="#000000" flood-opacity="0.75" />
+      </filter>
+    </defs>
     <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
-    ${pathElements}
+    ${strokePaths}
+    ${fillPaths}
   </svg>`;
 }
 
@@ -376,33 +385,44 @@ async function buildSubtitleClips(
   style: SubtitleStyle,
   outputWidth: number,
   outputHeight: number,
+  contentRect: ContentRectPx,
 ): Promise<any[]> {
-  const subWidth = Math.round(outputWidth * 0.85);
+  const subWidth = Math.round(contentRect.w * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
   const font = await loadHebrewFont();
 
-  return segments
-    .filter((seg) => seg.text && seg.text.trim())
-    .map((seg) => {
-      const svgMarkup = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
+  const marginBottom = Math.max(18, contentRect.h * 0.05);
+  const subtitleCenterX = contentRect.x + contentRect.w / 2;
+  const subtitleCenterY = contentRect.y + contentRect.h - subHeight / 2 - marginBottom;
+  const offsetX = subtitleCenterX / outputWidth - 0.5;
+  const offsetY = -(subtitleCenterY / outputHeight - 0.5);
 
-      return {
-        asset: {
-          type: "html",
-          html: svgMarkup,
-          width: subWidth,
-          height: subHeight,
-        },
-        start: seg.start,
-        length: Math.max(0.5, seg.end - seg.start),
-        position: "bottom",
-        offset: { y: 0.08 },
-        transition: {
-          in: "slideUp",
-          out: "fade",
-        },
-      };
-    });
+  return Promise.all(
+    segments
+      .filter((seg) => seg.text && seg.text.trim())
+      .map(async (seg) => {
+        const svgMarkup = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
+        const hash = await sha1Hex(`${subWidth}x${subHeight}|${JSON.stringify(style || {})}|${seg.text}`);
+        const objectPath = `uploads/subtitle-overlays/${hash}.svg`;
+        const src = await uploadSubtitleSvg(svgMarkup, objectPath);
+
+        return {
+          asset: {
+            type: "image",
+            src,
+          },
+          start: seg.start,
+          length: Math.max(0.5, seg.end - seg.start),
+          position: "center",
+          offset: { x: round2(offsetX), y: round2(offsetY) },
+          scale: round2(subWidth / outputWidth),
+          transition: {
+            in: "slideUp",
+            out: "fade",
+          },
+        };
+      }),
+  );
 }
 
 function buildStickerClips(stickers: StickerItem[]): any[] {
@@ -610,6 +630,7 @@ Deno.serve(async (req) => {
           subtitleStyle || {},
           outputConfig.width,
           outputConfig.height,
+          contentRect,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
@@ -692,6 +713,7 @@ Deno.serve(async (req) => {
             subtitleStyle || {},
             outputConfig.width,
             outputConfig.height,
+            contentRect,
           );
           textClips.push(...subClips);
         }
@@ -740,6 +762,17 @@ Deno.serve(async (req) => {
       if (audioUrl) {
         soundtrack.src = audioUrl;
         soundtrack.effect = "fadeOut";
+      }
+
+      const subtitleProofClip = tracks
+        .flatMap((track: any) => track?.clips ?? [])
+        .find((clip: any) => clip?.asset?.type === "image" && typeof clip?.asset?.src === "string" && clip.asset.src.includes("/subtitle-overlays/"));
+
+      if (subtitleProofClip?.asset?.src) {
+        console.log("Subtitle overlay proof", {
+          type: subtitleProofClip.asset.type,
+          src: String(subtitleProofClip.asset.src).slice(0, 180),
+        });
       }
 
       const renderBody: any = {
