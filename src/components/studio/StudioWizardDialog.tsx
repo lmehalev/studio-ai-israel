@@ -1423,6 +1423,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const stepInfo = getStepInfo();
   const totalSteps = getTotalSteps();
   const currentStepNum = step + 1;
+  const preventSubtitleAccidentalClose = selectedAction === 'subtitles';
 
   return (
     <>
