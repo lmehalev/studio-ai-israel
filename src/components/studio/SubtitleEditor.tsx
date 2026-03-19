@@ -2016,10 +2016,6 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         )}
       </div>
 
-      {/* Debug: Next status */}
-      <div className="text-[10px] text-muted-foreground" dir="ltr">
-        step={step} | selectedFont={selectedFont} | nextEnabled=true
-      </div>
 
       <NavButtons canNext={true} />
     </div>
