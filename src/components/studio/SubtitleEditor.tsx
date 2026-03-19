@@ -1222,13 +1222,23 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   // ── Add sticker ──
   const addSticker = (emoji: string) => {
     const videoDuration = videoPreviewRef.current?.duration || 30;
+    // Clutter check: warn if more than 2 stickers per 10 seconds
+    const overlapping = stickers.filter(s => {
+      const newStart = 0;
+      const newEnd = Math.min(videoDuration, 5);
+      return !(s.startTime + s.duration < newStart || s.startTime > newEnd);
+    });
+    if (overlapping.length >= 2) {
+      toast.warning('יותר מ-2 סטיקרים ב-10 שניות עלול ליצור עומס ויזואלי');
+    }
     setStickers(prev => [...prev, {
       id: crypto.randomUUID(),
       emoji,
-      position: 'topRight',
+      position: 'topRight' as OverlayPosition,
       startTime: 0,
       duration: Math.min(videoDuration, 5),
       scale: 1,
+      animationIn: 'pop' as StickerAnimation,
     }]);
   };
 
