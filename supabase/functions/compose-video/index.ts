@@ -1,5 +1,3 @@
-import hebrewFontBytes from "./NotoSansHebrew-Regular.ttf" with { type: "bytes" };
-
 // Deno.serve used natively
 
 const corsHeaders = {
@@ -12,6 +10,11 @@ const SHOTSTACK_ENDPOINTS = {
   production: "https://api.shotstack.io/edit/v1",
   stage: "https://api.shotstack.io/edit/stage",
 } as const;
+
+const HEBREW_FONT_URLS = [
+  "https://raw.githubusercontent.com/openmaptiles/fonts/master/noto-sans/NotoSansHebrew-Regular.ttf",
+  "https://cdn.jsdelivr.net/gh/openmaptiles/fonts@noto-sans/NotoSansHebrew-Regular.ttf",
+];
 
 type ShotstackEnv = keyof typeof SHOTSTACK_ENDPOINTS;
 
@@ -80,10 +83,27 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function getEmbeddedHebrewFontBase64(): string {
+async function getEmbeddedHebrewFontBase64(): Promise<string> {
   if (cachedHebrewFontBase64) return cachedHebrewFontBase64;
-  cachedHebrewFontBase64 = uint8ToBase64(new Uint8Array(hebrewFontBytes));
-  return cachedHebrewFontBase64;
+
+  const errors: string[] = [];
+
+  for (const fontUrl of HEBREW_FONT_URLS) {
+    try {
+      const res = await fetch(fontUrl);
+      if (!res.ok) {
+        errors.push(`${fontUrl} -> ${res.status}`);
+        continue;
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      cachedHebrewFontBase64 = uint8ToBase64(bytes);
+      return cachedHebrewFontBase64;
+    } catch (e) {
+      errors.push(`${fontUrl} -> ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  throw new Error(`לא ניתן לטעון פונט עברי מוטמע: ${errors.join(" | ")}`);
 }
 
 function escapeXml(value: string): string {
@@ -451,7 +471,7 @@ Deno.serve(async (req) => {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
 
-      const embeddedFontBase64 = getEmbeddedHebrewFontBase64();
+      const embeddedFontBase64 = await getEmbeddedHebrewFontBase64();
 
       if (subtitleSegments && subtitleSegments.length > 0) {
         const subClips = buildSubtitleClips(
