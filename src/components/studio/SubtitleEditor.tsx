@@ -173,6 +173,14 @@ interface SubtitleTranscribeDebug {
   providerBody?: string;
 }
 
+interface SubtitlePlaybackDebug {
+  readyState: number;
+  currentTime: number;
+  startSec: number | null;
+  endSec: number | null;
+  playError: string | null;
+}
+
 // Step names
 const STEPS = [
   { key: 'upload', label: 'העלאה', icon: Upload },
