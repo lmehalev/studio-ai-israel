@@ -338,6 +338,10 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setHighlightStage('');
         setHighlightOutputType('viral_short');
         setVideoWizardSession(null);
+        setWebsiteScanResult(null);
+        setWebsiteContentForPrompt(null);
+        setImageMode('single');
+        setShowCarousel(false);
       }, 300);
     }
   }, [open]);
