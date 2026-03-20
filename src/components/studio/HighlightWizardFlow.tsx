@@ -1092,12 +1092,12 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
               )}
 
               <div className="flex gap-2">
-                <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
+                <button onClick={handleDownload} className="flex-1 px-4 py-2.5 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2">
                   <Download className="w-4 h-4" /> הורד MP4
                 </button>
                 {!saved && (
                   <button onClick={handleManualSave} disabled={savingOutput || !effectiveBrandId}
-                    className="flex-1 px-4 py-2.5 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+                    className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2 disabled:opacity-50">
                     {savingOutput ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {savingOutput ? 'שומר...' : 'שמור בפרויקט'}
                   </button>
@@ -1108,6 +1108,12 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
                   </div>
                 )}
               </div>
+
+              {settings.musicUrl && (
+                <button onClick={handleDownloadMusic} className="w-full px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:bg-muted flex items-center justify-center gap-1.5">
+                  <Music className="w-3.5 h-3.5" /> הורד מוזיקת רקע בנפרד
+                </button>
+              )}
 
               <button onClick={() => { onComplete?.(); }}
                 className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2">
