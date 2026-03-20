@@ -265,7 +265,7 @@ const STEPS = [
   { key: 'extras', label: 'תוספות', icon: Layers },
 ] as const;
 
-export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
+export function SubtitleEditor({ activeBrand, onBack, initialVideoUrl, pipAvatarUrl, onComplete }: SubtitleEditorProps) {
   const [step, setStep] = useState(0);
   const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
