@@ -640,8 +640,24 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
   const handleDownload = () => {
     if (!outputVideoUrl) return;
+    // Ensure we download the FINAL MP4, not the music file
+    const url = outputVideoUrl;
     const a = document.createElement('a');
-    a.href = outputVideoUrl; a.download = `highlight-${Date.now()}.mp4`; a.target = '_blank'; a.click();
+    a.href = url;
+    a.download = `highlight-${Date.now()}.mp4`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
+  };
+
+  const handleDownloadMusic = () => {
+    if (!settings.musicUrl) return;
+    const a = document.createElement('a');
+    a.href = settings.musicUrl;
+    a.download = `music-${Date.now()}.mp3`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
   };
 
   // ============ RENDER UI ============
