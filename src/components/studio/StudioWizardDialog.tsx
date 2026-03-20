@@ -509,10 +509,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         { title: 'התוצאה', desc: 'התוצאה הערוכה' },
       ],
       highlight: [
-        { title: 'העלה תוכן', desc: 'העלה סרטונים ותמונות מהתוכן שלך' },
-        { title: 'הגדר את הפלט', desc: 'בחר סוג סרטון ותאר מה אתה רוצה' },
-        { title: 'מעבד...', desc: 'חותך, מרכיב ומעצב את התוצר' },
-        { title: 'התוצאה', desc: 'התוצר שלך מוכן' },
+        { title: 'סרטון קצר מתוכן ארוך', desc: 'העלה, הגדר ורנדר' },
       ],
     };
 
