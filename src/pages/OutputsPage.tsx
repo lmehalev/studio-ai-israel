@@ -20,7 +20,13 @@ export default function OutputsPage() {
           {allOutputs.map(o => (
             <div key={o.id} className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors">
               <div className="aspect-video bg-muted flex items-center justify-center">
-                <PlayCircle className="w-12 h-12 text-muted-foreground" />
+                {o.videoUrl ? (
+                  <video src={o.videoUrl} controls className="w-full h-full object-contain" />
+                ) : o.thumbnailUrl ? (
+                  <img src={o.thumbnailUrl} alt={o.name} className="w-full h-full object-cover" />
+                ) : (
+                  <PlayCircle className="w-12 h-12 text-muted-foreground" />
+                )}
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
