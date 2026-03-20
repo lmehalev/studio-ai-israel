@@ -328,6 +328,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setEditRefPhotos([]);
         setImportUrl('');
         setImportType(null);
+        setImportStorageUrl('');
+        setImportVideoEditMode(null);
+        setImportPipAvatar(false);
         setRunwayImageUrl('');
         setVideoFile(null);
         setVideoPreviewUrl(null);
