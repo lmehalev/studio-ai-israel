@@ -1071,7 +1071,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (wizardStep === 0) return (
         <div className="space-y-4">
           {avatarVoiceBar}
-          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube — המערכת תזהה את הסוג אוטומטית ותוריד לאחסון</p>
+          <p className="text-xs text-muted-foreground">הדבק קישור ישיר לקובץ תמונה או סרטון (JPG, PNG, WebP, MP4, MOV, WebM). קישורי YouTube/TikTok/Instagram אינם נתמכים להורדה — יש להעלות ידנית.</p>
           
           {importLoading ? (
             <div className="space-y-3 py-6 text-center">

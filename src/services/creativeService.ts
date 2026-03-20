@@ -952,6 +952,8 @@ export interface ImportResult {
   storagePath?: string;
   isYoutube?: boolean;
   youtubeId?: string;
+  isPlatform?: boolean;
+  platformMessage?: string;
   metadata?: Record<string, any>;
 }
 
