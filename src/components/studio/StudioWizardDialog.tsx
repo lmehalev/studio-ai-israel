@@ -1071,7 +1071,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (wizardStep === 0) return (
         <div className="space-y-4">
           {avatarVoiceBar}
-          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube — המערכת תזהה את הסוג אוטומטית ותוריד לאחסון</p>
+          <p className="text-xs text-muted-foreground">הדבק קישור ישיר לקובץ תמונה או סרטון (JPG, PNG, WebP, MP4, MOV, WebM). קישורי YouTube/TikTok/Instagram אינם נתמכים להורדה — יש להעלות ידנית.</p>
           
           {importLoading ? (
             <div className="space-y-3 py-6 text-center">
@@ -1084,12 +1084,45 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                 setImportLoading(true);
                 setImportStage('מזהה סוג תוכן...');
                 try {
-                  const result = await importService.importUrl(url);
+                  setImportStage('בודק קישור...');
+                  const importResult = await importService.importUrl(url);
+                  
+                  // Platform link — show message, don't proceed
+                  if (importResult.isPlatform) {
+                    if (importResult.isYoutube) {
+                      setImportUrl(url);
+                      setImportType('image');
+                      setImportStorageUrl(importResult.publicUrl);
+                      toast.warning(importResult.platformMessage || 'קישורי YouTube אינם ניתנים להורדה. יש להעלות את הסרטון ידנית.', { duration: 6000 });
+                      setStep(step + 1);
+                    } else {
+                      toast.error(importResult.platformMessage || 'קישורי פלטפורמות אינם ניתנים להורדה. יש להעלות את הקובץ ידנית.', { duration: 6000 });
+                    }
+                    return;
+                  }
+                  
                   setImportUrl(url);
-                  setImportType(result.type);
-                  setImportStorageUrl(result.publicUrl);
+                  setImportType(importResult.type);
+                  setImportStorageUrl(importResult.publicUrl);
                   setImportStage('');
-                  toast.success(result.type === 'video' ? 'סרטון יובא בהצלחה!' : result.isYoutube ? 'תמונת YouTube חולצה!' : 'תמונה יובאה בהצלחה!');
+                  
+                  // Auto-save as source output in project
+                  const brandId = activeBrandId || inlineBrandId;
+                  const brandObj = activeBrand || brands.find(b => b.id === brandId);
+                  if (brandId && brandObj) {
+                    try {
+                      const project = await projectService.findOrCreateByBrand(brandId, brandObj.name, effectiveCategory || undefined);
+                      await projectService.addOutput(project.id, {
+                        name: `מקור מיובא — ${importResult.type === 'video' ? 'סרטון' : 'תמונה'}`,
+                        description: `מקור: ${url}`,
+                        video_url: importResult.type === 'video' ? importResult.publicUrl : null,
+                        thumbnail_url: importResult.type === 'image' ? importResult.publicUrl : null,
+                        provider: 'import',
+                      });
+                    } catch {}
+                  }
+                  
+                  toast.success(importResult.type === 'video' ? 'סרטון יובא בהצלחה!' : 'תמונה יובאה בהצלחה!');
                   setStep(step + 1);
                 } catch (e: any) {
                   toast.error(e.message || 'שגיאה בייבוא');
@@ -1097,7 +1130,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   setImportLoading(false);
                   setImportStage('');
                 }
-              }} placeholder="הדבק קישור לתמונה, סרטון, או YouTube..." />
+              }} placeholder="הדבק קישור ישיר לתמונה או סרטון (JPG, PNG, WebP, MP4, MOV, WebM)..." />
               
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="h-px flex-1 bg-border" /> או העלה קבצים <span className="h-px flex-1 bg-border" />
