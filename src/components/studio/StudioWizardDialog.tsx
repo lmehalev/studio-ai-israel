@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors, Layers
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors, Layers, PictureInPicture2
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
