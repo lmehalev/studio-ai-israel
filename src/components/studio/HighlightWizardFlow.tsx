@@ -36,6 +36,8 @@ interface HighlightSegment {
   type: 'video' | 'image';
   reason?: string;
   role?: 'hook' | 'value' | 'proof' | 'cta' | 'filler';
+  zoomPct?: number;
+  emoji?: string;
 }
 
 interface HighlightSettings {
