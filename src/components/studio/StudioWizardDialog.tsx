@@ -1071,7 +1071,18 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (wizardStep === 0) return (
         <div className="space-y-4">
           {avatarVoiceBar}
-          <p className="text-xs text-muted-foreground">הדבק קישור ישיר לקובץ תמונה או סרטון (JPG, PNG, WebP, MP4, MOV, WebM). קישורי YouTube/TikTok/Instagram אינם נתמכים להורדה — יש להעלות ידנית.</p>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                <Check className="w-3 h-3" /> נתמך: .mp4 .mov .webm .jpg .png .webp
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                <X className="w-3 h-3" /> YouTube / TikTok / IG / FB: תמונה ממוזערת בלבד — יש להעלות ידנית
+              </span>
+            </div>
+          </div>
           
           {importLoading ? (
             <div className="space-y-3 py-6 text-center">
