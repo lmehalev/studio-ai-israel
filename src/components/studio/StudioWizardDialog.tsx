@@ -523,7 +523,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     const counts: Record<StudioAction, number> = {
       image: 2, video_ai: 1, subtitles: 1,
       import_edit: importType === 'video' ? 4 : 3,
-      highlight: 4,
+      highlight: 1,
     };
     return counts[selectedAction] + 1;
   };
