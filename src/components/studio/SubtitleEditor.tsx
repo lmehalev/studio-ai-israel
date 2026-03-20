@@ -210,6 +210,12 @@ const STICKER_ANIM_OPTIONS: { value: StickerAnimation; label: string }[] = [
 interface SubtitleEditorProps {
   activeBrand: Brand | undefined;
   onBack: () => void;
+  /** Pre-load a video URL (skip upload step) */
+  initialVideoUrl?: string;
+  /** Avatar image URL for PiP overlay on final render */
+  pipAvatarUrl?: string;
+  /** Called when render completes with the output video URL */
+  onComplete?: (videoUrl: string) => void;
 }
 
 interface SubtitleTranscribeDebug {
@@ -259,7 +265,7 @@ const STEPS = [
   { key: 'extras', label: 'תוספות', icon: Layers },
 ] as const;
 
-export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
+export function SubtitleEditor({ activeBrand, onBack, initialVideoUrl, pipAvatarUrl, onComplete }: SubtitleEditorProps) {
   const [step, setStep] = useState(0);
   const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -436,6 +442,15 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
   const [showCostApproval, setShowCostApproval] = useState(false);
 
   const currentFont = fontPresets.find(p => p.id === selectedFont) || fontPresets[0];
+
+  // Auto-load initial video URL (e.g., from import flow)
+  useEffect(() => {
+    if (initialVideoUrl && !videoPreviewUrl) {
+      setVideoPreviewUrl(initialVideoUrl);
+      setUploadedVideoUrl(initialVideoUrl);
+      setStep(1); // Skip upload step, go straight to subtitles
+    }
+  }, [initialVideoUrl]);
 
   const getAdjustedSegments = useCallback(() => {
     return subtitleSegments
@@ -1391,6 +1406,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         sourceWidth: videoNativeWidth || undefined,
         sourceHeight: videoNativeHeight || undefined,
         captionPosition,
+        ...(pipAvatarUrl ? { pipAvatarUrl } : {}),
       };
 
       const renderResult = await composeService.render(renderParams);
@@ -1429,6 +1445,11 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           setRenderedVideoUrl(status.url);
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
+
+          // Call onComplete callback if provided (e.g. from import flow)
+          if (onComplete) {
+            onComplete(status.url);
+          }
 
           // Auto-save to project
           try {

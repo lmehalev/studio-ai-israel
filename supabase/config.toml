@@ -62,3 +62,9 @@ verify_jwt = false
 
 [functions.scrape-website-content]
 verify_jwt = false
+
+[functions.import-url]
+verify_jwt = false
+
+[functions.data-manager]
+verify_jwt = false

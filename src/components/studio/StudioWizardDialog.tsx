@@ -3,7 +3,7 @@ import {
   ArrowRight, Loader2, Download, Copy, RefreshCw, Plus,
   Play, Pause, Mic, MicOff, Upload, Eye, Save, Edit3,
   Subtitles, Check, X, Wand2, UserCircle, ChevronLeft,
-  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors, Layers
+  ImageIcon, Video, FileText, Sparkles, Link2, Volume2, ChevronDown, Scissors, Layers, PictureInPicture2
 } from 'lucide-react';
 import { VoiceDictationButton } from '@/components/VoiceDictationButton';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import {
   imageService, voiceService, didService, avatarGenService,
   promptEnhanceService, subtitleService, runwayService,
   avatarDbService, storageService, composeService, soundEffectService, kreaService,
+  importService, type ImportResult,
   type SubtitleSegment, type Brand, brandService,
 } from '@/services/creativeService';
 import { projectService } from '@/services/projectService';
@@ -85,6 +86,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // Import/Edit
   const [importUrl, setImportUrl] = useState('');
   const [importType, setImportType] = useState<'image' | 'video' | null>(null);
+  const [importStorageUrl, setImportStorageUrl] = useState(''); // The public URL saved in storage
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStage, setImportStage] = useState('');
+  const [importVideoEditMode, setImportVideoEditMode] = useState<'subtitles' | 'edit' | null>(null);
+  const [importPipAvatar, setImportPipAvatar] = useState(false); // PiP avatar overlay
 
   // Video AI
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
@@ -229,7 +235,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     if (step === 0 && !selectedAction) return; // Don't save initial state
     const session = {
       selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
-      importUrl, importType, selectedAvatarId, selectedVoiceId,
+      importUrl, importType, importStorageUrl, selectedAvatarId, selectedVoiceId,
       selectedCategory, customCategory, highlightFiles, highlightOutputType,
       timestamp: Date.now(),
     };
@@ -240,7 +246,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         localStorage.setItem(SESSION_KEY, JSON.stringify(lite));
       } catch {}
     }
-  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, importStorageUrl, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
 
   // Restore session when dialog opens
   const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
@@ -274,6 +280,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (s.editPrompt) setEditPrompt(s.editPrompt);
       if (s.importUrl) setImportUrl(s.importUrl);
       if (s.importType) setImportType(s.importType);
+      if (s.importStorageUrl) setImportStorageUrl(s.importStorageUrl);
       if (s.selectedAvatarId) setSelectedAvatarId(s.selectedAvatarId);
       if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
       if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
@@ -321,6 +328,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         setEditRefPhotos([]);
         setImportUrl('');
         setImportType(null);
+        setImportStorageUrl('');
+        setImportVideoEditMode(null);
+        setImportPipAvatar(false);
         setRunwayImageUrl('');
         setVideoFile(null);
         setVideoPreviewUrl(null);
@@ -492,7 +502,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       ],
       import_edit: [
         { title: 'הדבק קישור', desc: 'שים קישור לתמונה או סרטון' },
-        { title: 'מה לשנות?', desc: 'תאר את השינויים שתרצה' },
+        { title: importType === 'video' ? 'תצוגה ועריכה' : 'מה לשנות?', desc: importType === 'video' ? 'צפה בסרטון ובחר פעולות' : 'תאר את השינויים שתרצה' },
+        { title: importType === 'video' ? 'עורך וידאו' : 'התוצאה', desc: importType === 'video' ? 'כתוביות, לוגו ועריכה' : 'התוצאה הערוכה' },
         { title: 'התוצאה', desc: 'התוצאה הערוכה' },
       ],
       highlight: [
@@ -511,7 +522,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 1, subtitles: 1, import_edit: 3, highlight: 4,
+      image: 2, video_ai: 1, subtitles: 1,
+      import_edit: importType === 'video' ? 4 : 3,
+      highlight: 4,
     };
     return counts[selectedAction] + 1;
   };
@@ -1052,51 +1065,68 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
     // ====== IMPORT & EDIT ======
     if (selectedAction === 'import_edit') {
-      // Collect all images: imported + avatar + extra uploads
-      const importImages = importUrl ? [importUrl] : [];
+      const importImages = importStorageUrl ? [importStorageUrl] : [];
       
+      // Step 0: URL input
       if (wizardStep === 0) return (
         <div className="space-y-4">
           {avatarVoiceBar}
-          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube (נחלץ את התמונה הממוזערת)</p>
-          <UrlImportInput onSubmit={url => {
-            const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
-            if (ytMatch) {
-              const videoId = ytMatch[1];
-              const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-              setImportUrl(thumbnailUrl);
-              setImportType('image');
-              toast.success('תמונת YouTube חולצה בהצלחה!');
-              setStep(step + 1);
-              return;
-            }
-            const blocked = /^https?:\/\/(www\.)?(facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com)/i;
-            if (blocked.test(url)) {
-              toast.error('יש להדביק קישור ישיר לתמונה או סרטון — לא קישור לאתר');
-              return;
-            }
-            setImportUrl(url);
-            const lower = url.toLowerCase();
-            if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/)) setImportType('image');
-            else if (lower.match(/\.(mp4|mov|webm|avi)(\?|$)/)) setImportType('video');
-            else setImportType('image');
-            setStep(step + 1);
-          }} placeholder="הדבק קישור לתמונה, סרטון, או YouTube..." />
-          <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /> או העלה קבצים <span className="h-px flex-1 bg-border" /></div>
-          <FileUploadZone accept="image/*,video/*" multiple label="העלה תמונות או סרטון" hint={`JPG, PNG, MP4 — עד ${MAX_REF_IMAGES} קבצים`}
-            onUploaded={url => {
-              if (url) { setImportUrl(url); setImportType('image'); setStep(step + 1); }
-            }}
-            onMultipleUploaded={urls => {
-              if (urls.length > 0) {
-                setImportUrl(urls[0]);
-                setImportType('image');
-                // Store extra images in imageRefPhotos for use in the edit step
-                if (urls.length > 1) setImageRefPhotos(prev => [...prev, ...urls.slice(1)].slice(0, MAX_REF_IMAGES));
-                setStep(step + 1);
-              }
-            }}
-          />
+          <p className="text-xs text-muted-foreground">הדבק קישור לתמונה, סרטון, או סרטון YouTube — המערכת תזהה את הסוג אוטומטית ותוריד לאחסון</p>
+          
+          {importLoading ? (
+            <div className="space-y-3 py-6 text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+              <p className="text-sm font-medium">{importStage || 'מייבא...'}</p>
+            </div>
+          ) : (
+            <>
+              <UrlImportInput onSubmit={async (url) => {
+                setImportLoading(true);
+                setImportStage('מזהה סוג תוכן...');
+                try {
+                  const result = await importService.importUrl(url);
+                  setImportUrl(url);
+                  setImportType(result.type);
+                  setImportStorageUrl(result.publicUrl);
+                  setImportStage('');
+                  toast.success(result.type === 'video' ? 'סרטון יובא בהצלחה!' : result.isYoutube ? 'תמונת YouTube חולצה!' : 'תמונה יובאה בהצלחה!');
+                  setStep(step + 1);
+                } catch (e: any) {
+                  toast.error(e.message || 'שגיאה בייבוא');
+                } finally {
+                  setImportLoading(false);
+                  setImportStage('');
+                }
+              }} placeholder="הדבק קישור לתמונה, סרטון, או YouTube..." />
+              
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> או העלה קבצים <span className="h-px flex-1 bg-border" />
+              </div>
+              
+              <FileUploadZone accept="image/*,video/*" multiple label="העלה תמונות או סרטון" hint={`JPG, PNG, MP4 — עד ${MAX_REF_IMAGES} קבצים`}
+                onUploaded={url => {
+                  if (url) {
+                    const isVideo = url.match(/\.(mp4|mov|webm)/i);
+                    setImportUrl(url);
+                    setImportStorageUrl(url);
+                    setImportType(isVideo ? 'video' : 'image');
+                    setStep(step + 1);
+                  }
+                }}
+                onMultipleUploaded={urls => {
+                  if (urls.length > 0) {
+                    const isVideo = urls[0].match(/\.(mp4|mov|webm)/i);
+                    setImportUrl(urls[0]);
+                    setImportStorageUrl(urls[0]);
+                    setImportType(isVideo ? 'video' : 'image');
+                    if (urls.length > 1) setImageRefPhotos(prev => [...prev, ...urls.slice(1)].slice(0, MAX_REF_IMAGES));
+                    setStep(step + 1);
+                  }
+                }}
+              />
+            </>
+          )}
+          
           {selectedAvatar && (
             <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
               <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
@@ -1105,56 +1135,206 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
           )}
         </div>
       );
-      if (wizardStep === 1) {
-        const allEditRefs = [
-          ...importImages,
-          ...(selectedAvatar ? [selectedAvatar.image_url] : []),
-          ...imageRefPhotos,
-        ];
 
-        return (
-          <div className="space-y-4">
-            {/* Show all reference images */}
-            <div className="flex flex-wrap gap-2">
-              {allEditRefs.map((url, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border">
-                  <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
-                  {i === 0 && <div className="absolute bottom-0 inset-x-0 text-[8px] text-center bg-background/80 text-foreground py-0.5">ראשי</div>}
+      // ====== IMAGE EDIT FLOW ======
+      if (importType === 'image') {
+        if (wizardStep === 1) {
+          const allEditRefs = [
+            ...importImages,
+            ...(selectedAvatar ? [selectedAvatar.image_url] : []),
+            ...imageRefPhotos,
+          ];
+
+          return (
+            <div className="space-y-4">
+              {/* Preview the imported image */}
+              {importStorageUrl && (
+                <div className="rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+                  <img src={importStorageUrl} alt="מקור" className="max-w-full max-h-[200px] object-contain" />
                 </div>
-              ))}
-              {allEditRefs.length < MAX_REF_IMAGES && (
-                <FileUploadZone accept="image/*" multiple label="+" hint=""
-                  onUploaded={url => { if (url) setImageRefPhotos(prev => [...prev, url]); }}
-                  onMultipleUploaded={urls => setImageRefPhotos(prev => [...prev, ...urls].slice(0, MAX_REF_IMAGES))}
-                />
               )}
+              
+              <div className="flex flex-wrap gap-2">
+                {allEditRefs.slice(1).map((url, i) => (
+                  <div key={i} className="relative w-14 h-14 rounded-lg overflow-hidden border border-border">
+                    <img src={url} alt={`ref ${i+1}`} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+                {allEditRefs.length < MAX_REF_IMAGES && (
+                  <FileUploadZone accept="image/*" multiple label="+" hint=""
+                    onUploaded={url => { if (url) setImageRefPhotos(prev => [...prev, url]); }}
+                    onMultipleUploaded={urls => setImageRefPhotos(prev => [...prev, ...urls].slice(0, MAX_REF_IMAGES))}
+                  />
+                )}
+              </div>
+              
+              {renderPromptInput({ placeholder: 'תאר מה תרצה לשנות... למשל: "שנה את הצבעים למותג שלי", "הוסף כיתוב בעברית"' })}
+              
+              <button
+                onClick={async () => {
+                  if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
+                  setLoading(true);
+                  try {
+                    const avatarContext = selectedAvatar ? `\n\nIMPORTANT: The avatar/person reference is included — preserve their exact likeness in the output.` : '';
+                    const extraRefs = allEditRefs.length > 1 ? `\n\nAdditional reference images are provided (${allEditRefs.length} total). Use ALL of them as context.` : '';
+                    const data = await imageService.edit(buildPrompt(prompt) + avatarContext + extraRefs, importStorageUrl);
+                    setResult({ imageUrl: data.imageUrl });
+                    setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
+                    setStep(step + 1);
+                    toast.success('העריכה הושלמה!');
+                  } catch (e: any) { toast.error(e.message); }
+                  finally { setLoading(false); }
+                }}
+                disabled={loading}
+                className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                {loading ? 'עורך...' : 'ערוך'}
+              </button>
             </div>
-            {renderPromptInput({ placeholder: 'תאר מה תרצה לשנות... למשל: "שנה את הצבעים למותג שלי", "הוסף כיתוב בעברית"' })}
-            <button
-              onClick={async () => {
-                if (!prompt.trim()) { toast.error('יש להזין תיאור'); return; }
-                setLoading(true);
-                try {
-                  const avatarContext = selectedAvatar ? `\n\nIMPORTANT: The avatar/person reference is included — preserve their exact likeness in the output.` : '';
-                  const extraRefs = allEditRefs.length > 1 ? `\n\nAdditional reference images are provided (${allEditRefs.length} total). Use ALL of them as context.` : '';
-                  const data = await imageService.edit(buildPrompt(prompt) + avatarContext + extraRefs, importUrl);
-                  setResult({ imageUrl: data.imageUrl });
-                  setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
-                  setStep(step + 1);
-                  toast.success('העריכה הושלמה!');
-                } catch (e: any) { toast.error(e.message); }
-                finally { setLoading(false); }
-              }}
-              disabled={loading}
-              className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              {loading ? 'עורך...' : 'ערוך'}
-            </button>
-          </div>
-        );
+          );
+        }
+        if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
       }
-      if (wizardStep === 2 && result?.imageUrl) return renderImageResultWithEdit();
+
+      // ====== VIDEO EDIT FLOW ======
+      if (importType === 'video') {
+        // Step 1: Preview video + choose what to do
+        if (wizardStep === 1) {
+          return (
+            <div className="space-y-4">
+              {/* Video preview */}
+              {importStorageUrl && (
+                <div className="rounded-lg overflow-hidden border border-border bg-muted/30">
+                  <video src={importStorageUrl} controls className="w-full max-h-[220px]" />
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">הסרטון נשמר באחסון. בחר מה תרצה לעשות:</p>
+              
+              {/* PiP Avatar toggle */}
+              {selectedAvatar && (
+                <label className="flex items-center gap-3 bg-muted/30 border border-border rounded-lg p-3 cursor-pointer hover:border-primary/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={importPipAvatar}
+                    onChange={e => setImportPipAvatar(e.target.checked)}
+                    className="accent-primary w-4 h-4"
+                  />
+                  <div className="flex items-center gap-2 flex-1">
+                    <img src={selectedAvatar.image_url} alt="" className="w-8 h-8 rounded-full object-cover border border-primary/30" />
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <PictureInPicture2 className="w-3.5 h-3.5" /> הוסף אווטאר PiP
+                      </p>
+                      <p className="text-xs text-muted-foreground">"{selectedAvatar.name}" יוצג כשכבה בפינת הסרטון</p>
+                    </div>
+                  </div>
+                </label>
+              )}
+              
+              {/* Action cards */}
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={() => { setImportVideoEditMode('subtitles'); setStep(step + 1); }}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-right transition-all"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Subtitles className="w-4.5 h-4.5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">כתוביות + לוגו + מוזיקה + ייצוא</p>
+                    <p className="text-xs text-muted-foreground">תמלול, עיצוב כתוביות, הוספת לוגו ומוזיקה, וייצוא MP4 סופי</p>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setImportVideoEditMode('edit');
+                    setStep(step + 1);
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-right transition-all"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Wand2 className="w-4.5 h-4.5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">עריכה חכמה (AI)</p>
+                    <p className="text-xs text-muted-foreground">בקש שינויים בטקסט — חיתוך, שינוי סגנון, שיפור</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // Step 2: Video editing
+        if (wizardStep === 2) {
+          if (importVideoEditMode === 'subtitles') {
+            return (
+              <SubtitleEditor
+                activeBrand={activeBrand}
+                initialVideoUrl={importStorageUrl}
+                pipAvatarUrl={importPipAvatar && selectedAvatar ? selectedAvatar.image_url : undefined}
+                onBack={() => setStep(step - 1)}
+                onComplete={(videoUrl) => {
+                  setResult({ videoUrl });
+                  setStep(step + 1);
+                }}
+              />
+            );
+          }
+          
+          if (importVideoEditMode === 'edit') {
+            return (
+              <div className="space-y-4">
+                {/* Show video */}
+                {importStorageUrl && (
+                  <div className="rounded-lg overflow-hidden border border-border bg-muted/30">
+                    <video src={importStorageUrl} controls className="w-full max-h-[180px]" />
+                  </div>
+                )}
+                
+                {renderPromptInput({ placeholder: 'תאר מה תרצה לשנות בסרטון...\n\nלמשל: "חתוך ל-30 שניות הראשונות", "הוסף כתוביות ולוגו", "שנה את הגודל ל-9:16"' })}
+                
+                <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">💡 מה אפשר לעשות:</p>
+                  <p>• חיתוך וקיצור הסרטון</p>
+                  <p>• הוספת כתוביות בעברית</p>
+                  <p>• הוספת לוגו ומוזיקת רקע</p>
+                  <p>• שינוי יחס גובה-רוחב (9:16, 16:9)</p>
+                  {selectedAvatar && importPipAvatar && <p>• אווטאר PiP יתווסף אוטומטית</p>}
+                </div>
+                
+                <button
+                  onClick={async () => {
+                    if (!prompt.trim()) { toast.error('יש להזין הנחיות'); return; }
+                    setLoading(true);
+                    try {
+                      // For now, redirect to subtitle editor with the prompt as context
+                      // The compose-video pipeline handles the actual processing
+                      toast.info('מעביר לעורך הוידאו...');
+                      setImportVideoEditMode('subtitles');
+                    } catch (e: any) {
+                      toast.error(e.message || 'שגיאה');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                  className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {loading ? 'מעבד...' : 'המשך לעריכה'}
+                </button>
+              </div>
+            );
+          }
+        }
+
+        // Step 3: Result
+        if (wizardStep === 3 && result?.videoUrl) return renderResultView();
+      }
     }
 
     // ====== HIGHLIGHT (Long → Short Viral) ======

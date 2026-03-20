@@ -943,3 +943,26 @@ export const heygenExtendedService = {
     return data?.quota || {};
   },
 };
+
+// ====== URL Import Service ======
+export interface ImportResult {
+  type: 'image' | 'video';
+  sourceUrl: string;
+  publicUrl: string;
+  storagePath?: string;
+  isYoutube?: boolean;
+  youtubeId?: string;
+  metadata?: Record<string, any>;
+}
+
+export const importService = {
+  /** Import a URL (image/video) — downloads to storage and returns public URL + metadata */
+  importUrl: async (url: string): Promise<ImportResult> => {
+    const { data, error } = await supabase.functions.invoke('import-url', {
+      body: { url },
+    });
+    if (error) throw new Error(error.message || 'שגיאה בייבוא');
+    if (data?.error) throw new Error(data.error);
+    return data as ImportResult;
+  },
+};
