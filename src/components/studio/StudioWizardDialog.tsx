@@ -86,6 +86,11 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   // Import/Edit
   const [importUrl, setImportUrl] = useState('');
   const [importType, setImportType] = useState<'image' | 'video' | null>(null);
+  const [importStorageUrl, setImportStorageUrl] = useState(''); // The public URL saved in storage
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStage, setImportStage] = useState('');
+  const [importVideoEditMode, setImportVideoEditMode] = useState<'subtitles' | 'edit' | null>(null);
+  const [importPipAvatar, setImportPipAvatar] = useState(false); // PiP avatar overlay
 
   // Video AI
   const [runwayMode, setRunwayMode] = useState<'image_to_video' | 'text_to_video'>('image_to_video');
