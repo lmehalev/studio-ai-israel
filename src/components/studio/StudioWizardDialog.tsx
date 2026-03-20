@@ -518,7 +518,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const getTotalSteps = () => {
     if (!selectedAction) return 1;
     const counts: Record<StudioAction, number> = {
-      image: 2, video_ai: 1, subtitles: 1, import_edit: 3, highlight: 4,
+      image: 2, video_ai: 1, subtitles: 1,
+      import_edit: importType === 'video' ? 4 : 3,
+      highlight: 4,
     };
     return counts[selectedAction] + 1;
   };
