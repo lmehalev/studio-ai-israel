@@ -1406,6 +1406,7 @@ export function SubtitleEditor({ activeBrand, onBack, initialVideoUrl, pipAvatar
         sourceWidth: videoNativeWidth || undefined,
         sourceHeight: videoNativeHeight || undefined,
         captionPosition,
+        ...(pipAvatarUrl ? { pipAvatarUrl } : {}),
       };
 
       const renderResult = await composeService.render(renderParams);
