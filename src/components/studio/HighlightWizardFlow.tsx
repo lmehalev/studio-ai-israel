@@ -3,6 +3,7 @@ import {
   ArrowRight, Loader2, Download, Save, X, Scissors, Upload,
   ChevronDown, ChevronUp, GripVertical, Play, Pause, Image as ImageIcon,
   Video, Music, Eye, RefreshCw, Bug, Check, Settings2, FileText,
+  Wand2, Hand,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -34,6 +35,7 @@ interface HighlightSegment {
   endSec: number;
   type: 'video' | 'image';
   reason?: string;
+  role?: 'hook' | 'value' | 'proof' | 'cta' | 'filler';
 }
 
 interface HighlightSettings {
@@ -56,10 +58,11 @@ interface HighlightWizardFlowProps {
   onBack?: () => void;
 }
 
+type PlanMode = 'auto' | 'manual';
+
 const MAX_FILES = 20;
 const MAX_FILE_SIZE_MB = 500;
-const MAX_TOTAL_SIZE_MB = 2000;
-const IMAGE_DISPLAY_DURATION = 5; // seconds per image in final video
+const IMAGE_DISPLAY_DURATION = 5;
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
@@ -84,13 +87,33 @@ function formatDuration(sec: number) {
   return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `${s}ש׳`;
 }
 
+function formatTimeInput(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toFixed(1).padStart(4, '0')}`;
+}
+
+function parseTimeInput(val: string): number | null {
+  const match = val.match(/^(\d+):(\d+\.?\d*)$/);
+  if (!match) return null;
+  const result = Number(match[1]) * 60 + Number(match[2]);
+  return isNaN(result) ? null : Math.max(0, result);
+}
+
+// Marketing structure roles
+const ROLE_LABELS: Record<string, string> = {
+  hook: '🪝 Hook — פתיחה',
+  value: '💎 Value — ערך',
+  proof: '🏆 Proof — הוכחה',
+  cta: '📣 CTA — קריאה לפעולה',
+  filler: '🎬 Filler — מילוי',
+};
+
 export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, onBack }: HighlightWizardFlowProps) {
-  // Step: 0=upload, 1=settings, 2=plan, 3=render
   const [step, setStep] = useState(0);
 
   // Step 0: Assets
   const [assets, setAssets] = useState<UploadedAsset[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Step 1: Settings
   const [settings, setSettings] = useState<HighlightSettings>({
@@ -107,8 +130,11 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
   });
 
   // Step 2: Plan
+  const [planMode, setPlanMode] = useState<PlanMode>('auto');
   const [segments, setSegments] = useState<HighlightSegment[]>([]);
   const [planLoading, setPlanLoading] = useState(false);
+  const [playingSegId, setPlayingSegId] = useState<string | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   // Step 3: Render
   const [rendering, setRendering] = useState(false);
@@ -124,10 +150,9 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
   // Cost approval
   const [showCostApproval, setShowCostApproval] = useState(false);
 
-  // Brands (inline selector when no brand pre-selected)
+  // Brands
   const [inlineBrandId, setInlineBrandId] = useState<string | null>(null);
   const brands = brandService.getAll();
-
   const effectiveBrandId = activeBrandId || inlineBrandId;
   const effectiveBrandObj = activeBrand || brands.find(b => b.id === inlineBrandId);
 
@@ -138,59 +163,9 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
   // ============ STEP 0: UPLOAD ============
 
-  const handleFilesSelected = async (files: File[]) => {
-    if (assets.length + files.length > MAX_FILES) {
-      toast.error(`מותר עד ${MAX_FILES} קבצים`);
-      return;
-    }
-
-    const totalCurrentSize = assets.reduce((s, a) => s + a.size, 0);
-    const newAssets: UploadedAsset[] = [];
-
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        toast.error(`"${file.name}" גדול מדי (מקסימום ${MAX_FILE_SIZE_MB}MB)`);
-        continue;
-      }
-      const asset: UploadedAsset = {
-        id: generateId(),
-        url: '',
-        name: file.name,
-        type: getFileType(file),
-        size: file.size,
-        status: 'uploading',
-      };
-      newAssets.push(asset);
-    }
-
-    setAssets(prev => [...prev, ...newAssets]);
-
-    // Upload sequentially to avoid overwhelming the server
-    for (let i = 0; i < newAssets.length; i++) {
-      const asset = newAssets[i];
-      const file = files.find(f => f.name === asset.name && f.size === asset.size);
-      if (!file) continue;
-
-      try {
-        const url = await storageService.upload(file);
-        setAssets(prev => prev.map(a =>
-          a.id === asset.id ? { ...a, url, status: 'ready' as const } : a
-        ));
-      } catch (err: any) {
-        setAssets(prev => prev.map(a =>
-          a.id === asset.id ? { ...a, status: 'failed' as const, error: err.message || 'שגיאה בהעלאה' } : a
-        ));
-      }
-    }
-  };
-
-  const removeAsset = (id: string) => {
-    setAssets(prev => prev.filter(a => a.id !== id));
-  };
-
+  const removeAsset = (id: string) => setAssets(prev => prev.filter(a => a.id !== id));
   const readyAssets = assets.filter(a => a.status === 'ready');
   const uploadingCount = assets.filter(a => a.status === 'uploading').length;
-  const failedAssets = assets.filter(a => a.status === 'failed');
 
   // ============ STEP 1: SETTINGS ============
 
@@ -221,91 +196,110 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
     }
   };
 
-  // ============ STEP 2: PLAN ============
+  // ============ STEP 2: AUTO PLAN ============
 
-  const buildPlan = useCallback(async () => {
+  const buildAutoPlan = useCallback(() => {
     setPlanLoading(true);
-    addLog('בונה תוכנית חיתוך...');
+    addLog('בונה תוכנית אוטומטית...');
 
     const targetDuration = getTargetDuration();
     const videoAssets = readyAssets.filter(a => a.type === 'video');
     const imageAssets = readyAssets.filter(a => a.type === 'image');
-
+    const allAssets = [...videoAssets, ...imageAssets];
     const newSegments: HighlightSegment[] = [];
 
     if (targetDuration === 0) {
-      // "Long compilation" — use everything
-      for (const asset of videoAssets) {
+      // Long compilation — use everything
+      for (const asset of allAssets) {
         newSegments.push({
-          id: generateId(),
-          sourceAssetId: asset.id,
-          sourceUrl: asset.url,
-          sourceName: asset.name,
-          startSec: 0,
-          endSec: asset.durationSec || 30,
-          type: 'video',
-          reason: 'כל הסרטון',
+          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+          sourceName: asset.name, startSec: 0,
+          endSec: asset.type === 'video' ? (asset.durationSec || 30) : IMAGE_DISPLAY_DURATION,
+          type: asset.type, reason: asset.type === 'video' ? 'כל הסרטון' : 'תמונה',
+          role: 'filler',
         });
       }
-      for (const asset of imageAssets) {
+    } else if (settings.contentStyle === 'product' || settings.contentStyle === 'auto') {
+      // Marketing structure: Hook → Value → Proof → CTA
+      const roles: Array<{ role: HighlightSegment['role']; label: string; pct: number }> = [
+        { role: 'hook', label: 'פתיחה חזקה', pct: 0.2 },
+        { role: 'value', label: 'הצגת ערך / מוצר', pct: 0.35 },
+        { role: 'proof', label: 'הוכחה חברתית', pct: 0.25 },
+        { role: 'cta', label: 'קריאה לפעולה', pct: 0.2 },
+      ];
+
+      let assetIdx = 0;
+      for (const r of roles) {
+        const slotDuration = Math.max(3, Math.round(targetDuration * r.pct));
+        // Distribute slot across available assets round-robin
+        const assetsForSlot = Math.max(1, Math.ceil(allAssets.length / roles.length));
+        let remaining = slotDuration;
+
+        for (let j = 0; j < assetsForSlot && assetIdx < allAssets.length && remaining > 0; j++) {
+          const asset = allAssets[assetIdx++];
+          const clipLen = asset.type === 'image'
+            ? Math.min(remaining, IMAGE_DISPLAY_DURATION)
+            : Math.min(remaining, asset.durationSec || 30);
+          newSegments.push({
+            id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+            sourceName: asset.name, startSec: 0, endSec: clipLen,
+            type: asset.type, reason: r.label, role: r.role,
+          });
+          remaining -= clipLen;
+        }
+      }
+
+      // If unused assets remain, add as filler
+      while (assetIdx < allAssets.length) {
+        const asset = allAssets[assetIdx++];
+        const clipLen = asset.type === 'image' ? IMAGE_DISPLAY_DURATION : Math.min(8, asset.durationSec || 8);
         newSegments.push({
-          id: generateId(),
-          sourceAssetId: asset.id,
-          sourceUrl: asset.url,
-          sourceName: asset.name,
-          startSec: 0,
-          endSec: IMAGE_DISPLAY_DURATION,
-          type: 'image',
-          reason: 'תמונה',
+          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+          sourceName: asset.name, startSec: 0, endSec: clipLen,
+          type: asset.type, reason: 'תוכן נוסף', role: 'filler',
         });
       }
     } else {
-      // Distribute duration across assets
-      const totalAssets = videoAssets.length + imageAssets.length;
-      if (totalAssets === 0) {
-        setPlanLoading(false);
-        return;
-      }
-
+      // Podcast / Drama / other: even split
+      const totalAssets = allAssets.length;
+      if (totalAssets === 0) { setPlanLoading(false); return; }
       const perAssetSec = Math.max(3, Math.floor(targetDuration / totalAssets));
 
-      for (const asset of videoAssets) {
-        const clipLen = Math.min(perAssetSec, asset.durationSec || 30);
+      for (const asset of allAssets) {
+        const clipLen = asset.type === 'image'
+          ? Math.min(perAssetSec, IMAGE_DISPLAY_DURATION)
+          : Math.min(perAssetSec, asset.durationSec || 30);
         newSegments.push({
-          id: generateId(),
-          sourceAssetId: asset.id,
-          sourceUrl: asset.url,
-          sourceName: asset.name,
-          startSec: 0,
-          endSec: clipLen,
-          type: 'video',
-          reason: `${clipLen} שניות ראשונות`,
-        });
-      }
-
-      for (const asset of imageAssets) {
-        const imgDur = Math.min(perAssetSec, IMAGE_DISPLAY_DURATION);
-        newSegments.push({
-          id: generateId(),
-          sourceAssetId: asset.id,
-          sourceUrl: asset.url,
-          sourceName: asset.name,
-          startSec: 0,
-          endSec: imgDur,
-          type: 'image',
-          reason: 'תמונה',
+          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+          sourceName: asset.name, startSec: 0, endSec: clipLen,
+          type: asset.type,
+          reason: settings.contentStyle === 'podcast' ? 'הדגשה מפודקאסט' : 'קטע דרמטי',
+          role: 'filler',
         });
       }
     }
 
     setSegments(newSegments);
-    addLog(`תוכנית מוכנה: ${newSegments.length} קטעים`);
+    addLog(`תוכנית מוכנה: ${newSegments.length} קטעים, ${Math.round(newSegments.reduce((s, seg) => s + seg.endSec - seg.startSec, 0))} שניות`);
     setPlanLoading(false);
   }, [readyAssets, settings, addLog]);
 
+  const buildManualPlan = useCallback(() => {
+    // Manual: add all assets as full-length clips for user to trim
+    const allAssets = readyAssets;
+    const newSegments: HighlightSegment[] = allAssets.map(asset => ({
+      id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+      sourceName: asset.name, startSec: 0,
+      endSec: asset.type === 'video' ? (asset.durationSec || 30) : IMAGE_DISPLAY_DURATION,
+      type: asset.type, reason: '', role: undefined,
+    }));
+    setSegments(newSegments);
+  }, [readyAssets]);
+
   useEffect(() => {
     if (step === 2 && segments.length === 0 && readyAssets.length > 0) {
-      buildPlan();
+      if (planMode === 'auto') buildAutoPlan();
+      else buildManualPlan();
     }
   }, [step]);
 
@@ -321,25 +315,60 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
     });
   };
 
+  const updateSegmentTrim = (id: string, field: 'startSec' | 'endSec', value: number) => {
+    setSegments(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      if (field === 'startSec') return { ...s, startSec: Math.min(value, s.endSec - 0.5) };
+      return { ...s, endSec: Math.max(value, s.startSec + 0.5) };
+    }));
+  };
+
+  const splitSegment = (id: string) => {
+    setSegments(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const seg = prev[idx];
+      const mid = (seg.startSec + seg.endSec) / 2;
+      if (seg.endSec - seg.startSec < 2) { toast.error('הקטע קצר מדי לפיצול'); return prev; }
+      const a = { ...seg, endSec: mid };
+      const b = { ...seg, id: generateId(), startSec: mid, reason: seg.reason ? `${seg.reason} (חלק 2)` : '' };
+      return [...prev.slice(0, idx), a, b, ...prev.slice(idx + 1)];
+    });
+  };
+
+  const playSegment = (seg: HighlightSegment) => {
+    if (seg.type !== 'video') return;
+    setPlayingSegId(seg.id);
+    const vid = previewVideoRef.current;
+    if (!vid) return;
+    vid.src = seg.sourceUrl;
+    vid.currentTime = seg.startSec;
+    vid.play();
+    const handleTime = () => {
+      if (vid.currentTime >= seg.endSec) {
+        vid.pause();
+        setPlayingSegId(null);
+        vid.removeEventListener('timeupdate', handleTime);
+      }
+    };
+    vid.addEventListener('timeupdate', handleTime);
+  };
+
   const totalPlanDuration = segments.reduce((s, seg) => s + (seg.endSec - seg.startSec), 0);
 
   // ============ STEP 3: RENDER ============
 
   const buildCostEstimates = (): CostEstimate[] => {
     const estimates: CostEstimate[] = [];
-
     if (settings.captionsOn) {
       estimates.push({
-        provider: 'ElevenLabs',
-        action: 'תמלול אוטומטי (STT)',
+        provider: 'ElevenLabs', action: 'תמלול אוטומטי (STT)',
         estimatedCost: `~${segments.filter(s => s.type === 'video').length} קבצים`,
         details: ['תמלול לצורך כתוביות בעברית'],
       });
     }
-
     estimates.push({
-      provider: 'Shotstack',
-      model: 'Production',
+      provider: 'Shotstack', model: 'Production',
       action: `הרכבה ורינדור — ${segments.length} קטעים`,
       estimatedCost: '1 רינדור',
       details: [
@@ -349,15 +378,11 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
         settings.captionsOn ? 'כולל כתוביות בעברית' : '',
       ].filter(Boolean),
     });
-
     return estimates;
   };
 
   const requestRender = () => {
-    if (segments.length === 0) {
-      toast.error('אין קטעים לרינדור');
-      return;
-    }
+    if (segments.length === 0) { toast.error('אין קטעים לרינדור'); return; }
     setShowCostApproval(true);
   };
 
@@ -377,7 +402,6 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
     addLog(`התחלת רינדור — runId: ${runId}`);
 
     try {
-      // Step A: If captions ON, transcribe video segments (max 2 concurrency)
       let allSubtitleSegments: SubtitleSegment[] = [];
 
       if (settings.captionsOn) {
@@ -393,48 +417,36 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
           try {
             const { data: txData, error: txError } = await supabase.functions.invoke('transcribe-audio', {
-              body: {
-                sourceAudioUrl: seg.sourceUrl,
-                language: 'he',
-                videoDuration: segDuration,
-              },
+              body: { sourceAudioUrl: seg.sourceUrl, language: 'he', videoDuration: segDuration },
             });
-
             if (txError) {
               addLog(`שגיאת תמלול: ${txError.message}`);
             } else if (txData?.segments) {
-              // Offset timestamps to match the timeline position
               const offsetSegments: SubtitleSegment[] = txData.segments.map((s: SubtitleSegment) => ({
-                ...s,
-                start: s.start + timeOffset,
-                end: Math.min(s.end + timeOffset, timeOffset + segDuration),
+                ...s, start: s.start + timeOffset, end: Math.min(s.end + timeOffset, timeOffset + segDuration),
               }));
               allSubtitleSegments.push(...offsetSegments);
             }
           } catch (err: any) {
             addLog(`כשלון תמלול ${seg.sourceName}: ${err.message}`);
           }
-
           timeOffset += segDuration;
         }
-
         addLog(`תמלול הושלם: ${allSubtitleSegments.length} מקטעי כתוביות`);
       }
 
       setRenderProgress(35);
       setRenderStage('בונה ציר זמן...');
 
-      // Step B: Build Shotstack scenes array
       const scenes = segments.map(seg => ({
         src: seg.sourceUrl,
         length: seg.endSec - seg.startSec,
         fit: 'contain' as const,
         type: seg.type,
+        trim: seg.type === 'video' ? seg.startSec : undefined,
       }));
 
-      // Determine orientation
       const orientation = settings.orientation === 'auto' ? 'landscape' : (settings.orientation === '9:16' ? 'portrait' : 'landscape');
-
       addLog(`שולח לרינדור: ${scenes.length} קטעים, כיוון: ${orientation}`);
 
       setRenderProgress(40);
@@ -451,61 +463,39 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
         totalDuration: totalPlanDuration,
         orientation,
         subtitleStyle: settings.captionsOn ? {
-          font: 'NotoSansHebrew',
-          color: '#FFFFFF',
-          size: 32,
-          position: 'bottom',
-          animation: 'slideUp',
+          font: 'NotoSansHebrew', color: '#FFFFFF', size: 32,
+          position: 'bottom', animation: 'slideUp',
         } : undefined,
       });
 
-      if (!composeResult?.renderId) {
-        throw new Error('לא התקבל מזהה רינדור מ-Shotstack');
-      }
-
+      if (!composeResult?.renderId) throw new Error('לא התקבל מזהה רינדור מ-Shotstack');
       addLog(`renderId: ${composeResult.renderId}, env: ${composeResult.shotstackEnv || 'production'}`);
 
       setRenderProgress(50);
       setRenderStage('ממתין לרינדור...');
 
-      // Step C: Poll for completion
       for (let i = 0; i < 120; i++) {
         await new Promise(r => setTimeout(r, 5000));
-        const progress = 50 + Math.min(45, Math.floor(i * 0.8));
-        setRenderProgress(progress);
+        setRenderProgress(50 + Math.min(45, Math.floor(i * 0.8)));
 
         try {
-          const statusResult = await composeService.checkStatus(
-            composeResult.renderId,
-            composeResult.shotstackEnv
-          );
-
+          const statusResult = await composeService.checkStatus(composeResult.renderId, composeResult.shotstackEnv);
           if (statusResult?.status === 'done' && statusResult?.url) {
             setOutputVideoUrl(statusResult.url);
             setRenderProgress(100);
             setRenderStage('הרינדור הושלם!');
             addLog(`סיום! URL: ${statusResult.url}`);
-
-            // Auto-save to project if brand selected
-            if (effectiveBrandId && effectiveBrandObj) {
-              await autoSaveToProject(statusResult.url);
-            }
-
+            if (effectiveBrandId && effectiveBrandObj) await autoSaveToProject(statusResult.url);
             toast.success('🎬 הסרטון מוכן!');
             setRendering(false);
             return;
           }
-
-          if (statusResult?.status === 'failed') {
-            throw new Error(`רינדור נכשל — Shotstack status: failed`);
-          }
-
+          if (statusResult?.status === 'failed') throw new Error('רינדור נכשל — Shotstack status: failed');
           setRenderStage(`ממתין לרינדור... (${statusResult?.progress || 0}%)`);
         } catch (pollErr: any) {
           addLog(`שגיאת בדיקת סטטוס: ${pollErr.message}`);
         }
       }
-
       throw new Error('הרינדור חרג מזמן המתנה (10 דקות)');
     } catch (err: any) {
       addLog(`שגיאה: ${err.message}`);
@@ -524,8 +514,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
       await projectService.addOutput(project.id, {
         name: `Highlight — ${effectiveBrandObj.name}`,
         description: `${segments.length} קטעים, ${Math.round(totalPlanDuration)} שניות`,
-        video_url: videoUrl,
-        provider: 'shotstack',
+        video_url: videoUrl, provider: 'shotstack',
       });
       addLog('נשמר בפרויקט בהצלחה');
       setSaved(true);
@@ -536,28 +525,20 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
   const handleManualSave = async () => {
     if (!outputVideoUrl) return;
-    if (!effectiveBrandId || !effectiveBrandObj) {
-      toast.error('יש לבחור חברה / מותג');
-      return;
-    }
+    if (!effectiveBrandId || !effectiveBrandObj) { toast.error('יש לבחור חברה / מותג'); return; }
     setSavingOutput(true);
     try {
       await autoSaveToProject(outputVideoUrl);
       toast.success('נשמר בפרויקט!');
     } catch (err: any) {
       toast.error(err.message || 'שגיאה בשמירה');
-    } finally {
-      setSavingOutput(false);
-    }
+    } finally { setSavingOutput(false); }
   };
 
   const handleDownload = () => {
     if (!outputVideoUrl) return;
     const a = document.createElement('a');
-    a.href = outputVideoUrl;
-    a.download = `highlight-${Date.now()}.mp4`;
-    a.target = '_blank';
-    a.click();
+    a.href = outputVideoUrl; a.download = `highlight-${Date.now()}.mp4`; a.target = '_blank'; a.click();
   };
 
   // ============ RENDER UI ============
@@ -588,7 +569,6 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
           <p className="text-sm text-muted-foreground">
             העלה סרטונים ו/או תמונות — המערכת תייצר ממנו סרטון קצר, קולע וויראלי (30‑60 שניות)
           </p>
-
           <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground space-y-0.5">
             <p>📎 נתמך: MP4, MOV, WEBM, JPG, PNG, WEBP</p>
             <p>📦 עד {MAX_FILES} קבצים, עד {MAX_FILE_SIZE_MB}MB לקובץ</p>
@@ -622,7 +602,6 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
             }}
           />
 
-          {/* Asset list */}
           {assets.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">{readyAssets.length} קבצים מוכנים{uploadingCount > 0 ? `, ${uploadingCount} מועלים...` : ''}</p>
@@ -650,10 +629,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
           )}
 
           <button
-            onClick={() => {
-              if (readyAssets.length === 0) { toast.error('יש להעלות לפחות קובץ אחד'); return; }
-              setStep(1);
-            }}
+            onClick={() => { if (readyAssets.length === 0) { toast.error('יש להעלות לפחות קובץ אחד'); return; } setStep(1); }}
             disabled={uploadingCount > 0}
             className="w-full gradient-gold text-primary-foreground px-6 py-3 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
@@ -677,9 +653,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
               ] as const).map(opt => (
                 <button key={opt.id} onClick={() => setSettings(p => ({ ...p, outputDuration: opt.id }))}
                   className={cn('text-right p-2.5 rounded-lg border transition-all text-xs',
-                    settings.outputDuration === opt.id
-                      ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
-                      : 'border-border hover:border-primary/30 bg-card'
+                    settings.outputDuration === opt.id ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-border hover:border-primary/30 bg-card'
                   )}>
                   <span className="mr-1">{opt.icon}</span> {opt.label}
                 </button>
@@ -707,9 +681,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
               ] as const).map(opt => (
                 <button key={opt.id} onClick={() => setSettings(p => ({ ...p, contentStyle: opt.id }))}
                   className={cn('text-right p-2.5 rounded-lg border transition-all text-xs',
-                    settings.contentStyle === opt.id
-                      ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
-                      : 'border-border hover:border-primary/30 bg-card'
+                    settings.contentStyle === opt.id ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-border hover:border-primary/30 bg-card'
                   )}>
                   <span className="font-semibold">{opt.label}</span>
                   <p className="text-muted-foreground text-[10px]">{opt.desc}</p>
@@ -752,16 +724,13 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
               <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
                 <img src={settings.logoUrl} alt="logo" className="w-8 h-8 object-contain rounded" />
                 <span className="text-xs flex-1 truncate">לוגו הועלה</span>
-                <button onClick={() => setSettings(p => ({ ...p, logoUrl: null }))} className="text-muted-foreground hover:text-destructive">
-                  <X className="w-4 h-4" />
-                </button>
+                <button onClick={() => setSettings(p => ({ ...p, logoUrl: null }))} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
               </div>
             ) : (
               <label className="block border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-primary/40 transition-colors">
                 <Upload className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">העלה לוגו</p>
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={e => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0]); }} />
+                <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0]); }} />
               </label>
             )}
             {settings.logoUrl && (
@@ -769,14 +738,12 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
                 <div>
                   <label className="text-muted-foreground">גודל (%)</label>
                   <input type="range" min={2} max={30} value={settings.logoPlacement.scalePct}
-                    onChange={e => setSettings(p => ({ ...p, logoPlacement: { ...p.logoPlacement, scalePct: Number(e.target.value) } }))}
-                    className="w-full" />
+                    onChange={e => setSettings(p => ({ ...p, logoPlacement: { ...p.logoPlacement, scalePct: Number(e.target.value) } }))} className="w-full" />
                 </div>
                 <div>
                   <label className="text-muted-foreground">שקיפות</label>
                   <input type="range" min={10} max={100} value={Math.round(settings.logoPlacement.opacity * 100)}
-                    onChange={e => setSettings(p => ({ ...p, logoPlacement: { ...p.logoPlacement, opacity: Number(e.target.value) / 100 } }))}
-                    className="w-full" />
+                    onChange={e => setSettings(p => ({ ...p, logoPlacement: { ...p.logoPlacement, opacity: Number(e.target.value) / 100 } }))} className="w-full" />
                 </div>
               </div>
             )}
@@ -789,16 +756,13 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
               <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
                 <Music className="w-4 h-4 text-primary" />
                 <span className="text-xs flex-1">מוזיקה הועלה</span>
-                <button onClick={() => setSettings(p => ({ ...p, musicUrl: null }))} className="text-muted-foreground hover:text-destructive">
-                  <X className="w-4 h-4" />
-                </button>
+                <button onClick={() => setSettings(p => ({ ...p, musicUrl: null }))} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
               </div>
             ) : (
               <label className="block border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-primary/40 transition-colors">
                 <Music className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">העלה קובץ מוזיקה</p>
-                <input type="file" accept="audio/*" className="hidden"
-                  onChange={e => { if (e.target.files?.[0]) handleMusicUpload(e.target.files[0]); }} />
+                <input type="file" accept="audio/*" className="hidden" onChange={e => { if (e.target.files?.[0]) handleMusicUpload(e.target.files[0]); }} />
               </label>
             )}
             {settings.musicUrl && (
@@ -806,8 +770,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
                 <div className="flex items-center gap-2 text-xs">
                   <label className="text-muted-foreground">עוצמה</label>
                   <input type="range" min={5} max={100} value={Math.round(settings.musicVolume * 100)}
-                    onChange={e => setSettings(p => ({ ...p, musicVolume: Number(e.target.value) / 100 }))}
-                    className="flex-1" />
+                    onChange={e => setSettings(p => ({ ...p, musicVolume: Number(e.target.value) / 100 }))} className="flex-1" />
                   <span className="text-muted-foreground w-8 text-center">{Math.round(settings.musicVolume * 100)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -823,9 +786,7 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
           {/* Navigation */}
           <div className="flex gap-2">
-            <button onClick={() => setStep(0)} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">
-              חזרה
-            </button>
+            <button onClick={() => setStep(0)} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">חזרה</button>
             <button onClick={() => { setSegments([]); setStep(2); }}
               className="flex-1 gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2">
               בנה תוכנית <ArrowRight className="w-4 h-4 rotate-180" />
@@ -834,9 +795,25 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
         </div>
       )}
 
-      {/* ============ STEP 2: PLAN ============ */}
+      {/* ============ STEP 2: PLAN (Auto / Manual) ============ */}
       {step === 2 && (
         <div className="space-y-4">
+          {/* Mode toggle */}
+          <div className="flex gap-2 bg-muted/30 border border-border rounded-lg p-1">
+            <button onClick={() => { setPlanMode('auto'); if (segments.length === 0) buildAutoPlan(); }}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all',
+                planMode === 'auto' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}>
+              <Wand2 className="w-3.5 h-3.5" /> אוטומטי
+            </button>
+            <button onClick={() => { setPlanMode('manual'); if (segments.length === 0) buildManualPlan(); }}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all',
+                planMode === 'manual' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}>
+              <Hand className="w-3.5 h-3.5" /> ידני
+            </button>
+          </div>
+
           {planLoading ? (
             <div className="text-center py-8 space-y-3">
               <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
@@ -844,46 +821,111 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
             </div>
           ) : (
             <>
+              {/* Summary bar */}
               <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">{segments.length} קטעים</span>
                 <span className="font-semibold">{formatDuration(totalPlanDuration)} סה״כ</span>
               </div>
 
-              <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+              {/* Auto mode: rebuild button */}
+              {planMode === 'auto' && (
+                <button onClick={buildAutoPlan}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-primary hover:bg-primary/5 rounded-lg border border-primary/20 transition-colors">
+                  <RefreshCw className="w-3.5 h-3.5" /> צור תוכנית אוטומטית מחדש
+                </button>
+              )}
+
+              {/* Hidden video element for segment preview */}
+              <video ref={previewVideoRef} className="hidden" onEnded={() => setPlayingSegId(null)} />
+
+              {/* Segment list */}
+              <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
                 {segments.map((seg, idx) => (
-                  <div key={seg.id} className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2 text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <button onClick={() => moveSegment(idx, -1)} disabled={idx === 0}
-                        className="text-muted-foreground hover:text-foreground disabled:opacity-20">
-                        <ChevronUp className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => moveSegment(idx, 1)} disabled={idx === segments.length - 1}
-                        className="text-muted-foreground hover:text-foreground disabled:opacity-20">
-                        <ChevronDown className="w-3 h-3" />
+                  <div key={seg.id} className={cn(
+                    'bg-card border rounded-lg px-3 py-2.5 text-xs space-y-1.5',
+                    playingSegId === seg.id ? 'border-primary ring-1 ring-primary/30' : 'border-border',
+                  )}>
+                    {/* Header row: reorder + name + controls */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-0.5">
+                        <button onClick={() => moveSegment(idx, -1)} disabled={idx === 0}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-20">
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => moveSegment(idx, 1)} disabled={idx === segments.length - 1}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-20">
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
+                        {seg.type === 'video' ? <Video className="w-4 h-4 text-green-500" /> : <ImageIcon className="w-4 h-4 text-amber-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-medium">{seg.sourceName}</p>
+                        {seg.role && planMode === 'auto' && (
+                          <p className="text-[10px] text-primary/80">{ROLE_LABELS[seg.role] || seg.role}</p>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground font-mono">{formatDuration(seg.endSec - seg.startSec)}</span>
+                      {seg.type === 'video' && (
+                        <button onClick={() => playSegment(seg)} title="נגן קטע"
+                          className={cn('p-1 rounded hover:bg-muted', playingSegId === seg.id ? 'text-primary' : 'text-muted-foreground')}>
+                          {playingSegId === seg.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                      <button onClick={() => removeSegment(seg.id)} className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-destructive">
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
-                      {seg.type === 'video' ? <Video className="w-4 h-4 text-green-500" /> : <ImageIcon className="w-4 h-4 text-amber-500" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium">{seg.sourceName}</p>
-                      <p className="text-muted-foreground">
-                        {seg.type === 'video' ? `${seg.startSec}ש׳ → ${seg.endSec}ש׳` : `${seg.endSec}ש׳ תצוגה`}
-                        {seg.reason && ` — ${seg.reason}`}
+
+                    {/* Trim controls — always visible in manual mode, collapsed in auto */}
+                    {seg.type === 'video' && (planMode === 'manual' || true) && (
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                        <span className="text-[10px] text-muted-foreground w-10">התחלה</span>
+                        <input
+                          type="text"
+                          value={formatTimeInput(seg.startSec)}
+                          onChange={e => {
+                            const v = parseTimeInput(e.target.value);
+                            if (v !== null) updateSegmentTrim(seg.id, 'startSec', v);
+                          }}
+                          className="w-16 bg-muted/50 border border-border rounded px-1.5 py-0.5 text-[11px] font-mono text-center"
+                          dir="ltr"
+                        />
+                        <span className="text-[10px] text-muted-foreground w-8">סוף</span>
+                        <input
+                          type="text"
+                          value={formatTimeInput(seg.endSec)}
+                          onChange={e => {
+                            const v = parseTimeInput(e.target.value);
+                            if (v !== null) updateSegmentTrim(seg.id, 'endSec', v);
+                          }}
+                          className="w-16 bg-muted/50 border border-border rounded px-1.5 py-0.5 text-[11px] font-mono text-center"
+                          dir="ltr"
+                        />
+                        {planMode === 'manual' && (
+                          <button onClick={() => splitSegment(seg.id)} title="פצל קטע"
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <Scissors className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reason */}
+                    {seg.reason && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {seg.type === 'video' ? `${seg.startSec.toFixed(1)}ש׳ → ${seg.endSec.toFixed(1)}ש׳` : `${seg.endSec}ש׳ תצוגה`}
+                        {` — ${seg.reason}`}
                       </p>
-                    </div>
-                    <span className="text-muted-foreground font-mono">{formatDuration(seg.endSec - seg.startSec)}</span>
-                    <button onClick={() => removeSegment(seg.id)} className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-destructive">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                    )}
                   </div>
                 ))}
               </div>
 
+              {/* Navigation */}
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">
-                  חזרה
-                </button>
+                <button onClick={() => setStep(1)} className="px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted">חזרה</button>
                 <button onClick={requestRender} disabled={segments.length === 0}
                   className="flex-1 gradient-gold text-primary-foreground px-6 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
                   💰 רנדור סרטון <Scissors className="w-4 h-4" />
@@ -919,7 +961,6 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
                 <video src={outputVideoUrl} controls className="w-full max-h-[300px]" />
               </div>
 
-              {/* Brand selector for saving */}
               {!activeBrand && (
                 <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">שמור תחת חברה / מותג</label>
@@ -959,13 +1000,10 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
           {!rendering && !outputVideoUrl && renderStage.startsWith('שגיאה') && (
             <div className="space-y-3 text-center py-4">
               <p className="text-sm text-destructive font-medium">{renderStage}</p>
-              <button onClick={() => { setStep(2); }} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted">
-                חזרה לתוכנית
-              </button>
+              <button onClick={() => { setStep(2); }} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted">חזרה לתוכנית</button>
             </div>
           )}
 
-          {/* Debug panel */}
           {debugLogs.length > 0 && (
             <div className="border border-border rounded-lg overflow-hidden">
               <button onClick={() => setShowDebug(p => !p)}
