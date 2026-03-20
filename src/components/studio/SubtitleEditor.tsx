@@ -210,6 +210,12 @@ const STICKER_ANIM_OPTIONS: { value: StickerAnimation; label: string }[] = [
 interface SubtitleEditorProps {
   activeBrand: Brand | undefined;
   onBack: () => void;
+  /** Pre-load a video URL (skip upload step) */
+  initialVideoUrl?: string;
+  /** Avatar image URL for PiP overlay on final render */
+  pipAvatarUrl?: string;
+  /** Called when render completes with the output video URL */
+  onComplete?: (videoUrl: string) => void;
 }
 
 interface SubtitleTranscribeDebug {
