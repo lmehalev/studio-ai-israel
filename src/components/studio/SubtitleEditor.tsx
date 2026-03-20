@@ -443,6 +443,15 @@ export function SubtitleEditor({ activeBrand, onBack, initialVideoUrl, pipAvatar
 
   const currentFont = fontPresets.find(p => p.id === selectedFont) || fontPresets[0];
 
+  // Auto-load initial video URL (e.g., from import flow)
+  useEffect(() => {
+    if (initialVideoUrl && !videoPreviewUrl) {
+      setVideoPreviewUrl(initialVideoUrl);
+      setUploadedVideoUrl(initialVideoUrl);
+      setStep(1); // Skip upload step, go straight to subtitles
+    }
+  }, [initialVideoUrl]);
+
   const getAdjustedSegments = useCallback(() => {
     return subtitleSegments
       .map((seg) => ({
