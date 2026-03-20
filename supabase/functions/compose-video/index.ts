@@ -758,6 +758,7 @@ Deno.serve(async (req) => {
         outputConfig.height,
         Number(sourceWidth),
         Number(sourceHeight),
+        orientation,
       );
 
       const tracks: any[] = [];
