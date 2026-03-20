@@ -246,7 +246,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         localStorage.setItem(SESSION_KEY, JSON.stringify(lite));
       } catch {}
     }
-  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
+  }, [open, selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt, importUrl, importType, importStorageUrl, selectedAvatarId, selectedVoiceId, selectedCategory, customCategory, highlightFiles, highlightOutputType]);
 
   // Restore session when dialog opens
   const [sessionRestoreOffered, setSessionRestoreOffered] = useState(false);
