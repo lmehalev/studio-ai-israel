@@ -15,6 +15,7 @@ import {
   subtitleService, type SubtitleSegment, type Brand, type CaptionCue,
   storageService, composeService,
 } from '@/services/creativeService';
+import { projectService } from '@/services/projectService';
 import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/studio/CostApprovalDialog';
 
 // ── Font presets (YouTube-style, creative) ──
