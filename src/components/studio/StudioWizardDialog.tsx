@@ -1107,19 +1107,30 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   setImportStage('');
                   
                   // Auto-save as source output in project
-                  const brandId = activeBrandId || inlineBrandId;
-                  const brandObj = activeBrand || brands.find(b => b.id === brandId);
-                  if (brandId && brandObj) {
-                    try {
-                      const project = await projectService.findOrCreateByBrand(brandId, brandObj.name, effectiveCategory || undefined);
-                      await projectService.addOutput(project.id, {
-                        name: `מקור מיובא — ${importResult.type === 'video' ? 'סרטון' : 'תמונה'}`,
-                        description: `מקור: ${url}`,
-                        video_url: importResult.type === 'video' ? importResult.publicUrl : null,
-                        thumbnail_url: importResult.type === 'image' ? importResult.publicUrl : null,
-                        provider: 'import',
+                  try {
+                    const brandId = activeBrandId || inlineBrandId;
+                    const brandObj = activeBrand || brands.find(b => b.id === brandId);
+                    let project;
+                    if (brandId && brandObj) {
+                      project = await projectService.findOrCreateByBrand(brandId, brandObj.name, effectiveCategory || undefined);
+                    } else {
+                      // No brand selected — create a generic import project
+                      project = await projectService.create({
+                        name: `ייבוא — ${new Date().toLocaleDateString('he-IL')}`,
+                        video_type: 'ייבוא ועריכה',
+                        status: 'טיוטה',
                       });
-                    } catch {}
+                    }
+                    await projectService.addOutput(project.id, {
+                      name: `מקור מיובא — ${importResult.type === 'video' ? 'סרטון' : 'תמונה'}`,
+                      description: `מקור: ${url}`,
+                      video_url: importResult.type === 'video' ? importResult.publicUrl : null,
+                      thumbnail_url: importResult.type === 'image' ? importResult.publicUrl : null,
+                      provider: 'import',
+                    });
+                    toast.success('נשמר כפרויקט!');
+                  } catch (saveErr) {
+                    console.warn('Auto-save to project failed:', saveErr);
                   }
                   
                   toast.success(importResult.type === 'video' ? 'סרטון יובא בהצלחה!' : 'תמונה יובאה בהצלחה!');
