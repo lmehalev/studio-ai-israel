@@ -1476,18 +1476,6 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
         </div>
       </DialogContent>
     </Dialog>
-
-    {/* Cost approval dialog for highlight flow */}
-    <CostApprovalDialog
-      open={showHighlightCostApproval}
-      onOpenChange={setShowHighlightCostApproval}
-      estimates={buildHighlightEstimates(
-        !!selectedVoiceId,
-        highlightFiles.some(f => f.match(/\.(mp4|mov|webm)/i))
-      )}
-      onApprove={() => { setShowHighlightCostApproval(false); setStep(step + 1); }}
-      title="אישור יצירת סרטון בתשלום"
-    />
     </>
   );
 }
