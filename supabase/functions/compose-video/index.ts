@@ -733,6 +733,7 @@ Deno.serve(async (req) => {
         orientation,
         sourceWidth,
         sourceHeight,
+        captionPosition,
       } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
