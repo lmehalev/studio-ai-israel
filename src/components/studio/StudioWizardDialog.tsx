@@ -498,7 +498,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       ],
       import_edit: [
         { title: 'הדבק קישור', desc: 'שים קישור לתמונה או סרטון' },
-        { title: 'מה לשנות?', desc: 'תאר את השינויים שתרצה' },
+        { title: importType === 'video' ? 'תצוגה ועריכה' : 'מה לשנות?', desc: importType === 'video' ? 'צפה בסרטון ובחר פעולות' : 'תאר את השינויים שתרצה' },
+        { title: importType === 'video' ? 'עורך וידאו' : 'התוצאה', desc: importType === 'video' ? 'כתוביות, לוגו ועריכה' : 'התוצאה הערוכה' },
         { title: 'התוצאה', desc: 'התוצאה הערוכה' },
       ],
       highlight: [
