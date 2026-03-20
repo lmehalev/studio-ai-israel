@@ -179,7 +179,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (url.startsWith('data:')) {
         toast.info('מעלה קובץ לאחסון...');
         const blob = await fetch(url).then(r => r.blob());
-        const ext = url.includes('png') ? 'png' : 'jpg';
+        const isVid = isVideo || blob.type.startsWith('video/');
+        const ext = isVid ? 'mp4' : url.includes('png') ? 'png' : 'jpg';
         const file = new File([blob], `output-${Date.now()}.${ext}`, { type: blob.type });
         finalUrl = await storageService.upload(file);
       }
