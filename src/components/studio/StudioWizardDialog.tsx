@@ -280,6 +280,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
       if (s.editPrompt) setEditPrompt(s.editPrompt);
       if (s.importUrl) setImportUrl(s.importUrl);
       if (s.importType) setImportType(s.importType);
+      if (s.importStorageUrl) setImportStorageUrl(s.importStorageUrl);
       if (s.selectedAvatarId) setSelectedAvatarId(s.selectedAvatarId);
       if (s.selectedVoiceId) setSelectedVoiceId(s.selectedVoiceId);
       if (s.selectedCategory) setSelectedCategory(s.selectedCategory);
