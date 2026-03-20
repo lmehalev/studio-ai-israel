@@ -198,11 +198,25 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
     }
   };
 
-  // ============ STEP 2: AUTO PLAN ============
+  // ============ STEP 2: VIRAL AUTO PLAN ============
+
+  // Extract multiple micro-segments from a single video asset
+  const extractMicroSegments = (asset: UploadedAsset, count: number, segLen: number): Array<{ start: number; end: number }> => {
+    const dur = asset.durationSec || 30;
+    if (dur <= segLen) return [{ start: 0, end: dur }];
+    const results: Array<{ start: number; end: number }> = [];
+    // Spread picks across the clip to avoid sequential boring order
+    const step = Math.max(1, (dur - segLen) / (count + 1));
+    for (let i = 1; i <= count && results.length < count; i++) {
+      const start = Math.min(dur - segLen, Math.round(step * i * 10) / 10);
+      results.push({ start, end: Math.round((start + segLen) * 10) / 10 });
+    }
+    return results;
+  };
 
   const buildAutoPlan = useCallback(() => {
     setPlanLoading(true);
-    addLog('בונה תוכנית אוטומטית...');
+    addLog('בונה תוכנית ויראלית...');
 
     const targetDuration = getTargetDuration();
     const videoAssets = readyAssets.filter(a => a.type === 'video');
@@ -211,78 +225,165 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
     const newSegments: HighlightSegment[] = [];
 
     if (targetDuration === 0) {
-      // Long compilation — use everything
+      // Long compilation — use everything but still micro-segment videos
       for (const asset of allAssets) {
-        newSegments.push({
-          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
-          sourceName: asset.name, startSec: 0,
-          endSec: asset.type === 'video' ? (asset.durationSec || 30) : IMAGE_DISPLAY_DURATION,
-          type: asset.type, reason: asset.type === 'video' ? 'כל הסרטון' : 'תמונה',
-          role: 'filler',
-        });
-      }
-    } else if (settings.contentStyle === 'product' || settings.contentStyle === 'auto') {
-      // Marketing structure: Hook → Value → Proof → CTA
-      const roles: Array<{ role: HighlightSegment['role']; label: string; pct: number }> = [
-        { role: 'hook', label: 'פתיחה חזקה', pct: 0.2 },
-        { role: 'value', label: 'הצגת ערך / מוצר', pct: 0.35 },
-        { role: 'proof', label: 'הוכחה חברתית', pct: 0.25 },
-        { role: 'cta', label: 'קריאה לפעולה', pct: 0.2 },
-      ];
-
-      let assetIdx = 0;
-      for (const r of roles) {
-        const slotDuration = Math.max(3, Math.round(targetDuration * r.pct));
-        // Distribute slot across available assets round-robin
-        const assetsForSlot = Math.max(1, Math.ceil(allAssets.length / roles.length));
-        let remaining = slotDuration;
-
-        for (let j = 0; j < assetsForSlot && assetIdx < allAssets.length && remaining > 0; j++) {
-          const asset = allAssets[assetIdx++];
-          const clipLen = asset.type === 'image'
-            ? Math.min(remaining, IMAGE_DISPLAY_DURATION)
-            : Math.min(remaining, asset.durationSec || 30);
+        if (asset.type === 'image') {
           newSegments.push({
             id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
-            sourceName: asset.name, startSec: 0, endSec: clipLen,
-            type: asset.type, reason: r.label, role: r.role,
+            sourceName: asset.name, startSec: 0, endSec: IMAGE_DISPLAY_DURATION,
+            type: 'image', reason: 'תמונה', role: 'filler',
           });
-          remaining -= clipLen;
+        } else {
+          const dur = asset.durationSec || 30;
+          const microCount = Math.max(2, Math.ceil(dur / 8));
+          const picks = extractMicroSegments(asset, microCount, Math.min(8, dur));
+          picks.forEach((p, pi) => {
+            newSegments.push({
+              id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
+              sourceName: asset.name, startSec: p.start, endSec: p.end,
+              type: 'video', reason: `קטע ${pi + 1}/${picks.length}`, role: 'filler',
+            });
+          });
+        }
+      }
+    } else {
+      // ===== VIRAL MICRO-SEGMENT PLAN =====
+      // Structure templates by style
+      type RoleSlot = { role: NonNullable<HighlightSegment['role']>; label: string; pct: number; emoji?: string; zoom?: boolean };
+      let structure: RoleSlot[];
+
+      if (settings.contentStyle === 'podcast') {
+        structure = [
+          { role: 'hook', label: 'ציטוט חזק / פתיחה', pct: 0.12, emoji: '🔥' },
+          { role: 'value', label: 'תובנה מרכזית', pct: 0.25 },
+          { role: 'proof', label: 'תגובה / רגע מצחיק', pct: 0.2, zoom: true },
+          { role: 'value', label: 'ציטוט נוסף', pct: 0.18 },
+          { role: 'proof', label: 'פאנצ\'ליין', pct: 0.15, emoji: '💡', zoom: true },
+          { role: 'cta', label: 'סיום + CTA', pct: 0.1, emoji: '➡️' },
+        ];
+      } else if (settings.contentStyle === 'drama') {
+        structure = [
+          { role: 'hook', label: 'Setup — הצגת מצב', pct: 0.15 },
+          { role: 'value', label: 'בניית מתח', pct: 0.25, zoom: true },
+          { role: 'proof', label: 'Twist — טוויסט', pct: 0.25, emoji: '🔥', zoom: true },
+          { role: 'value', label: 'תגובה / פיקאפ', pct: 0.2 },
+          { role: 'cta', label: 'Payoff — סיום', pct: 0.15, emoji: '✅' },
+        ];
+      } else {
+        // product / auto = marketing viral
+        structure = [
+          { role: 'hook', label: '🪝 Hook — פתיחה חזקה', pct: 0.08, emoji: '🔥', zoom: true },
+          { role: 'hook', label: 'בעיה / כאב', pct: 0.1 },
+          { role: 'value', label: 'הצגת פתרון', pct: 0.12, zoom: true },
+          { role: 'value', label: 'דמו / תוצאות', pct: 0.12 },
+          { role: 'proof', label: 'הוכחה חברתית', pct: 0.1, emoji: '✅' },
+          { role: 'value', label: 'פיצ\'ר מפתח', pct: 0.1, zoom: true },
+          { role: 'proof', label: 'תוצאה / לפני-אחרי', pct: 0.1, emoji: '💡' },
+          { role: 'value', label: 'Jump cut — חיזוק', pct: 0.08, zoom: true },
+          { role: 'cta', label: '📣 CTA — קריאה לפעולה', pct: 0.1, emoji: '➡️' },
+          { role: 'cta', label: 'סגירה + לוגו', pct: 0.1 },
+        ];
+      }
+
+      // Build a pool of micro-segments from all video assets
+      type MicroPick = { asset: UploadedAsset; start: number; end: number; used: boolean };
+      const pool: MicroPick[] = [];
+      const segLenRange = { min: 3, max: 8 };
+
+      for (const asset of videoAssets) {
+        const dur = asset.durationSec || 30;
+        // Pick 2-4 segments per source clip depending on its length
+        const pickCount = Math.max(2, Math.min(4, Math.ceil(dur / 10)));
+        for (let i = 0; i < pickCount; i++) {
+          const segLen = segLenRange.min + Math.random() * (segLenRange.max - segLenRange.min);
+          const maxStart = Math.max(0, dur - segLen);
+          const start = Math.round((maxStart * (i + 0.5) / pickCount) * 10) / 10;
+          const end = Math.round(Math.min(dur, start + segLen) * 10) / 10;
+          if (end - start >= 2) pool.push({ asset, start, end, used: false });
         }
       }
 
-      // If unused assets remain, add as filler
-      while (assetIdx < allAssets.length) {
-        const asset = allAssets[assetIdx++];
-        const clipLen = asset.type === 'image' ? IMAGE_DISPLAY_DURATION : Math.min(8, asset.durationSec || 8);
-        newSegments.push({
-          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
-          sourceName: asset.name, startSec: 0, endSec: clipLen,
-          type: asset.type, reason: 'תוכן נוסף', role: 'filler',
-        });
+      // Shuffle pool slightly for variety (don't just go in order)
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
       }
-    } else {
-      // Podcast / Drama / other: even split
-      const totalAssets = allAssets.length;
-      if (totalAssets === 0) { setPlanLoading(false); return; }
-      const perAssetSec = Math.max(3, Math.floor(targetDuration / totalAssets));
 
-      for (const asset of allAssets) {
-        const clipLen = asset.type === 'image'
-          ? Math.min(perAssetSec, IMAGE_DISPLAY_DURATION)
-          : Math.min(perAssetSec, asset.durationSec || 30);
+      // Fill structure slots from pool
+      let poolIdx = 0;
+      let accumulated = 0;
+      const imagePool = [...imageAssets];
+
+      for (const slot of structure) {
+        const slotDuration = Math.max(3, Math.round(targetDuration * slot.pct));
+        let remaining = slotDuration;
+
+        while (remaining >= 2) {
+          // Try pool first
+          const pick = pool.find((p, idx) => !p.used && idx >= poolIdx % pool.length);
+          if (pick) {
+            pick.used = true;
+            const clipLen = Math.min(remaining, pick.end - pick.start);
+            const actualEnd = Math.round((pick.start + clipLen) * 10) / 10;
+            newSegments.push({
+              id: generateId(), sourceAssetId: pick.asset.id, sourceUrl: pick.asset.url,
+              sourceName: pick.asset.name, startSec: pick.start, endSec: actualEnd,
+              type: 'video', reason: slot.label, role: slot.role,
+              zoomPct: slot.zoom ? 105 : undefined,
+              emoji: slot.emoji,
+            });
+            remaining -= clipLen;
+            accumulated += clipLen;
+            poolIdx++;
+          } else if (imagePool.length > 0) {
+            // Use an image
+            const img = imagePool.shift()!;
+            const imgDur = Math.min(remaining, IMAGE_DISPLAY_DURATION);
+            newSegments.push({
+              id: generateId(), sourceAssetId: img.id, sourceUrl: img.url,
+              sourceName: img.name, startSec: 0, endSec: imgDur,
+              type: 'image', reason: slot.label, role: slot.role,
+              emoji: slot.emoji,
+            });
+            remaining -= imgDur;
+            accumulated += imgDur;
+          } else {
+            // Re-use pool items (jump cuts = same source different segment)
+            const reuse = pool[poolIdx % pool.length];
+            if (!reuse) break;
+            poolIdx++;
+            const clipLen = Math.min(remaining, reuse.end - reuse.start);
+            const actualEnd = Math.round((reuse.start + clipLen) * 10) / 10;
+            newSegments.push({
+              id: generateId(), sourceAssetId: reuse.asset.id, sourceUrl: reuse.asset.url,
+              sourceName: reuse.asset.name, startSec: reuse.start, endSec: actualEnd,
+              type: 'video', reason: `${slot.label} (jump cut)`, role: slot.role,
+              zoomPct: slot.zoom ? 105 : undefined,
+              emoji: slot.emoji,
+            });
+            remaining -= clipLen;
+            accumulated += clipLen;
+          }
+        }
+
+        // If we've exceeded target, stop
+        if (targetDuration > 0 && accumulated >= targetDuration) break;
+      }
+
+      // Add remaining images if any
+      for (const img of imagePool) {
+        if (targetDuration > 0 && accumulated >= targetDuration) break;
         newSegments.push({
-          id: generateId(), sourceAssetId: asset.id, sourceUrl: asset.url,
-          sourceName: asset.name, startSec: 0, endSec: clipLen,
-          type: asset.type,
-          reason: settings.contentStyle === 'podcast' ? 'הדגשה מפודקאסט' : 'קטע דרמטי',
-          role: 'filler',
+          id: generateId(), sourceAssetId: img.id, sourceUrl: img.url,
+          sourceName: img.name, startSec: 0, endSec: IMAGE_DISPLAY_DURATION,
+          type: 'image', reason: 'תוכן נוסף', role: 'filler',
         });
+        accumulated += IMAGE_DISPLAY_DURATION;
       }
     }
 
     setSegments(newSegments);
-    addLog(`תוכנית מוכנה: ${newSegments.length} קטעים, ${Math.round(newSegments.reduce((s, seg) => s + seg.endSec - seg.startSec, 0))} שניות`);
+    addLog(`תוכנית ויראלית: ${newSegments.length} מיקרו-קטעים, ${Math.round(newSegments.reduce((s, seg) => s + seg.endSec - seg.startSec, 0))} שניות`);
     setPlanLoading(false);
   }, [readyAssets, settings, addLog]);
 
