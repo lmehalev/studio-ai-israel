@@ -165,10 +165,15 @@ Deno.serve(async (req) => {
     const contentLength = headResp.headers.get("content-length");
 
     // ── 6. Content-type validation ──
+    // Extension takes priority over content-type (many CDNs return wrong MIME)
     const mimeType = detectTypeFromMime(contentType);
-    const detectedType = mimeType || extType;
+    const detectedType = extType || mimeType;
     if (!detectedType) {
       return err(`סוג הקובץ אינו נתמך (content-type: ${contentType}). נתמכים: JPG, PNG, WebP, MP4, MOV, WebM`);
+    }
+    // Extra safety: if extension says video but MIME says image (or vice versa), trust extension
+    if (extType && mimeType && extType !== mimeType) {
+      console.warn(`Type mismatch: extension=${extType}, mime=${mimeType}. Using extension.`);
     }
 
     // ── 7. Size validation ──

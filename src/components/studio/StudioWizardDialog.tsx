@@ -653,22 +653,24 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
 
   // ============ RESULT VIEW ============
+  const isResultVideo = !!(result?.videoUrl);
+  const isResultImage = !!(result?.imageUrl) && !isResultVideo;
   const renderResultView = () => (
     <div className="space-y-4">
-      {result?.imageUrl && (
+      {isResultImage && (
         <div className="rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
-          <img src={result.imageUrl} alt="תוצאה" className="max-w-full max-h-[300px] object-contain" />
+          <img src={result!.imageUrl} alt="תוצאה" className="max-w-full max-h-[300px] object-contain" />
         </div>
       )}
-      {result?.videoUrl && (
+      {isResultVideo && (
         <div className="rounded-lg overflow-hidden border border-border bg-muted/30">
-          <video src={result.videoUrl} controls className="w-full max-h-[300px]" />
+          <video src={result!.videoUrl} controls className="w-full max-h-[300px]" />
         </div>
       )}
       {renderInlineBrandSelector()}
       <div className="flex gap-2">
         <button onClick={handleDownload} className="flex-1 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-muted flex items-center justify-center gap-2">
-          <Download className="w-4 h-4" /> הורד
+          <Download className="w-4 h-4" /> {isResultVideo ? 'הורד MP4' : 'הורד תמונה'}
         </button>
         <button onClick={handleSaveToProject} disabled={savingOutput}
           className="flex-1 px-4 py-2.5 gradient-gold text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
