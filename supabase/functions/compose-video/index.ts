@@ -35,6 +35,12 @@ interface SubtitleStyle {
   shadow?: string;
   fontWeight?: number;
   padding?: string;
+  // SVG-specific overrides derived from font preset
+  strokeColor?: string;
+  strokeWidth?: number;
+  shadowBlur?: number;
+  shadowColor?: string;
+  shadowOpacity?: number;
 }
 
 interface StickerItem {
