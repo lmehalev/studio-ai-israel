@@ -872,6 +872,7 @@ Deno.serve(async (req) => {
             outputConfig.width,
             outputConfig.height,
             contentRect,
+            captionPosition,
           );
           textClips.push(...subClips);
         }
