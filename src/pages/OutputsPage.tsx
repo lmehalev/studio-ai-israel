@@ -37,8 +37,8 @@ export default function OutputsPage() {
                 <p className="text-xs text-muted-foreground">{o.avatarName} • {o.aspectRatio} • {o.estimatedLength}</p>
                 <p className="text-[10px] text-muted-foreground">{o.createdAt} • {o.provider}</p>
                 <div className="flex gap-2 pt-2 border-t border-border">
-                  <button onClick={() => toast.info('הורדה תתבצע בעתיד')} className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-border rounded-lg text-xs hover:bg-muted">
-                    <Download className="w-3 h-3" /> הורדה
+                   <button onClick={() => toast.info('הורדה תתבצע בעתיד')} className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-border rounded-lg text-xs hover:bg-muted">
+                    <Download className="w-3 h-3" /> {o.videoUrl ? 'הורד MP4' : 'הורד תמונה'}
                   </button>
                   <button className="p-1.5 border border-border rounded-lg hover:bg-muted"><Copy className="w-3.5 h-3.5 text-muted-foreground" /></button>
                   <button className="p-1.5 border border-border rounded-lg hover:bg-muted"><RefreshCw className="w-3.5 h-3.5 text-muted-foreground" /></button>
