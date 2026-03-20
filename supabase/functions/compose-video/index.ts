@@ -778,6 +778,35 @@ Deno.serve(async (req) => {
         tracks.push(logo.track);
       }
 
+      // PiP avatar overlay (picture-in-picture)
+      if (pipAvatarUrl) {
+        const pipSize = Math.round(outputConfig.width * 0.18); // 18% of width
+        const pipMargin = Math.round(outputConfig.width * 0.03);
+        // Bottom-left corner
+        const pipX = pipMargin;
+        const pipY = outputConfig.height - pipMargin - pipSize;
+        const pipOffsetX = (pipX + pipSize / 2) / outputConfig.width - 0.5;
+        const pipOffsetY = -((pipY + pipSize / 2) / outputConfig.height - 0.5);
+
+        tracks.push({
+          clips: [{
+            asset: {
+              type: "image",
+              src: pipAvatarUrl,
+            },
+            start: 0,
+            length: totalDuration,
+            fit: "cover",
+            position: "center",
+            offset: { x: pipOffsetX, y: pipOffsetY },
+            scale: pipSize / outputConfig.width,
+            opacity: 0.95,
+            transition: { in: "fade", out: "fade" },
+          }],
+        });
+        console.log(`PiP avatar added: ${pipSize}px at offset (${pipOffsetX.toFixed(3)}, ${pipOffsetY.toFixed(3)})`);
+      }
+
       if (stickers && stickers.length > 0) {
         tracks.push({ clips: buildStickerClips(stickers) });
       }
