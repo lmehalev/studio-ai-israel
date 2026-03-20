@@ -35,6 +35,12 @@ interface SubtitleStyle {
   shadow?: string;
   fontWeight?: number;
   padding?: string;
+  // SVG-specific overrides derived from font preset
+  strokeColor?: string;
+  strokeWidth?: number;
+  shadowBlur?: number;
+  shadowColor?: string;
+  shadowOpacity?: number;
 }
 
 interface StickerItem {
@@ -402,6 +408,34 @@ function buildSubtitleHtmlAsset(
     ">${safeLines}</div>`;
 }
 
+function parseShadowStyle(shadow: string | undefined): { strokeColor: string; strokeWidth: number; shadowBlur: number; shadowColor: string; shadowOpacity: number } {
+  // Parse CSS text-shadow into SVG-friendly stroke/shadow params
+  if (!shadow || shadow === 'none') {
+    return { strokeColor: '#000000', strokeWidth: 0, shadowBlur: 0, shadowColor: '#000000', shadowOpacity: 0 };
+  }
+
+  // Detect thick outline style (multiple directional shadows like "2px 2px 0 #000, -2px -2px 0 #000")
+  const outlineMatch = shadow.match(/(\d+)px\s+\d+px\s+\d+px?\s+(#[0-9a-fA-F]+|rgba?\([^)]+\))/);
+  const strokeW = outlineMatch ? Math.max(2, Number(outlineMatch[1]) * 1.2) : 2.5;
+  const strokeCol = outlineMatch ? outlineMatch[2] : '#000000';
+
+  // Detect blur-based shadow (e.g. "0 2px 6px rgba(0,0,0,0.85)")
+  const blurMatch = shadow.match(/(\d+)px\s+(\d+)px\s+(\d+)px\s+(rgba?\([^)]+\)|#[0-9a-fA-F]+)/);
+  const blur = blurMatch ? Number(blurMatch[3]) : 1.8;
+
+  // Detect glow (multiple large blur shadows)
+  const glowMatch = shadow.match(/0\s+0\s+(\d+)px\s+(#[0-9a-fA-F]+|rgba?\([^)]+\))/);
+  const isGlow = glowMatch && Number(glowMatch[1]) >= 10;
+
+  return {
+    strokeColor: strokeCol,
+    strokeWidth: isGlow ? 1.5 : strokeW,
+    shadowBlur: isGlow ? Number(glowMatch![1]) * 0.3 : Math.min(blur * 0.4, 3),
+    shadowColor: isGlow ? (glowMatch![2] || '#FFFFFF') : (strokeCol || '#000000'),
+    shadowOpacity: isGlow ? 0.6 : 0.75,
+  };
+}
+
 function buildSubtitleSvgAsset(
   text: string,
   style: SubtitleStyle,
@@ -415,6 +449,14 @@ function buildSubtitleSvgAsset(
   const borderRadius = style.borderRadius ?? 16;
   const padding = parsePadding(style.padding);
 
+  // Derive stroke/shadow from font preset's shadow string or explicit overrides
+  const shadowParams = parseShadowStyle(style.shadow);
+  const strokeColor = style.strokeColor || shadowParams.strokeColor;
+  const strokeWidth = style.strokeWidth ?? shadowParams.strokeWidth;
+  const shadowBlur = style.shadowBlur ?? shadowParams.shadowBlur;
+  const shadowColor = style.shadowColor || shadowParams.shadowColor;
+  const shadowOpacity = style.shadowOpacity ?? shadowParams.shadowOpacity;
+
   const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
   const lines = wrapText(text, maxCharsPerLine, 3);
   const safeLines = lines.length > 0 ? lines : [text];
@@ -423,13 +465,13 @@ function buildSubtitleSvgAsset(
   const textBlockHeight = safeLines.length * lineHeight;
   const firstBaseline = (height - textBlockHeight) / 2 + fontSize;
 
-  const strokePaths = safeLines.map((line, index) => {
+  const strokePaths = strokeWidth > 0 ? safeLines.map((line, index) => {
     const baselineY = firstBaseline + index * lineHeight;
     const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
     return d
-      ? `<path d="${d}" fill="none" stroke="#000000" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#subtitleShadow)" />`
+      ? `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${round2(strokeWidth)}" stroke-linejoin="round" stroke-linecap="round" filter="url(#subtitleShadow)" />`
       : "";
-  }).join("");
+  }).join("") : "";
 
   const fillPaths = safeLines.map((line, index) => {
     const baselineY = firstBaseline + index * lineHeight;
@@ -440,7 +482,7 @@ function buildSubtitleSvgAsset(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <filter id="subtitleShadow" x="-25%" y="-25%" width="150%" height="150%">
-        <feDropShadow dx="0" dy="2" stdDeviation="1.8" flood-color="#000000" flood-opacity="0.75" />
+        <feDropShadow dx="0" dy="2" stdDeviation="${round2(shadowBlur)}" flood-color="${shadowColor}" flood-opacity="${shadowOpacity}" />
       </filter>
     </defs>
     <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
@@ -455,14 +497,26 @@ async function buildSubtitleClips(
   outputWidth: number,
   outputHeight: number,
   contentRect: ContentRectPx,
+  captionPosition?: string,
 ): Promise<any[]> {
   const subWidth = Math.round(contentRect.w * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
   const font = await loadHebrewFont();
 
-  const marginBottom = Math.max(18, contentRect.h * 0.05);
+  // Position: bottom (default), middle, top — matching preview captionPosition
   const subtitleCenterX = contentRect.x + contentRect.w / 2;
-  const subtitleCenterY = contentRect.y + contentRect.h - subHeight / 2 - marginBottom;
+  let subtitleCenterY: number;
+  const margin = Math.max(18, contentRect.h * 0.05);
+
+  if (captionPosition === 'top') {
+    subtitleCenterY = contentRect.y + subHeight / 2 + margin;
+  } else if (captionPosition === 'middle') {
+    subtitleCenterY = contentRect.y + contentRect.h / 2;
+  } else {
+    // bottom (default)
+    subtitleCenterY = contentRect.y + contentRect.h - subHeight / 2 - margin;
+  }
+
   const offsetX = subtitleCenterX / outputWidth - 0.5;
   const offsetY = -(subtitleCenterY / outputHeight - 0.5);
 
@@ -547,12 +601,26 @@ function resolveContentRect(
   outputHeight: number,
   sourceWidth?: number,
   sourceHeight?: number,
+  orientation?: string,
 ): ContentRectPx {
-  const sw = Number(sourceWidth);
-  const sh = Number(sourceHeight);
+  let sw = Number(sourceWidth);
+  let sh = Number(sourceHeight);
 
   if (!Number.isFinite(sw) || !Number.isFinite(sh) || sw <= 0 || sh <= 0) {
     return { x: 0, y: 0, w: outputWidth, h: outputHeight };
+  }
+
+  // Mirror the preview's orientation override logic exactly
+  if (orientation === 'landscape' && sh > sw) {
+    // Portrait source → landscape target: use 16:9 effective aspect
+    const targetAspect = 16 / 9;
+    sw = Math.max(sw, sh * targetAspect);
+    sh = sw / targetAspect;
+  } else if (orientation === 'portrait' && sw > sh) {
+    // Landscape source → portrait target: use 9:16 effective aspect
+    const targetAspect = 9 / 16;
+    sh = Math.max(sh, sw / targetAspect);
+    sw = sh * targetAspect;
   }
 
   const sourceAspect = sw / sh;
@@ -665,6 +733,7 @@ Deno.serve(async (req) => {
         orientation,
         sourceWidth,
         sourceHeight,
+        captionPosition,
       } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
@@ -689,6 +758,7 @@ Deno.serve(async (req) => {
         outputConfig.height,
         Number(sourceWidth),
         Number(sourceHeight),
+        orientation,
       );
 
       const tracks: any[] = [];
@@ -718,6 +788,7 @@ Deno.serve(async (req) => {
           outputConfig.width,
           outputConfig.height,
           contentRect,
+          captionPosition,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
@@ -801,6 +872,7 @@ Deno.serve(async (req) => {
             outputConfig.width,
             outputConfig.height,
             contentRect,
+            captionPosition,
           );
           textClips.push(...subClips);
         }

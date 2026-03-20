@@ -15,6 +15,7 @@ import {
   subtitleService, type SubtitleSegment, type Brand, type CaptionCue,
   storageService, composeService,
 } from '@/services/creativeService';
+import { projectService } from '@/services/projectService';
 import { CostApprovalDialog, buildSubtitleRenderEstimates } from '@/components/studio/CostApprovalDialog';
 
 // ── Font presets (YouTube-style, creative) ──
@@ -1389,6 +1390,7 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
         orientation: effectiveOrientation === 'portrait' ? 'portrait' : 'landscape',
         sourceWidth: videoNativeWidth || undefined,
         sourceHeight: videoNativeHeight || undefined,
+        captionPosition,
       };
 
       const renderResult = await composeService.render(renderParams);
@@ -1427,6 +1429,29 @@ export function SubtitleEditor({ activeBrand, onBack }: SubtitleEditorProps) {
           setRenderedVideoUrl(status.url);
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
+
+          // Auto-save to project
+          try {
+            const brandName = activeBrand?.name || 'כתוביות';
+            const project = await projectService.findOrCreateByBrand(
+              activeBrand?.id || 'subtitles-default',
+              brandName,
+              'כתוביות',
+            );
+            await projectService.addOutput(project.id, {
+              name: `כתוביות — ${new Date().toLocaleDateString('he-IL')}`,
+              description: `רינדור כתוביות | סגנון: ${currentFont.label} | גודל: ${customFontSize}`,
+              video_url: status.url,
+              thumbnail_url: status.thumbnailUrl || null,
+              provider: 'Shotstack',
+              prompt: `subtitle_style:${selectedFont}|fontSize:${customFontSize}|color:${customColor}|position:${captionPosition}`,
+            });
+            toast.success('נשמר לפרויקט בהצלחה!');
+          } catch (saveErr: any) {
+            console.error('Auto-save to project failed:', saveErr);
+            toast.error('השמירה לפרויקט נכשלה: ' + (saveErr.message || ''));
+          }
+
           break;
         } else if (status.status === 'failed') {
           throw new Error('ההרכבה נכשלה ב-Shotstack (status: failed)');

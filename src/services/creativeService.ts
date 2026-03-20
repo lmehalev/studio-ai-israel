@@ -260,6 +260,7 @@ export const composeService = {
     orientation?: string;
     sourceWidth?: number;
     sourceHeight?: number;
+    captionPosition?: string;
   }): Promise<{
     renderId: string | null;
     status: string;
