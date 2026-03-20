@@ -119,6 +119,75 @@ async function loadHebrewFont(): Promise<any> {
   throw new Error("Failed to load Hebrew font for subtitle vector rendering");
 }
 
+function formatCodepoint(codepoint: number): string {
+  return `U+${codepoint.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+function getRemovedCodepointReason(codepoint: number): string | null {
+  if (codepoint >= 0x0000 && codepoint <= 0x001F) return "control_char";
+  if (codepoint === 0x007F) return "control_char";
+
+  if (codepoint === 0x200E || codepoint === 0x200F) return "bidi_mark";
+  if (codepoint >= 0x202A && codepoint <= 0x202E) return "bidi_mark";
+  if (codepoint >= 0x2066 && codepoint <= 0x2069) return "bidi_mark";
+
+  if (codepoint >= 0x200B && codepoint <= 0x200D) return "zero_width";
+  if (codepoint === 0xFEFF) return "zero_width";
+
+  return null;
+}
+
+function isRenderableGlyph(char: string, font: any): boolean {
+  if (!char) return false;
+  if (/\s/u.test(char)) return true;
+
+  try {
+    if (typeof font?.charToGlyph !== "function") return true;
+    const glyph = font.charToGlyph(char);
+    if (!glyph) return false;
+
+    if (glyph.name === ".notdef") return false;
+
+    if (Array.isArray(glyph.unicodes) && glyph.unicodes.length > 0) return true;
+    if (Number.isFinite(glyph.unicode)) return true;
+
+    const glyphIndex = Number(glyph.index);
+    if (Number.isFinite(glyphIndex) && glyphIndex > 0) return true;
+
+    const path = glyph.getPath?.(0, 0, 10);
+    return Array.isArray(path?.commands) && path.commands.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeSubtitleText(rawText: string, font: any): { text: string; removedCodepoints: string[] } {
+  const normalized = (rawText || "").normalize("NFC");
+  const sanitizedChars: string[] = [];
+  const removedCodepoints: string[] = [];
+
+  for (const char of normalized) {
+    const codepoint = char.codePointAt(0);
+    if (!Number.isFinite(codepoint)) continue;
+
+    const removalReason = getRemovedCodepointReason(codepoint as number);
+    if (removalReason) {
+      removedCodepoints.push(`${formatCodepoint(codepoint as number)}:${removalReason}`);
+      continue;
+    }
+
+    if (!isRenderableGlyph(char, font)) {
+      removedCodepoints.push(`${formatCodepoint(codepoint as number)}:unknown_glyph`);
+      continue;
+    }
+
+    sanitizedChars.push(char);
+  }
+
+  const text = sanitizedChars.join("").replace(/\s+/g, " ").trim();
+  return { text, removedCodepoints };
+}
+
 function toPathData(commands: any[]): string {
   return commands.map((cmd: any) => {
     if (cmd.type === "M" || cmd.type === "L") return `${cmd.type}${round2(cmd.x)} ${round2(cmd.y)}`;
@@ -399,7 +468,25 @@ async function buildSubtitleClips(
 
   return Promise.all(
     segments
-      .filter((seg) => seg.text && seg.text.trim())
+      .map((seg, cueIndex) => {
+        const sanitized = sanitizeSubtitleText(seg.text || "", font);
+        if (sanitized.removedCodepoints.length > 0) {
+          console.log("Subtitle sanitization removed codepoints", {
+            cueIndex,
+            cueStart: seg.start,
+            cueEnd: seg.end,
+            removedCodepoints: sanitized.removedCodepoints,
+          });
+        }
+
+        return {
+          cueIndex,
+          start: seg.start,
+          end: seg.end,
+          text: sanitized.text,
+        };
+      })
+      .filter((seg) => seg.text.trim().length > 0)
       .map(async (seg) => {
         const svgMarkup = buildSubtitleSvgAsset(seg.text, style || {}, subWidth, subHeight, font);
         const hash = await sha1Hex(`${subWidth}x${subHeight}|${JSON.stringify(style || {})}|${seg.text}`);
