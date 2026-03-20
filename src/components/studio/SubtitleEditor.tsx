@@ -1445,6 +1445,11 @@ export function SubtitleEditor({ activeBrand, onBack, initialVideoUrl, pipAvatar
           setRenderProgress(100);
           toast.success('הסרטון מוכן! 🎬');
 
+          // Call onComplete callback if provided (e.g. from import flow)
+          if (onComplete) {
+            onComplete(status.url);
+          }
+
           // Auto-save to project
           try {
             const brandName = activeBrand?.name || 'כתוביות';
