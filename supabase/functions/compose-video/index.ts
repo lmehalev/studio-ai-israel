@@ -589,12 +589,26 @@ function resolveContentRect(
   outputHeight: number,
   sourceWidth?: number,
   sourceHeight?: number,
+  orientation?: string,
 ): ContentRectPx {
-  const sw = Number(sourceWidth);
-  const sh = Number(sourceHeight);
+  let sw = Number(sourceWidth);
+  let sh = Number(sourceHeight);
 
   if (!Number.isFinite(sw) || !Number.isFinite(sh) || sw <= 0 || sh <= 0) {
     return { x: 0, y: 0, w: outputWidth, h: outputHeight };
+  }
+
+  // Mirror the preview's orientation override logic exactly
+  if (orientation === 'landscape' && sh > sw) {
+    // Portrait source → landscape target: use 16:9 effective aspect
+    const targetAspect = 16 / 9;
+    sw = Math.max(sw, sh * targetAspect);
+    sh = sw / targetAspect;
+  } else if (orientation === 'portrait' && sw > sh) {
+    // Landscape source → portrait target: use 9:16 effective aspect
+    const targetAspect = 9 / 16;
+    sh = Math.max(sh, sw / targetAspect);
+    sw = sh * targetAspect;
   }
 
   const sourceAspect = sw / sh;
