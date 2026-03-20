@@ -583,12 +583,14 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
 
         try {
           const statusResult = await composeService.checkStatus(composeResult.renderId, composeResult.shotstackEnv);
-          if (statusResult?.status === 'done' && statusResult?.url) {
-            setOutputVideoUrl(statusResult.url);
+          if (statusResult?.status === 'done' && (statusResult?.url || statusResult?.outputUrl)) {
+            // Always prefer outputUrl (the final MP4) over generic url
+            const finalUrl = statusResult.outputUrl || statusResult.url;
+            setOutputVideoUrl(finalUrl!);
             setRenderProgress(100);
             setRenderStage('הרינדור הושלם!');
-            addLog(`סיום! URL: ${statusResult.url}`);
-            if (effectiveBrandId && effectiveBrandObj) await autoSaveToProject(statusResult.url);
+            addLog(`סיום! MP4 URL: ${finalUrl}`);
+            if (effectiveBrandId && effectiveBrandObj) await autoSaveToProject(finalUrl!);
             toast.success('🎬 הסרטון מוכן!');
             setRendering(false);
             return;
