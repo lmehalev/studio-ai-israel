@@ -235,7 +235,7 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     if (step === 0 && !selectedAction) return; // Don't save initial state
     const session = {
       selectedAction, step, prompt, result, imageRefPhotos, editHistory, editPrompt,
-      importUrl, importType, selectedAvatarId, selectedVoiceId,
+      importUrl, importType, importStorageUrl, selectedAvatarId, selectedVoiceId,
       selectedCategory, customCategory, highlightFiles, highlightOutputType,
       timestamp: Date.now(),
     };
