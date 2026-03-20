@@ -788,6 +788,7 @@ Deno.serve(async (req) => {
           outputConfig.width,
           outputConfig.height,
           contentRect,
+          captionPosition,
         );
         if (subClips.length > 0) {
           tracks.push({ clips: subClips });
