@@ -408,6 +408,34 @@ function buildSubtitleHtmlAsset(
     ">${safeLines}</div>`;
 }
 
+function parseShadowStyle(shadow: string | undefined): { strokeColor: string; strokeWidth: number; shadowBlur: number; shadowColor: string; shadowOpacity: number } {
+  // Parse CSS text-shadow into SVG-friendly stroke/shadow params
+  if (!shadow || shadow === 'none') {
+    return { strokeColor: '#000000', strokeWidth: 0, shadowBlur: 0, shadowColor: '#000000', shadowOpacity: 0 };
+  }
+
+  // Detect thick outline style (multiple directional shadows like "2px 2px 0 #000, -2px -2px 0 #000")
+  const outlineMatch = shadow.match(/(\d+)px\s+\d+px\s+\d+px?\s+(#[0-9a-fA-F]+|rgba?\([^)]+\))/);
+  const strokeW = outlineMatch ? Math.max(2, Number(outlineMatch[1]) * 1.2) : 2.5;
+  const strokeCol = outlineMatch ? outlineMatch[2] : '#000000';
+
+  // Detect blur-based shadow (e.g. "0 2px 6px rgba(0,0,0,0.85)")
+  const blurMatch = shadow.match(/(\d+)px\s+(\d+)px\s+(\d+)px\s+(rgba?\([^)]+\)|#[0-9a-fA-F]+)/);
+  const blur = blurMatch ? Number(blurMatch[3]) : 1.8;
+
+  // Detect glow (multiple large blur shadows)
+  const glowMatch = shadow.match(/0\s+0\s+(\d+)px\s+(#[0-9a-fA-F]+|rgba?\([^)]+\))/);
+  const isGlow = glowMatch && Number(glowMatch[1]) >= 10;
+
+  return {
+    strokeColor: strokeCol,
+    strokeWidth: isGlow ? 1.5 : strokeW,
+    shadowBlur: isGlow ? Number(glowMatch![1]) * 0.3 : Math.min(blur * 0.4, 3),
+    shadowColor: isGlow ? (glowMatch![2] || '#FFFFFF') : (strokeCol || '#000000'),
+    shadowOpacity: isGlow ? 0.6 : 0.75,
+  };
+}
+
 function buildSubtitleSvgAsset(
   text: string,
   style: SubtitleStyle,
@@ -421,6 +449,14 @@ function buildSubtitleSvgAsset(
   const borderRadius = style.borderRadius ?? 16;
   const padding = parsePadding(style.padding);
 
+  // Derive stroke/shadow from font preset's shadow string or explicit overrides
+  const shadowParams = parseShadowStyle(style.shadow);
+  const strokeColor = style.strokeColor || shadowParams.strokeColor;
+  const strokeWidth = style.strokeWidth ?? shadowParams.strokeWidth;
+  const shadowBlur = style.shadowBlur ?? shadowParams.shadowBlur;
+  const shadowColor = style.shadowColor || shadowParams.shadowColor;
+  const shadowOpacity = style.shadowOpacity ?? shadowParams.shadowOpacity;
+
   const maxCharsPerLine = Math.max(10, Math.floor((width - padding.horizontal * 2) / Math.max(10, fontSize * 0.62)));
   const lines = wrapText(text, maxCharsPerLine, 3);
   const safeLines = lines.length > 0 ? lines : [text];
@@ -429,13 +465,13 @@ function buildSubtitleSvgAsset(
   const textBlockHeight = safeLines.length * lineHeight;
   const firstBaseline = (height - textBlockHeight) / 2 + fontSize;
 
-  const strokePaths = safeLines.map((line, index) => {
+  const strokePaths = strokeWidth > 0 ? safeLines.map((line, index) => {
     const baselineY = firstBaseline + index * lineHeight;
     const d = buildRtlPathData(line, font, fontSize, baselineY, width / 2);
     return d
-      ? `<path d="${d}" fill="none" stroke="#000000" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#subtitleShadow)" />`
+      ? `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${round2(strokeWidth)}" stroke-linejoin="round" stroke-linecap="round" filter="url(#subtitleShadow)" />`
       : "";
-  }).join("");
+  }).join("") : "";
 
   const fillPaths = safeLines.map((line, index) => {
     const baselineY = firstBaseline + index * lineHeight;
@@ -446,7 +482,7 @@ function buildSubtitleSvgAsset(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <filter id="subtitleShadow" x="-25%" y="-25%" width="150%" height="150%">
-        <feDropShadow dx="0" dy="2" stdDeviation="1.8" flood-color="#000000" flood-opacity="0.75" />
+        <feDropShadow dx="0" dy="2" stdDeviation="${round2(shadowBlur)}" flood-color="${shadowColor}" flood-opacity="${shadowOpacity}" />
       </filter>
     </defs>
     <rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgColor}" />
