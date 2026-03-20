@@ -1031,13 +1031,15 @@ export function HighlightWizardFlow({ activeBrand, activeBrandId, onComplete, on
                       </div>
                     )}
 
-                    {/* Reason */}
-                    {seg.reason && (
-                      <p className="text-[10px] text-muted-foreground">
+                    {/* Reason + indicators */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground">
+                      <span>
                         {seg.type === 'video' ? `${seg.startSec.toFixed(1)}ש׳ → ${seg.endSec.toFixed(1)}ש׳` : `${seg.endSec}ש׳ תצוגה`}
-                        {` — ${seg.reason}`}
-                      </p>
-                    )}
+                      </span>
+                      {seg.reason && <span>— {seg.reason}</span>}
+                      {seg.emoji && <span className="text-xs">{seg.emoji}</span>}
+                      {seg.zoomPct && <span className="px-1 py-0.5 bg-primary/10 text-primary rounded text-[9px]">🔍 zoom {seg.zoomPct}%</span>}
+                    </div>
                   </div>
                 ))}
               </div>
