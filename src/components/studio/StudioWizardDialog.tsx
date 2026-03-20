@@ -29,6 +29,7 @@ import { CostApprovalDialog, buildHighlightEstimates, type CostEstimate } from '
 import { SubtitleEditor } from '@/components/studio/SubtitleEditor';
 import { WebsiteScanPanel, type WebsiteScanResult } from '@/components/studio/WebsiteScanPanel';
 import { CarouselGenerator } from '@/components/studio/CarouselGenerator';
+import { HighlightWizardFlow } from '@/components/studio/HighlightWizardFlow';
 
 export type StudioAction = 'image' | 'video_ai' | 'subtitles' | 'import_edit' | 'highlight';
 
