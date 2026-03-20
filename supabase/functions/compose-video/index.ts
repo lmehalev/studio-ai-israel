@@ -734,6 +734,7 @@ Deno.serve(async (req) => {
         sourceWidth,
         sourceHeight,
         captionPosition,
+        pipAvatarUrl,
       } = params;
 
       const clipUrls: string[] = videoUrls || (videoUrl ? [videoUrl] : []);
