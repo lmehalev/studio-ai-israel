@@ -497,14 +497,26 @@ async function buildSubtitleClips(
   outputWidth: number,
   outputHeight: number,
   contentRect: ContentRectPx,
+  captionPosition?: string,
 ): Promise<any[]> {
   const subWidth = Math.round(contentRect.w * 0.85);
   const subHeight = Math.round(outputHeight * 0.15);
   const font = await loadHebrewFont();
 
-  const marginBottom = Math.max(18, contentRect.h * 0.05);
+  // Position: bottom (default), middle, top — matching preview captionPosition
   const subtitleCenterX = contentRect.x + contentRect.w / 2;
-  const subtitleCenterY = contentRect.y + contentRect.h - subHeight / 2 - marginBottom;
+  let subtitleCenterY: number;
+  const margin = Math.max(18, contentRect.h * 0.05);
+
+  if (captionPosition === 'top') {
+    subtitleCenterY = contentRect.y + subHeight / 2 + margin;
+  } else if (captionPosition === 'middle') {
+    subtitleCenterY = contentRect.y + contentRect.h / 2;
+  } else {
+    // bottom (default)
+    subtitleCenterY = contentRect.y + contentRect.h - subHeight / 2 - margin;
+  }
+
   const offsetX = subtitleCenterX / outputWidth - 0.5;
   const offsetY = -(subtitleCenterY / outputHeight - 0.5);
 
