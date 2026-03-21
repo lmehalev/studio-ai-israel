@@ -180,6 +180,7 @@ export function AppSidebar() {
 
           <div className="p-3 border-t border-sidebar-border space-y-2">
             <OpenGuideTourButton />
+            <LogoutButton collapsed={false} />
             <div className="rounded-lg bg-sidebar-accent p-2.5">
               <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
             </div>
