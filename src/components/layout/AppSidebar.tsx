@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuthGate } from '@/contexts/AuthGateContext';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
   ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
