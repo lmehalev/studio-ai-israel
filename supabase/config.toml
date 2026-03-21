@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.data-manager]
 verify_jwt = false
+
+[functions.auth-gate]
+verify_jwt = false

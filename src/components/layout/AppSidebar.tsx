@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuthGate } from '@/contexts/AuthGateContext';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
   ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
-  ChevronDown, Flame, X
+  ChevronDown, Flame, X, LogOut
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { OpenGuideTourButton } from '@/components/GuidedTour';
@@ -24,6 +25,19 @@ const capabilityItems = [
 
 // Global event for toggling mobile sidebar
 export const sidebarEvents = new EventTarget();
+
+function LogoutButton({ collapsed }: { collapsed: boolean }) {
+  const { logout } = useAuthGate();
+  return (
+    <button
+      onClick={logout}
+      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+    >
+      <LogOut className="w-5 h-5 flex-shrink-0" />
+      {!collapsed && <span>התנתק</span>}
+    </button>
+  );
+}
 
 export function AppSidebar() {
   const location = useLocation();
@@ -166,6 +180,7 @@ export function AppSidebar() {
 
           <div className="p-3 border-t border-sidebar-border space-y-2">
             <OpenGuideTourButton />
+            <LogoutButton collapsed={false} />
             <div className="rounded-lg bg-sidebar-accent p-2.5">
               <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
             </div>
@@ -289,14 +304,15 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border space-y-2">
-          <OpenGuideTourButton />
+      <div className={cn("border-t border-sidebar-border", collapsed ? "p-2" : "p-4 space-y-2")}>
+        {!collapsed && <OpenGuideTourButton />}
+        <LogoutButton collapsed={collapsed} />
+        {!collapsed && (
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </aside>
   );
 }
