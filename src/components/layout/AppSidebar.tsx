@@ -290,14 +290,15 @@ export function AppSidebar() {
         </ul>
       </nav>
 
-      {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border space-y-2">
-          <OpenGuideTourButton />
+      <div className={cn("border-t border-sidebar-border", collapsed ? "p-2" : "p-4 space-y-2")}>
+        {!collapsed && <OpenGuideTourButton />}
+        <LogoutButton collapsed={collapsed} />
+        {!collapsed && (
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-muted-foreground">גרסה 1.0.0</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </aside>
   );
 }
