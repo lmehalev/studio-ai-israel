@@ -26,6 +26,19 @@ const capabilityItems = [
 // Global event for toggling mobile sidebar
 export const sidebarEvents = new EventTarget();
 
+function LogoutButton({ collapsed }: { collapsed: boolean }) {
+  const { logout } = useAuthGate();
+  return (
+    <button
+      onClick={logout}
+      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+    >
+      <LogOut className="w-5 h-5 flex-shrink-0" />
+      {!collapsed && <span>התנתק</span>}
+    </button>
+  );
+}
+
 export function AppSidebar() {
   const location = useLocation();
   const isMobile = useIsMobile();
