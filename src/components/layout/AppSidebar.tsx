@@ -4,7 +4,7 @@ import { useAuthGate } from '@/contexts/AuthGateContext';
 import {
   LayoutDashboard, Sparkles, FolderOpen, Settings,
   ChevronRight, ChevronLeft, Video, UserCircle, Mic, FileText,
-  ChevronDown, Flame, X
+  ChevronDown, Flame, X, LogOut
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { OpenGuideTourButton } from '@/components/GuidedTour';
