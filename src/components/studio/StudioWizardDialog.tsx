@@ -949,6 +949,27 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
             {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
 
+            {/* Aspect ratio selector */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">יחס תמונה</p>
+              <div className="flex items-center gap-1.5 bg-muted/30 border border-border rounded-lg p-1">
+                {([
+                  { value: 'auto', label: 'אוטומטי' },
+                  { value: '9:16', label: 'דיוקן (9:16)' },
+                  { value: '1:1', label: 'ריבוע (1:1)' },
+                  { value: '16:9', label: 'לרוחב (16:9)' },
+                ] as const).map(opt => (
+                  <button key={opt.value}
+                    onClick={() => setImageAspectRatio(opt.value)}
+                    className={cn('flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all text-center',
+                      imageAspectRatio === opt.value ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Website scan panel */}
             <WebsiteScanPanel
               onApplyContent={(data) => {
