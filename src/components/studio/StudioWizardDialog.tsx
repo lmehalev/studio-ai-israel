@@ -826,7 +826,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             setLoading(true);
             try {
               const refs = editRefPhotos.length > 0 ? editRefPhotos : undefined;
-              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl, refs);
+              const arParam = imageAspectRatio !== 'auto' ? imageAspectRatio : undefined;
+              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl, refs, arParam);
               setEditHistory(prev => [...prev, { imageUrl: data.imageUrl, prompt: editPrompt, refineRefs: editRefPhotos.length > 0 ? [...editRefPhotos] : undefined }]);
               setResult({ imageUrl: data.imageUrl });
               setEditPrompt('');
