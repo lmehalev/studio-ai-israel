@@ -1035,7 +1035,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   try {
                     const refs = allRefs.length > 0 ? allRefs : undefined;
                     const avatarContext = selectedAvatar ? `\n\nIMPORTANT: Use the provided avatar/person reference image(s) — the person in the output MUST look exactly like the reference photos.` : '';
-                    const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs);
+                    const arParam = imageAspectRatio !== 'auto' ? imageAspectRatio : undefined;
+                    const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs, arParam);
                     setResult({ imageUrl: data.imageUrl });
                     setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
                     setStep(step + 1);
