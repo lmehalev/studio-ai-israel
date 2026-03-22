@@ -23,7 +23,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { prompt, action, imageUrl, referenceImages } = await req.json();
+    const { prompt, action, imageUrl, referenceImages, aspectRatio } = await req.json();
+
+    // Map aspect ratio to dimension guidance for the model
+    const aspectInstruction = (() => {
+      switch (aspectRatio) {
+        case '16:9': return '\n\nIMPORTANT: Generate a LANDSCAPE image with 16:9 aspect ratio (wider than tall). The composition must be horizontal.';
+        case '1:1': return '\n\nIMPORTANT: Generate a SQUARE image with 1:1 aspect ratio. Width and height must be equal.';
+        case '9:16': return '\n\nIMPORTANT: Generate a PORTRAIT image with 9:16 aspect ratio (taller than wide). The composition must be vertical.';
+        default: return '';
+      }
+    })();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -58,9 +68,9 @@ Deno.serve(async (req) => {
         content: hebrewTextGuidelines,
       });
       const contentParts: any[] = [
-        { type: "text", text: referenceImages && referenceImages.length > 0
+        { type: "text", text: (referenceImages && referenceImages.length > 0
           ? `ערוך את התמונה הראשית לפי ההוראות הבאות. השתמש בתמונות הרפרנס הנוספות כהשראה לסגנון, קומפוזיציה ואלמנטים ויזואליים — שלב אותם בתוצאה הסופית.\n\nהוראות: ${prompt}`
-          : prompt },
+          : prompt) + aspectInstruction },
         { type: "image_url", image_url: { url: imageUrl } },
       ];
       // Append reference images for edit+refine
@@ -77,7 +87,7 @@ Deno.serve(async (req) => {
         content: hebrewTextGuidelines,
       });
       const contentParts: any[] = [
-        { type: "text", text: `צור תמונה חדשה באיכות גבוהה לפי התיאור הבא. השתמש בתמונות הרפרנס המצורפות כהשראה — שלב אלמנטים מהן (אנשים, מוצרים, לוגו, סגנון) בתמונה החדשה. שים לב שכל טקסט בעברית יהיה מדויק וקריא.\n\nתיאור: ${prompt}` },
+        { type: "text", text: `צור תמונה חדשה באיכות גבוהה לפי התיאור הבא. השתמש בתמונות הרפרנס המצורפות כהשראה — שלב אלמנטים מהן (אנשים, מוצרים, לוגו, סגנון) בתמונה החדשה. שים לב שכל טקסט בעברית יהיה מדויק וקריא.\n\nתיאור: ${prompt}${aspectInstruction}` },
       ];
       for (const refUrl of referenceImages) {
         contentParts.push({ type: "image_url", image_url: { url: refUrl } });
@@ -90,7 +100,7 @@ Deno.serve(async (req) => {
       });
       messages.push({
         role: "user",
-        content: `צור תמונה באיכות גבוהה לפי התיאור הבא. שים לב במיוחד שכל טקסט בעברית יהיה מדויק, קריא וברור: ${prompt}`,
+        content: `צור תמונה באיכות גבוהה לפי התיאור הבא. שים לב במיוחד שכל טקסט בעברית יהיה מדויק, קריא וברור: ${prompt}${aspectInstruction}`,
       });
     }
 

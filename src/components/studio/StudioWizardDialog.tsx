@@ -151,6 +151,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [imageMode, setImageMode] = useState<'single' | 'carousel'>('single');
   const [showCarousel, setShowCarousel] = useState(false);
 
+  // Image aspect ratio
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>('auto');
+
   const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
@@ -823,7 +826,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
             setLoading(true);
             try {
               const refs = editRefPhotos.length > 0 ? editRefPhotos : undefined;
-              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl, refs);
+              const arParam = imageAspectRatio !== 'auto' ? imageAspectRatio : undefined;
+              const data = await imageService.edit(buildPrompt(editPrompt), result.imageUrl, refs, arParam);
               setEditHistory(prev => [...prev, { imageUrl: data.imageUrl, prompt: editPrompt, refineRefs: editRefPhotos.length > 0 ? [...editRefPhotos] : undefined }]);
               setResult({ imageUrl: data.imageUrl });
               setEditPrompt('');
@@ -946,6 +950,27 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
 
             {renderPromptInput({ placeholder: 'תאר את התמונה... למשל: "באנר לחברת יבוא עם מוצרים על רקע מקצועי"' })}
 
+            {/* Aspect ratio selector */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">יחס תמונה</p>
+              <div className="flex items-center gap-1.5 bg-muted/30 border border-border rounded-lg p-1">
+                {([
+                  { value: 'auto', label: 'אוטומטי' },
+                  { value: '9:16', label: 'דיוקן (9:16)' },
+                  { value: '1:1', label: 'ריבוע (1:1)' },
+                  { value: '16:9', label: 'לרוחב (16:9)' },
+                ] as const).map(opt => (
+                  <button key={opt.value}
+                    onClick={() => setImageAspectRatio(opt.value)}
+                    className={cn('flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all text-center',
+                      imageAspectRatio === opt.value ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Website scan panel */}
             <WebsiteScanPanel
               onApplyContent={(data) => {
@@ -1011,7 +1036,8 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
                   try {
                     const refs = allRefs.length > 0 ? allRefs : undefined;
                     const avatarContext = selectedAvatar ? `\n\nIMPORTANT: Use the provided avatar/person reference image(s) — the person in the output MUST look exactly like the reference photos.` : '';
-                    const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs);
+                    const arParam = imageAspectRatio !== 'auto' ? imageAspectRatio : undefined;
+                    const data = await imageService.generate(buildPrompt(prompt) + avatarContext, refs, arParam);
                     setResult({ imageUrl: data.imageUrl });
                     setEditHistory([{ imageUrl: data.imageUrl, prompt }]);
                     setStep(step + 1);
