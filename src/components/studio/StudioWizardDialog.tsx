@@ -151,6 +151,9 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
   const [imageMode, setImageMode] = useState<'single' | 'carousel'>('single');
   const [showCarousel, setShowCarousel] = useState(false);
 
+  // Image aspect ratio
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>('auto');
+
   const brandDepartments = activeBrand?.departments || [];
   const effectiveCategory = customCategory.trim() || selectedCategory;
 
