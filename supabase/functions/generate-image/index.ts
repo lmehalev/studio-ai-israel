@@ -23,7 +23,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { prompt, action, imageUrl, referenceImages } = await req.json();
+    const { prompt, action, imageUrl, referenceImages, aspectRatio } = await req.json();
+
+    // Map aspect ratio to dimension guidance for the model
+    const aspectInstruction = (() => {
+      switch (aspectRatio) {
+        case '16:9': return '\n\nIMPORTANT: Generate a LANDSCAPE image with 16:9 aspect ratio (wider than tall). The composition must be horizontal.';
+        case '1:1': return '\n\nIMPORTANT: Generate a SQUARE image with 1:1 aspect ratio. Width and height must be equal.';
+        case '9:16': return '\n\nIMPORTANT: Generate a PORTRAIT image with 9:16 aspect ratio (taller than wide). The composition must be vertical.';
+        default: return '';
+      }
+    })();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
