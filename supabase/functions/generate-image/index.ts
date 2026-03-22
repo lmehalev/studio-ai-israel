@@ -68,9 +68,9 @@ Deno.serve(async (req) => {
         content: hebrewTextGuidelines,
       });
       const contentParts: any[] = [
-        { type: "text", text: referenceImages && referenceImages.length > 0
+        { type: "text", text: (referenceImages && referenceImages.length > 0
           ? `ערוך את התמונה הראשית לפי ההוראות הבאות. השתמש בתמונות הרפרנס הנוספות כהשראה לסגנון, קומפוזיציה ואלמנטים ויזואליים — שלב אותם בתוצאה הסופית.\n\nהוראות: ${prompt}`
-          : prompt },
+          : prompt) + aspectInstruction },
         { type: "image_url", image_url: { url: imageUrl } },
       ];
       // Append reference images for edit+refine
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
         content: hebrewTextGuidelines,
       });
       const contentParts: any[] = [
-        { type: "text", text: `צור תמונה חדשה באיכות גבוהה לפי התיאור הבא. השתמש בתמונות הרפרנס המצורפות כהשראה — שלב אלמנטים מהן (אנשים, מוצרים, לוגו, סגנון) בתמונה החדשה. שים לב שכל טקסט בעברית יהיה מדויק וקריא.\n\nתיאור: ${prompt}` },
+        { type: "text", text: `צור תמונה חדשה באיכות גבוהה לפי התיאור הבא. השתמש בתמונות הרפרנס המצורפות כהשראה — שלב אלמנטים מהן (אנשים, מוצרים, לוגו, סגנון) בתמונה החדשה. שים לב שכל טקסט בעברית יהיה מדויק וקריא.\n\nתיאור: ${prompt}${aspectInstruction}` },
       ];
       for (const refUrl of referenceImages) {
         contentParts.push({ type: "image_url", image_url: { url: refUrl } });
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
       });
       messages.push({
         role: "user",
-        content: `צור תמונה באיכות גבוהה לפי התיאור הבא. שים לב במיוחד שכל טקסט בעברית יהיה מדויק, קריא וברור: ${prompt}`,
+        content: `צור תמונה באיכות גבוהה לפי התיאור הבא. שים לב במיוחד שכל טקסט בעברית יהיה מדויק, קריא וברור: ${prompt}${aspectInstruction}`,
       });
     }
 
