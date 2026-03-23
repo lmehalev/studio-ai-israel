@@ -33,6 +33,7 @@ function AppRoutes() {
       <Route path="/creative-studio" element={<ProtectedRoute><CreativeStudioPage /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><ProjectsPage /></ProtectedRoute>} />
       <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
+      <Route path="/projects/:id/outputs/:outputId" element={<ProtectedRoute><OutputEditorPage /></ProtectedRoute>} />
       <Route path="/capabilities/avatars" element={<ProtectedRoute><AvatarsManagePage /></ProtectedRoute>} />
       <Route path="/capabilities/voices" element={<ProtectedRoute><VoicesManagePage /></ProtectedRoute>} />
       <Route path="/capabilities/scripts" element={<ProtectedRoute><ScriptsManagePage /></ProtectedRoute>} />
