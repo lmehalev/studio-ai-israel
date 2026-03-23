@@ -692,6 +692,19 @@ export default function ProjectDetailPage() {
       <VideoEditor open={videoEditorOpen} onClose={() => setVideoEditorOpen(false)} videoUrl={editingMediaUrl}
         onSave={() => { toast.success('העריכה נשמרה!'); setVideoEditorOpen(false); }} />
 
+      {/* AI Image Edit Dialog */}
+      {aiEditTarget && (
+        <AiImageEditDialog
+          open={!!aiEditTarget}
+          onClose={() => setAiEditTarget(null)}
+          output={aiEditTarget}
+          projectId={project.id}
+          onNewVersion={(newOutput) => {
+            setOutputs(prev => [newOutput, ...prev]);
+          }}
+        />
+      )}
+
       {/* Delete output dialog */}
       <AlertDialog open={!!deleteOutputTarget} onOpenChange={(open) => { if (!open && !deletingOutput) setDeleteOutputTarget(null); }}>
         <AlertDialogContent>
