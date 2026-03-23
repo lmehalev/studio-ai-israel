@@ -586,6 +586,11 @@ export default function ProjectDetailPage() {
                                 isVideo ? setVideoEditorOpen(true) : setImageEditorOpen(true);
                               }}><Edit className="w-3.5 h-3.5 mr-2" /> ערוך</DropdownMenuItem>
                             )}
+                            {mediaUrl && !isVideo && (
+                              <DropdownMenuItem onClick={() => setAiEditTarget(o)}>
+                                <Wand2 className="w-3.5 h-3.5 mr-2" /> ערוך עם AI
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleSetPrimary(o)}><Star className="w-3.5 h-3.5 mr-2" /> הגדר כראשי</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setDeleteOutputTarget(o)} className="text-destructive focus:text-destructive"><Trash2 className="w-3.5 h-3.5 mr-2" /> מחק</DropdownMenuItem>
