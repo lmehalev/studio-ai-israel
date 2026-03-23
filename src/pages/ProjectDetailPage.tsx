@@ -73,6 +73,9 @@ export default function ProjectDetailPage() {
   const [deleteProjectConfirm, setDeleteProjectConfirm] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
 
+  // AI image edit
+  const [aiEditTarget, setAiEditTarget] = useState<ProjectOutputRow | null>(null);
+
   useEffect(() => {
     if (!id) return;
     setBrands(brandService.getAll());
