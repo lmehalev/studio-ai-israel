@@ -562,7 +562,8 @@ export default function ProjectDetailPage() {
                           <Star className="w-2.5 h-2.5" /> ראשי
                         </span>
                       )}
-                      <div className="aspect-square bg-muted/30 flex items-center justify-center">
+                      <div className="aspect-square bg-muted/30 flex items-center justify-center cursor-pointer"
+                        onClick={() => navigate(`/projects/${project.id}/outputs/${o.id}`)}>
                         {mediaUrl ? (
                           isVideo ? <video src={mediaUrl} className="w-full h-full object-cover" /> : <img src={mediaUrl} alt={o.name} className="w-full h-full object-cover" loading="lazy" />
                         ) : <Video className="w-10 h-10 text-muted-foreground" />}
