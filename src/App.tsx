@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import CreativeStudioPage from "./pages/CreativeStudioPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
+import OutputEditorPage from "./pages/OutputEditorPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import AvatarsManagePage from "./pages/capabilities/AvatarsPage";
@@ -32,6 +33,7 @@ function AppRoutes() {
       <Route path="/creative-studio" element={<ProtectedRoute><CreativeStudioPage /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><ProjectsPage /></ProtectedRoute>} />
       <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
+      <Route path="/projects/:id/outputs/:outputId" element={<ProtectedRoute><OutputEditorPage /></ProtectedRoute>} />
       <Route path="/capabilities/avatars" element={<ProtectedRoute><AvatarsManagePage /></ProtectedRoute>} />
       <Route path="/capabilities/voices" element={<ProtectedRoute><VoicesManagePage /></ProtectedRoute>} />
       <Route path="/capabilities/scripts" element={<ProtectedRoute><ScriptsManagePage /></ProtectedRoute>} />

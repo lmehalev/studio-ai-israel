@@ -244,7 +244,6 @@ export function ImageEditor({ open, onClose, imageUrl, onSave }: ImageEditorProp
     const dataUrl = await exportImage();
     if (dataUrl && onSave) {
       onSave(dataUrl);
-      toast.success('התמונה נשמרה!');
     }
   };
 
