@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import CreativeStudioPage from "./pages/CreativeStudioPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
+import OutputEditorPage from "./pages/OutputEditorPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import AvatarsManagePage from "./pages/capabilities/AvatarsPage";
