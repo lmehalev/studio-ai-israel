@@ -14,6 +14,7 @@ import { projectService, getProjectCategory, type ProjectRow, type ProjectOutput
 import { brandService, type Brand } from '@/services/creativeService';
 import { ImageEditor } from '@/components/editors/ImageEditor';
 import { VideoEditor } from '@/components/editors/VideoEditor';
+import { AiImageEditDialog } from '@/components/studio/AiImageEditDialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger
