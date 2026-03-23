@@ -699,8 +699,10 @@ export default function ProjectDetailPage() {
           onClose={() => setAiEditTarget(null)}
           output={aiEditTarget}
           projectId={project.id}
+          projectName={project.name}
           onNewVersion={(newOutput) => {
             setOutputs(prev => [newOutput, ...prev]);
+            setActiveTab('outputs');
           }}
         />
       )}
