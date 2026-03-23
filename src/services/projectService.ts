@@ -286,12 +286,13 @@ export const projectService = {
       project_id: projectId,
       name: output.name || 'תוצר חדש',
       description: output.description || null,
-      status: 'הושלם',
+      status: output.status || 'הושלם',
       video_url: output.video_url || null,
       thumbnail_url: output.thumbnail_url || null,
       prompt: output.prompt || null,
       provider: output.provider || null,
       script: output.script || null,
+      aspect_ratio: output.aspect_ratio || null,
     });
     // Increment output_count on the project
     try {

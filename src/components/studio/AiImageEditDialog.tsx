@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Wand2, Upload, X, Loader2, Download, ImageIcon, Save } from 'lucide-react';
+import { Wand2, Upload, X, Loader2, Download, ImageIcon, Save, ArrowLeftRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +15,7 @@ interface AiImageEditDialogProps {
   onClose: () => void;
   output: ProjectOutputRow;
   projectId: string;
+  projectName?: string;
   onNewVersion: (newOutput: ProjectOutputRow) => void;
 }
 
@@ -25,7 +26,7 @@ const ASPECT_OPTIONS = [
   { value: '16:9', label: 'לרוחב (16:9)' },
 ];
 
-export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersion }: AiImageEditDialogProps) {
+export function AiImageEditDialog({ open, onClose, output, projectId, projectName, onNewVersion }: AiImageEditDialogProps) {
   const [editPrompt, setEditPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
@@ -33,6 +34,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
+  const [savedOutput, setSavedOutput] = useState<ProjectOutputRow | null>(null);
   const pendingAction = useRef<'preview' | 'save'>('preview');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +47,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
     setPreviewUrl(null);
     setGenerating(false);
     setSaving(false);
+    setSavedOutput(null);
   };
 
   const handleClose = () => {
@@ -81,6 +84,16 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
     return result.imageUrl;
   };
 
+  /** Upload base64/blob to storage, return public URL */
+  const uploadToStorage = async (imageUrl: string): Promise<string> => {
+    if (imageUrl.startsWith('data:')) {
+      const blob = await fetch(imageUrl).then(r => r.blob());
+      const file = new File([blob], `ai-edit-${Date.now()}.png`, { type: 'image/png' });
+      return await storageService.upload(file);
+    }
+    return imageUrl;
+  };
+
   const handleApprove = async () => {
     setCostOpen(false);
     const action = pendingAction.current;
@@ -90,29 +103,28 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
       try {
         const newUrl = await executeEdit();
         setPreviewUrl(newUrl);
-        toast.success('תצוגה מקדימה מוכנה');
+        toast.success('תצוגה מקדימה מוכנה — בדוק את התוצאה');
       } catch (e: any) {
-        toast.error(e.message || 'שגיאה בעריכת התמונה');
+        const msg = e.message || 'שגיאה בעריכת התמונה';
+        toast.error(`שגיאה: ${msg}`, { duration: 8000 });
+        console.error('[AiImageEdit] preview error:', e);
       } finally {
         setGenerating(false);
       }
     } else {
-      // save as new version
+      // Save as new version
       setSaving(true);
       try {
         let imageUrl = previewUrl;
         if (!imageUrl) {
           imageUrl = await executeEdit();
-        }
-        // Upload base64 to storage if needed
-        let storedUrl = imageUrl;
-        if (imageUrl.startsWith('data:')) {
-          const blob = await fetch(imageUrl).then(r => r.blob());
-          const file = new File([blob], `ai-edit-${Date.now()}.png`, { type: 'image/png' });
-          storedUrl = await storageService.upload(file);
+          setPreviewUrl(imageUrl);
         }
 
-        // Save as new output
+        // Upload to storage
+        const storedUrl = await uploadToStorage(imageUrl);
+
+        // Save as new output under the SAME project
         const newOutput = await projectService.addOutput(projectId, {
           name: `${output.name} (עריכה)`,
           thumbnail_url: storedUrl,
@@ -123,11 +135,13 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
           provider: 'Gemini AI Edit',
         });
 
+        setSavedOutput(newOutput);
         onNewVersion(newOutput);
-        toast.success('גרסה חדשה נשמרה בהצלחה');
-        handleClose();
+        toast.success(`✅ גרסה חדשה נשמרה בפרויקט — ${newOutput.id.slice(0, 8)}`, { duration: 6000 });
       } catch (e: any) {
-        toast.error(e.message || 'שגיאה בשמירת הגרסה');
+        const msg = e.message || 'שגיאה בשמירת הגרסה';
+        toast.error(`שגיאה בשמירה: ${msg}`, { duration: 8000 });
+        console.error('[AiImageEdit] save error:', e);
       } finally {
         setSaving(false);
       }
@@ -166,37 +180,68 @@ export function AiImageEditDialog({ open, onClose, output, projectId, onNewVersi
     }
   };
 
-  const displayUrl = previewUrl || originalUrl;
+  const showBeforeAfter = !!previewUrl && !!originalUrl;
 
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-        <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wand2 className="w-5 h-5 text-primary" />
               ערוך עם AI
             </DialogTitle>
-            <DialogDescription>ערוך את התמונה באמצעות הוראות טקסט. המקור לא ישתנה — תיווצר גרסה חדשה.</DialogDescription>
+            <DialogDescription>ערוך את התמונה באמצעות הוראות טקסט. המקור לא ישתנה — תיווצר גרסה חדשה באותו פרויקט.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Image preview */}
-            <div className="rounded-lg border border-border overflow-hidden bg-muted/30 flex items-center justify-center" style={{ maxHeight: 320 }}>
-              {displayUrl ? (
-                <img src={displayUrl} alt={output.name} className="max-w-full max-h-[320px] object-contain" />
-              ) : (
-                <div className="py-16 text-muted-foreground flex flex-col items-center gap-2">
-                  <ImageIcon className="w-10 h-10" />
-                  <span>אין תמונה</span>
+            {/* Before / After preview */}
+            {showBeforeAfter ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <ArrowLeftRight className="w-4 h-4" />
+                  לפני / אחרי
                 </div>
-              )}
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-border overflow-hidden bg-muted/30">
+                    <div className="text-xs text-center py-1 bg-muted/50 text-muted-foreground font-medium">מקור</div>
+                    <div className="flex items-center justify-center" style={{ maxHeight: 260 }}>
+                      <img src={originalUrl} alt="מקור" className="max-w-full max-h-[240px] object-contain" />
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-primary/30 overflow-hidden bg-muted/30">
+                    <div className="text-xs text-center py-1 bg-primary/10 text-primary font-medium">תוצאה חדשה</div>
+                    <div className="flex items-center justify-center" style={{ maxHeight: 260 }}>
+                      <img src={previewUrl} alt="תוצאה" className="max-w-full max-h-[240px] object-contain" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full">תצוגה מקדימה</span>
+                  <button onClick={() => setPreviewUrl(null)} className="hover:text-foreground underline">חזור למקור</button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden bg-muted/30 flex items-center justify-center" style={{ maxHeight: 320 }}>
+                {originalUrl ? (
+                  <img src={originalUrl} alt={output.name} className="max-w-full max-h-[320px] object-contain" />
+                ) : (
+                  <div className="py-16 text-muted-foreground flex flex-col items-center gap-2">
+                    <ImageIcon className="w-10 h-10" />
+                    <span>אין תמונה</span>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {previewUrl && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full">תצוגה מקדימה</span>
-                <button onClick={() => setPreviewUrl(null)} className="hover:text-foreground underline">חזור למקור</button>
+            {/* Saved confirmation */}
+            {savedOutput && (
+              <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 flex items-center gap-3">
+                <img src={savedOutput.thumbnail_url || ''} alt="saved" className="w-14 h-14 rounded object-cover border border-border" />
+                <div className="flex-1 text-sm">
+                  <div className="font-medium text-green-400">✅ נשמר בפרויקט{projectName ? `: ${projectName}` : ''}</div>
+                  <div className="text-muted-foreground text-xs mt-0.5">מזהה: {savedOutput.id.slice(0, 8)} · {savedOutput.name}</div>
+                </div>
               </div>
             )}
 
