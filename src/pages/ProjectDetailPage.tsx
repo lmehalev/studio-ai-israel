@@ -14,6 +14,7 @@ import { projectService, getProjectCategory, type ProjectRow, type ProjectOutput
 import { brandService, type Brand } from '@/services/creativeService';
 import { ImageEditor } from '@/components/editors/ImageEditor';
 import { VideoEditor } from '@/components/editors/VideoEditor';
+import { AiImageEditDialog } from '@/components/studio/AiImageEditDialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger
@@ -71,6 +72,9 @@ export default function ProjectDetailPage() {
   // Delete project
   const [deleteProjectConfirm, setDeleteProjectConfirm] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
+
+  // AI image edit
+  const [aiEditTarget, setAiEditTarget] = useState<ProjectOutputRow | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -582,6 +586,11 @@ export default function ProjectDetailPage() {
                                 isVideo ? setVideoEditorOpen(true) : setImageEditorOpen(true);
                               }}><Edit className="w-3.5 h-3.5 mr-2" /> ערוך</DropdownMenuItem>
                             )}
+                            {mediaUrl && !isVideo && (
+                              <DropdownMenuItem onClick={() => setAiEditTarget(o)}>
+                                <Wand2 className="w-3.5 h-3.5 mr-2" /> ערוך עם AI
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleSetPrimary(o)}><Star className="w-3.5 h-3.5 mr-2" /> הגדר כראשי</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setDeleteOutputTarget(o)} className="text-destructive focus:text-destructive"><Trash2 className="w-3.5 h-3.5 mr-2" /> מחק</DropdownMenuItem>
@@ -682,6 +691,19 @@ export default function ProjectDetailPage() {
         onSave={() => { toast.success('התמונה נשמרה!'); setImageEditorOpen(false); }} />
       <VideoEditor open={videoEditorOpen} onClose={() => setVideoEditorOpen(false)} videoUrl={editingMediaUrl}
         onSave={() => { toast.success('העריכה נשמרה!'); setVideoEditorOpen(false); }} />
+
+      {/* AI Image Edit Dialog */}
+      {aiEditTarget && (
+        <AiImageEditDialog
+          open={!!aiEditTarget}
+          onClose={() => setAiEditTarget(null)}
+          output={aiEditTarget}
+          projectId={project.id}
+          onNewVersion={(newOutput) => {
+            setOutputs(prev => [newOutput, ...prev]);
+          }}
+        />
+      )}
 
       {/* Delete output dialog */}
       <AlertDialog open={!!deleteOutputTarget} onOpenChange={(open) => { if (!open && !deletingOutput) setDeleteOutputTarget(null); }}>
