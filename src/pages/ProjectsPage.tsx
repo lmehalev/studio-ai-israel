@@ -30,9 +30,7 @@ const ThumbnailImg = ({ src, alt, className }: { src: string; alt: string; class
 export default function ProjectsPage() {
   const [view, setView] = useState<'grid' | 'list'>('list');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -40,9 +38,11 @@ export default function ProjectsPage() {
   const [outputsByProject, setOutputsByProject] = useState<Record<string, ProjectOutputRow[]>>({});
   const navigate = useNavigate();
 
-  // Inline edit state
+  // Inline edit states
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState('');
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null);
@@ -75,14 +75,11 @@ export default function ProjectsPage() {
 
   const filtered = projects.filter(p => {
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter && p.status !== statusFilter) return false;
     if (brandFilter && p.brand_id !== brandFilter) return false;
-    if (typeFilter && p.video_type !== typeFilter) return false;
     if (categoryFilter && getProjectSubActivity(p) !== categoryFilter) return false;
     return true;
   });
 
-  const videoTypes = [...new Set(projects.map(p => p.video_type))];
   const categories = [...new Set(projects.map(p => getProjectSubActivity(p)).filter(Boolean))] as string[];
   const formatDate = (d: string) => new Date(d).toLocaleDateString('he-IL');
 
@@ -102,24 +99,30 @@ export default function ProjectsPage() {
     try {
       const updated = await projectService.update(p.id, { name: newName });
       setProjects(prev => prev.map(x => x.id === p.id ? updated : x));
-      toast.success('השם עודכן');
+      toast.success('עודכן');
     } catch (e: any) { toast.error(e.message); }
     setEditingNameId(null);
   };
 
-  const handleUpdateStatus = async (p: ProjectRow, status: string) => {
+  const handleInlineCategory = async (p: ProjectRow) => {
+    const newCat = editingCategoryValue.trim();
+    const currentCat = getProjectSubActivity(p) || '';
+    if (newCat === currentCat) { setEditingCategoryId(null); return; }
     try {
-      const updated = await projectService.update(p.id, { status });
+      const updated = await projectService.update(p.id, {
+        content: { ...(p.content || {}), category: newCat || null, sub_activity: newCat || null },
+      });
       setProjects(prev => prev.map(x => x.id === p.id ? updated : x));
-      toast.success('הסטטוס עודכן');
+      toast.success('עודכן');
     } catch (e: any) { toast.error(e.message); }
+    setEditingCategoryId(null);
   };
 
   const handleUpdateBrand = async (p: ProjectRow, brandId: string) => {
     try {
       const updated = await projectService.update(p.id, { brand_id: brandId || null });
       setProjects(prev => prev.map(x => x.id === p.id ? updated : x));
-      toast.success('החברה עודכנה');
+      toast.success('עודכן');
     } catch (e: any) { toast.error(e.message); }
   };
 
@@ -142,21 +145,6 @@ export default function ProjectsPage() {
     finally { setDeleting(false); setDeleteTarget(null); setDeleteProgress(''); }
   };
 
-  const handleEditDetails = async (p: ProjectRow) => {
-    const newName = window.prompt('שם פרויקט', p.name)?.trim();
-    if (!newName) return;
-    const currentCat = getProjectSubActivity(p) || '';
-    const newCat = window.prompt('תת-פעילות / קטגוריה', currentCat)?.trim() ?? currentCat;
-    try {
-      const updated = await projectService.update(p.id, {
-        name: newName,
-        content: { ...(p.content || {}), category: newCat || null, sub_activity: newCat || null },
-      });
-      setProjects(prev => prev.map(x => x.id === p.id ? updated : x));
-      toast.success('פרטי הפרויקט עודכנו');
-    } catch (e: any) { toast.error(e.message); }
-  };
-
   // ── Row menu ──
   const RowMenu = ({ p }: { p: ProjectRow }) => (
     <DropdownMenu>
@@ -166,15 +154,13 @@ export default function ProjectsPage() {
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem onClick={() => navigate(`/projects/${p.id}`)}><FolderOpen className="w-3.5 h-3.5 mr-2" /> פתח</DropdownMenuItem>
         <DropdownMenuItem onClick={() => { setEditingNameId(p.id); setEditingNameValue(p.name); }}><Pencil className="w-3.5 h-3.5 mr-2" /> שנה שם</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleEditDetails(p)}><Tag className="w-3.5 h-3.5 mr-2" /> ערוך פרטים</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => { setEditingCategoryId(p.id); setEditingCategoryValue(getProjectSubActivity(p) || ''); }}><Tag className="w-3.5 h-3.5 mr-2" /> ערוך תת-פרויקט</DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleDuplicate(p)}><Copy className="w-3.5 h-3.5 mr-2" /> שכפל</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setDeleteTarget(p)} className="text-destructive focus:text-destructive"><Trash2 className="w-3.5 h-3.5 mr-2" /> מחק</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
-
-  const statusOptions = ['טיוטה', 'בעיבוד', 'הושלם', 'ממתין'];
 
   return (
     <AppLayout>
@@ -189,7 +175,7 @@ export default function ProjectsPage() {
           </Link>
         </div>
 
-        {/* Filters */}
+        {/* Filters – only Brand + Category */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
           <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -197,11 +183,6 @@ export default function ProjectsPage() {
               className="w-full bg-card border border-border rounded-lg pr-10 pl-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
-              <option value="">כל הסטטוסים</option>
-              {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
             {brands.length > 0 && (
               <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
                 className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
@@ -209,17 +190,10 @@ export default function ProjectsPage() {
                 {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
-            {videoTypes.length > 1 && (
-              <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-                className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
-                <option value="">כל הסוגים</option>
-                {videoTypes.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            )}
             {categories.length > 0 && (
               <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
                 className="bg-card border border-border rounded-lg px-3 py-2 text-sm flex-1 md:flex-none">
-                <option value="">כל הקטגוריות</option>
+                <option value="">כל התת-פרויקטים</option>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
@@ -244,8 +218,7 @@ export default function ProjectsPage() {
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground w-12"></th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">שם</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">חברה</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פעילות</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">סטטוס</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תת-פרויקט</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תאריך</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">תוצרים</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground w-12"></th>
@@ -256,8 +229,9 @@ export default function ProjectsPage() {
                     const thumb = getProjectThumbnail(p.id);
                     const outputCount = outputsByProject[p.id]?.length || p.output_count;
                     const isEditingName = editingNameId === p.id;
+                    const isEditingCat = editingCategoryId === p.id;
                     return (
-                      <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => !isEditingName && navigate(`/projects/${p.id}`)}>
+                      <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => !isEditingName && !isEditingCat && navigate(`/projects/${p.id}`)}>
                         <td className="px-3 py-2">
                           <div className="w-10 h-10 rounded-lg bg-muted/30 border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
                             {thumb ? <ThumbnailImg src={thumb} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-muted-foreground" />}
@@ -286,18 +260,33 @@ export default function ProjectsPage() {
                             {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                           </select>
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {getProjectSubActivity(p) ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
-                              <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
+                        <td className="px-4 py-3" onClick={e => { if (isEditingCat) e.stopPropagation(); }}>
+                          {isEditingCat ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                autoFocus value={editingCategoryValue}
+                                onChange={e => setEditingCategoryValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleInlineCategory(p); if (e.key === 'Escape') setEditingCategoryId(null); }}
+                                className="bg-background border border-primary rounded px-2 py-1 text-xs w-32 focus:outline-none"
+                                placeholder="הקלד תת-פרויקט..."
+                              />
+                              <button onClick={() => handleInlineCategory(p)} className="p-1 text-primary hover:bg-primary/10 rounded"><Check className="w-3 h-3" /></button>
+                              <button onClick={() => setEditingCategoryId(null)} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="w-3 h-3" /></button>
+                            </div>
+                          ) : (
+                            <span
+                              className="text-xs text-muted-foreground hover:text-primary cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); setEditingCategoryId(p.id); setEditingCategoryValue(getProjectSubActivity(p) || ''); }}
+                            >
+                              {getProjectSubActivity(p) ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground">
+                                  <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
+                                </span>
+                              ) : (
+                                <span className="opacity-50 hover:opacity-100">+ תת-פרויקט</span>
+                              )}
                             </span>
-                          ) : '—'}
-                        </td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <select value={p.status} onChange={e => handleUpdateStatus(p, e.target.value)}
-                            className="bg-transparent border-none text-xs p-0 focus:outline-none cursor-pointer">
-                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(p.created_at)}</td>
                         <td className="px-4 py-3">
@@ -327,8 +316,8 @@ export default function ProjectsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{p.name}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <StatusBadge status={p.status} />
                         {brand && <span className="text-[10px] text-primary">{brand.name}</span>}
+                        {getProjectSubActivity(p) && <span className="text-[10px] text-accent-foreground bg-accent/10 px-1.5 py-0.5 rounded-full">{getProjectSubActivity(p)}</span>}
                         <span className="text-[10px] text-muted-foreground">{formatDate(p.created_at)}</span>
                       </div>
                     </div>
@@ -359,10 +348,14 @@ export default function ProjectsPage() {
                       <RowMenu p={p} />
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <StatusBadge status={p.status} />
                       {brand && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
                           <Building2 className="w-3 h-3" /> {brand.name}
+                        </span>
+                      )}
+                      {getProjectSubActivity(p) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 text-accent-foreground text-xs">
+                          <Tag className="w-3 h-3" /> {getProjectSubActivity(p)}
                         </span>
                       )}
                     </div>
