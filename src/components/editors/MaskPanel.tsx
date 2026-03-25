@@ -76,7 +76,7 @@ export function MaskPanel({
       provider: 'Lovable AI (Gemini)',
       estimatedCost: '~$0.01–0.03',
       action: actionLabels[pendingAction.action],
-      details: pendingAction.prompt || 'מחיקה ומילוי רקע טבעי',
+      details: [pendingAction.prompt || 'מחיקה ומילוי רקע טבעי'],
     }];
   };
 

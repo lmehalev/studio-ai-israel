@@ -40,7 +40,7 @@ export function ComponentsPanel({
     provider: 'Lovable AI (Gemini)',
     estimatedCost: '~$0.02',
     action: 'ניתוח וזיהוי קומפוננטים',
-    details: 'זיהוי אלמנטים בתמונה: אנשים, לוגואים, טקסטים, רקע',
+    details: ['זיהוי אלמנטים בתמונה: אנשים, לוגואים, טקסטים, רקע'],
   }];
 
   const typeLabels: Record<string, string> = {
