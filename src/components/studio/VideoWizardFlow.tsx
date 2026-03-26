@@ -290,11 +290,20 @@ export function VideoWizardFlow({
   const [prompt, setPrompt] = useState(restoredSession?.prompt ?? '');
   const [loading, setLoading] = useState(false);
 
+  // Video type + duration
+  const [videoType, setVideoType] = useState<VideoType>(restoredSession?.videoType ?? 'marketing');
+  const [targetDurationSec, setTargetDurationSec] = useState(restoredSession?.targetDurationSec ?? 60);
+
   // Multi-select avatars & voices
   const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>(restoredSession?.selectedAvatarIds ?? []);
   const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>(restoredSession?.selectedVoiceIds ?? []);
   const [useAiVoice, setUseAiVoice] = useState(restoredSession?.useAiVoice ?? false);
   const [videoStyle, setVideoStyle] = useState<string>(restoredSession?.videoStyle ?? 'cinematic');
+
+  // Voice preview
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [showVoicePreviewCost, setShowVoicePreviewCost] = useState(false);
 
   // Script
   const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(restoredSession?.generatedScript ?? null);
