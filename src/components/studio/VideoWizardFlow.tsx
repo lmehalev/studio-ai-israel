@@ -802,7 +802,7 @@ export function VideoWizardFlow({
       const avatarImage = selectedAvatars[0]?.image_url;
       const workingScenes = generatedScript.scenes.length > 0
         ? generatedScript.scenes
-        : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle);
+        : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle, targetDurationSec);
 
       if (generatedScript.scenes.length === 0) {
         toast.info('התסריט הגיע בלי סצנות; יצרתי סצנות אוטומטיות כדי למנוע נפילה.');
@@ -1484,6 +1484,67 @@ export function VideoWizardFlow({
             )}
           </div>
 
+          {/* Video Type selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              🎯 סוג הסרטון
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {VIDEO_TYPE_OPTIONS.map(vt => (
+                <button key={vt.value} onClick={() => {
+                  setVideoType(vt.value);
+                  // Auto-adjust duration to first valid preset
+                  const firstPreset = DURATION_PRESETS.find(p => p.videoTypes.includes(vt.value));
+                  if (firstPreset) setTargetDurationSec(firstPreset.seconds);
+                }}
+                  className={cn('text-right p-2.5 rounded-lg border text-xs transition-all',
+                    videoType === vt.value
+                      ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                      : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                  <div className="font-medium">{vt.icon} {vt.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{vt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Duration selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              ⏱ משך הסרטון
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {DURATION_PRESETS.filter(p => p.videoTypes.includes(videoType)).map(p => (
+                <button key={p.seconds} onClick={() => setTargetDurationSec(p.seconds)}
+                  className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all',
+                    targetDurationSec === p.seconds
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="number" min={30} max={600} step={10} value={targetDurationSec}
+                onChange={e => setTargetDurationSec(Math.max(30, Math.min(600, Number(e.target.value))))}
+                className="w-20 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs text-center" />
+              <span className="text-[10px] text-muted-foreground">שניות ({formatDuration(targetDurationSec)})</span>
+            </div>
+            {targetDurationSec > 120 && (
+              <p className="text-[10px] text-amber-500">
+                ⚠️ סרטון ארוך ({formatDuration(targetDurationSec)}) — ייווצרו ~{Math.round(targetDurationSec / 10)} סצנות קצרות וירוכבו ל-MP4 אחד דרך Shotstack.
+              </p>
+            )}
+            {(() => {
+              const maxDur = VIDEO_TYPE_OPTIONS.find(v => v.value === videoType)?.maxDuration || 600;
+              if (targetDurationSec > maxDur) return (
+                <p className="text-[10px] text-destructive">
+                  ⛔ חריגה ממשך מקסימלי ({formatDuration(maxDur)}) למצב {VIDEO_TYPE_OPTIONS.find(v => v.value === videoType)?.label}. הסרטון עלול להיקטע.
+                </p>
+              );
+              return null;
+            })()}
+          </div>
           {/* Video style selector */}
           <div className="bg-card border border-border rounded-xl p-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
