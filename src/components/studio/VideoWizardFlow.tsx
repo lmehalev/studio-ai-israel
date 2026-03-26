@@ -72,6 +72,39 @@ interface VideoWizardFlowProps {
   onSessionChange?: (session: VideoWizardSession) => void;
 }
 
+type VideoType = 'marketing' | 'podcast' | 'episode';
+
+interface DurationPreset {
+  label: string;
+  seconds: number;
+  videoTypes: VideoType[];
+}
+
+const DURATION_PRESETS: DurationPreset[] = [
+  { label: '30 שניות', seconds: 30, videoTypes: ['marketing'] },
+  { label: '40 שניות', seconds: 40, videoTypes: ['marketing'] },
+  { label: '60 שניות', seconds: 60, videoTypes: ['marketing'] },
+  { label: '2 דקות', seconds: 120, videoTypes: ['podcast', 'episode'] },
+  { label: '3 דקות', seconds: 180, videoTypes: ['podcast', 'episode'] },
+  { label: '4 דקות', seconds: 240, videoTypes: ['episode'] },
+  { label: '5 דקות', seconds: 300, videoTypes: ['podcast', 'episode'] },
+  { label: '10 דקות', seconds: 600, videoTypes: ['podcast'] },
+];
+
+const VIDEO_TYPE_OPTIONS: { value: VideoType; label: string; desc: string; icon: string; maxDuration: number }[] = [
+  { value: 'marketing', label: 'שיווקי קצר', desc: '30–60 שניות • הוק + ערך + CTA', icon: '📢', maxDuration: 60 },
+  { value: 'podcast', label: 'פודקאסט / Talking Head', desc: '2–10 דקות • קריינות + B-Roll', icon: '🎙️', maxDuration: 600 },
+  { value: 'episode', label: 'אפיזודה AI', desc: '3–5 דקות • סצנות + קריינות', icon: '🎬', maxDuration: 300 },
+];
+
+const formatDuration = (sec: number): string => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s} שניות`;
+  if (s === 0) return `${m} דקות`;
+  return `${m}:${String(s).padStart(2, '0')} דקות`;
+};
+
 export interface VideoWizardSession {
   step: number;
   prompt: string;
@@ -86,6 +119,8 @@ export interface VideoWizardSession {
   customCategory: string;
   websiteUrl: string;
   improvePrompt: string;
+  videoType: VideoType;
+  targetDurationSec: number;
 }
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;
@@ -217,8 +252,9 @@ const toSceneChunks = (text: string): string[] => {
   return chunks;
 };
 
-const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptScene[] => {
+const buildFallbackScenesFromText = (sourceText: string, style: string, targetSec?: number): ScriptScene[] => {
   const chunks = toSceneChunks(sourceText);
+  const targetSceneCount = targetSec ? Math.max(3, Math.round(targetSec / 10)) : 3;
   const safeChunks = chunks.length > 0
     ? chunks
     : [
@@ -227,7 +263,19 @@ const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptS
         'סיום עם קריאה לפעולה ממוקדת וברורה.',
       ];
 
-  return safeChunks.slice(0, 6).map((chunk, idx) => ({
+  const result = [...safeChunks];
+  while (result.length < targetSceneCount && result.length < 60) {
+    const fillers = [
+      'הוכחה חברתית — ציטוט לקוח מרוצה.',
+      'יתרון נוסף — מה מבדיל אותנו.',
+      'שאלה נפוצה — תשובה ברורה ופשוטה.',
+      'Before/After — ההבדל לפני ואחרי.',
+      'קריאה לפעולה נוספת.',
+    ];
+    result.push(fillers[result.length % fillers.length]);
+  }
+
+  return result.slice(0, targetSceneCount).map((chunk, idx) => ({
     id: idx + 1,
     title: `סצנה ${idx + 1}`,
     speaker: 'קריין',
@@ -255,11 +303,20 @@ export function VideoWizardFlow({
   const [prompt, setPrompt] = useState(restoredSession?.prompt ?? '');
   const [loading, setLoading] = useState(false);
 
+  // Video type + duration
+  const [videoType, setVideoType] = useState<VideoType>(restoredSession?.videoType ?? 'marketing');
+  const [targetDurationSec, setTargetDurationSec] = useState(restoredSession?.targetDurationSec ?? 60);
+
   // Multi-select avatars & voices
   const [selectedAvatarIds, setSelectedAvatarIds] = useState<string[]>(restoredSession?.selectedAvatarIds ?? []);
   const [selectedVoiceIds, setSelectedVoiceIds] = useState<string[]>(restoredSession?.selectedVoiceIds ?? []);
   const [useAiVoice, setUseAiVoice] = useState(restoredSession?.useAiVoice ?? false);
   const [videoStyle, setVideoStyle] = useState<string>(restoredSession?.videoStyle ?? 'cinematic');
+
+  // Voice preview
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [showVoicePreviewCost, setShowVoicePreviewCost] = useState(false);
 
   // Script
   const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(restoredSession?.generatedScript ?? null);
@@ -316,12 +373,12 @@ export function VideoWizardFlow({
     const session: VideoWizardSession = {
       step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
       generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
-      websiteUrl, improvePrompt,
+      websiteUrl, improvePrompt, videoType, targetDurationSec,
     };
     onSessionChange(session);
   }, [step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
       generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
-      websiteUrl, improvePrompt, loading]);
+      websiteUrl, improvePrompt, loading, videoType, targetDurationSec]);
 
   const handleScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
@@ -435,6 +492,8 @@ export function VideoWizardFlow({
           websiteUrl: websiteUrl.trim() || undefined,
           websiteContext,
           hasScreenshot: !!websiteData?.screenshot,
+          targetDurationSec,
+          videoType,
         },
       });
       if (error) throw new Error(error.message || 'שגיאה ביצירת תסריט');
@@ -743,7 +802,7 @@ export function VideoWizardFlow({
       const avatarImage = selectedAvatars[0]?.image_url;
       const workingScenes = generatedScript.scenes.length > 0
         ? generatedScript.scenes
-        : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle);
+        : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle, targetDurationSec);
 
       if (generatedScript.scenes.length === 0) {
         toast.info('התסריט הגיע בלי סצנות; יצרתי סצנות אוטומטיות כדי למנוע נפילה.');
@@ -1133,7 +1192,7 @@ export function VideoWizardFlow({
     try {
       const workingScenes = generatedScript?.scenes?.length
         ? generatedScript.scenes
-        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle);
+        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle, targetDurationSec);
       const fullScript = workingScenes.map(s => s.spokenText).join(' ');
       const narrationText = toNarrationText(fullScript);
       const totalScenes = workingScenes.length;
@@ -1425,6 +1484,67 @@ export function VideoWizardFlow({
             )}
           </div>
 
+          {/* Video Type selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              🎯 סוג הסרטון
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {VIDEO_TYPE_OPTIONS.map(vt => (
+                <button key={vt.value} onClick={() => {
+                  setVideoType(vt.value);
+                  // Auto-adjust duration to first valid preset
+                  const firstPreset = DURATION_PRESETS.find(p => p.videoTypes.includes(vt.value));
+                  if (firstPreset) setTargetDurationSec(firstPreset.seconds);
+                }}
+                  className={cn('text-right p-2.5 rounded-lg border text-xs transition-all',
+                    videoType === vt.value
+                      ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                      : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                  <div className="font-medium">{vt.icon} {vt.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{vt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Duration selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              ⏱ משך הסרטון
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {DURATION_PRESETS.filter(p => p.videoTypes.includes(videoType)).map(p => (
+                <button key={p.seconds} onClick={() => setTargetDurationSec(p.seconds)}
+                  className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all',
+                    targetDurationSec === p.seconds
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="number" min={30} max={600} step={10} value={targetDurationSec}
+                onChange={e => setTargetDurationSec(Math.max(30, Math.min(600, Number(e.target.value))))}
+                className="w-20 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-xs text-center" />
+              <span className="text-[10px] text-muted-foreground">שניות ({formatDuration(targetDurationSec)})</span>
+            </div>
+            {targetDurationSec > 120 && (
+              <p className="text-[10px] text-amber-500">
+                ⚠️ סרטון ארוך ({formatDuration(targetDurationSec)}) — ייווצרו ~{Math.round(targetDurationSec / 10)} סצנות קצרות וירוכבו ל-MP4 אחד דרך Shotstack.
+              </p>
+            )}
+            {(() => {
+              const maxDur = VIDEO_TYPE_OPTIONS.find(v => v.value === videoType)?.maxDuration || 600;
+              if (targetDurationSec > maxDur) return (
+                <p className="text-[10px] text-destructive">
+                  ⛔ חריגה ממשך מקסימלי ({formatDuration(maxDur)}) למצב {VIDEO_TYPE_OPTIONS.find(v => v.value === videoType)?.label}. הסרטון עלול להיקטע.
+                </p>
+              );
+              return null;
+            })()}
+          </div>
           {/* Video style selector */}
           <div className="bg-card border border-border rounded-xl p-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -1454,7 +1574,7 @@ export function VideoWizardFlow({
           {/* Info about duration */}
           <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
             <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-            <span>הסרטון יהיה <strong className="text-foreground">30-60 שניות</strong> עם מספר סצנות קולנועיות. המערכת תוסיף קריינות בעברית, כתוביות, לוגו ואייקונים אוטומטית.</span>
+            <span>הסרטון יהיה <strong className="text-foreground">{formatDuration(targetDurationSec)}</strong> (~{Math.round(targetDurationSec / 10)} סצנות). המערכת תוסיף קריינות בעברית, כתוביות, לוגו ואייקונים אוטומטית.</span>
           </div>
 
           {/* Avatars multi-select */}

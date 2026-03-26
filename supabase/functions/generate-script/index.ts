@@ -204,6 +204,14 @@ const buildFallbackScriptPayload = (rawContent: string, promptText: string, sele
   };
 };
 
+  const formatDuration = (sec: number): string => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m === 0) return `${s} שניות`;
+    if (s === 0) return m === 1 ? 'דקה' : `${m} דקות`;
+    return `${m}:${String(s).padStart(2, '0')} דקות`;
+  };
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -213,7 +221,7 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle, websiteUrl, websiteContext, hasScreenshot } = await req.json();
+    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle, websiteUrl, websiteContext, hasScreenshot, targetDurationSec, videoType } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "יש להזין תיאור לסרטון" }), {
@@ -288,10 +296,28 @@ ${chosenStyle}
 **אל תתקבע על תחום אחד! זהה את התחום מהתיאור של המשתמש והתאם הכל.**
 
 ## מבנה הסרטון
-- צור תסריט של **3 עד 6 סצנות**, כל סצנה בת **10 שניות** בדיוק
-- סך הכל הסרטון יהיה **30 עד 60 שניות**
+${(() => {
+  const dur = typeof targetDurationSec === 'number' && targetDurationSec > 0 ? targetDurationSec : 60;
+  const sceneCount = Math.max(3, Math.min(60, Math.round(dur / 10)));
+  const minScenes = Math.max(3, sceneCount - 2);
+  const maxScenes = sceneCount + 2;
+  const vType = videoType || 'marketing';
+  
+  let structureNote = '';
+  if (vType === 'podcast') {
+    structureNote = `\n- זהו סרטון פודקאסט / Talking Head — רוב הסצנות הן קריינות עם B-Roll ויזואלי תומך. שמור על טון שיחתי, הסבר מעמיק, ותחושת ראיון/שיחה.`;
+  } else if (vType === 'episode') {
+    structureNote = `\n- זהו אפיזודה AI — סצנות מסופרות (storyboarded) עם קריינות. כל סצנה צריכה להרגיש כמו חלק מסדרה, עם קשר נרטיבי בין הסצנות.`;
+  }
+  
+  return `- צור תסריט של **${minScenes} עד ${maxScenes} סצנות**, כל סצנה בת **10 שניות** בדיוק
+- סך הכל הסרטון צריך להיות **${formatDuration(dur)}** (${dur} שניות)
 - כל סצנה תיוצר כקליפ וידאו עצמאי ותחובר לסרטון אחד שלם
-- התאם את מספר הסצנות לעומק התוכן — תוכן עשיר = יותר סצנות (עדיף 5-6)
+- התאם את מספר הסצנות לעומק התוכן — אם צריך, הוסף סצנות של הוכחות, FAQ, המלצות, דוגמאות ו-CTA נוספים כדי למלא את משך הזמן המבוקש
+- **אל תעצור מוקדם!** אם התוכן קצר, מלא בתוכן נוסף: יתרונות, שימושים, המלצות, שאלות נפוצות, תוצאות, סיפור לקוח, before/after${structureNote}`;
+})()}
+
+## סוג הסרטון: ${videoType === 'podcast' ? 'פודקאסט / Talking Head' : videoType === 'episode' ? 'אפיזודה AI' : 'שיווקי קצר'}
 
 ## מבנה מומלץ:
 1. **סצנת פתיחה (Hook)**: הוק מסקרן שתופס תשומת לב — שאלה, טענה מפתיעה, או סיטואציה מוכרת מהתחום
@@ -539,10 +565,15 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
 
       parsed.scenes = normalizedScenes.length > 0 ? normalizedScenes : buildFallbackScenes(fallbackBaseText, videoStyle);
 
-      if (parsed.scenes.length < 3) {
+      const targetSceneCount = typeof targetDurationSec === 'number' && targetDurationSec > 0
+        ? Math.max(3, Math.round(targetDurationSec / 10))
+        : 6;
+      const minScenes = Math.max(3, targetSceneCount - 2);
+
+      if (parsed.scenes.length < minScenes) {
         const fillers = buildFallbackScenes(fallbackBaseText, videoStyle);
         const existingCount = parsed.scenes.length;
-        const needed = 3 - existingCount;
+        const needed = minScenes - existingCount;
         const additions = fillers.slice(0, needed).map((scene: any, idx: number) => ({
           ...scene,
           id: existingCount + idx + 1,
@@ -550,8 +581,9 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
         parsed.scenes = [...parsed.scenes, ...additions];
       }
 
-      if (parsed.scenes.length > 6) {
-        parsed.scenes = parsed.scenes.slice(0, 6);
+      const maxScenes = targetSceneCount + 2;
+      if (parsed.scenes.length > maxScenes) {
+        parsed.scenes = parsed.scenes.slice(0, maxScenes);
       }
 
       if (typeof parsed.title !== "string" || !parsed.title.trim()) {
