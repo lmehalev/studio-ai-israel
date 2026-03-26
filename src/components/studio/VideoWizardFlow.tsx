@@ -72,6 +72,39 @@ interface VideoWizardFlowProps {
   onSessionChange?: (session: VideoWizardSession) => void;
 }
 
+type VideoType = 'marketing' | 'podcast' | 'episode';
+
+interface DurationPreset {
+  label: string;
+  seconds: number;
+  videoTypes: VideoType[];
+}
+
+const DURATION_PRESETS: DurationPreset[] = [
+  { label: '30 שניות', seconds: 30, videoTypes: ['marketing'] },
+  { label: '40 שניות', seconds: 40, videoTypes: ['marketing'] },
+  { label: '60 שניות', seconds: 60, videoTypes: ['marketing'] },
+  { label: '2 דקות', seconds: 120, videoTypes: ['podcast', 'episode'] },
+  { label: '3 דקות', seconds: 180, videoTypes: ['podcast', 'episode'] },
+  { label: '4 דקות', seconds: 240, videoTypes: ['episode'] },
+  { label: '5 דקות', seconds: 300, videoTypes: ['podcast', 'episode'] },
+  { label: '10 דקות', seconds: 600, videoTypes: ['podcast'] },
+];
+
+const VIDEO_TYPE_OPTIONS: { value: VideoType; label: string; desc: string; icon: string; maxDuration: number }[] = [
+  { value: 'marketing', label: 'שיווקי קצר', desc: '30–60 שניות • הוק + ערך + CTA', icon: '📢', maxDuration: 60 },
+  { value: 'podcast', label: 'פודקאסט / Talking Head', desc: '2–10 דקות • קריינות + B-Roll', icon: '🎙️', maxDuration: 600 },
+  { value: 'episode', label: 'אפיזודה AI', desc: '3–5 דקות • סצנות + קריינות', icon: '🎬', maxDuration: 300 },
+];
+
+const formatDuration = (sec: number): string => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s} שניות`;
+  if (s === 0) return `${m} דקות`;
+  return `${m}:${String(s).padStart(2, '0')} דקות`;
+};
+
 export interface VideoWizardSession {
   step: number;
   prompt: string;
@@ -86,6 +119,8 @@ export interface VideoWizardSession {
   customCategory: string;
   websiteUrl: string;
   improvePrompt: string;
+  videoType: VideoType;
+  targetDurationSec: number;
 }
 
 const RUNWAY_PROMPT_MAX_CHARS = 900;

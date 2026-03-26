@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle, websiteUrl, websiteContext, hasScreenshot } = await req.json();
+    const { prompt, avatarNames, voiceNames, brandContext, hasImages, videoStyle, websiteUrl, websiteContext, hasScreenshot, targetDurationSec, videoType } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "יש להזין תיאור לסרטון" }), {
