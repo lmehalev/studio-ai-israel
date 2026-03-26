@@ -479,6 +479,8 @@ export function VideoWizardFlow({
           websiteUrl: websiteUrl.trim() || undefined,
           websiteContext,
           hasScreenshot: !!websiteData?.screenshot,
+          targetDurationSec,
+          videoType,
         },
       });
       if (error) throw new Error(error.message || 'שגיאה ביצירת תסריט');
