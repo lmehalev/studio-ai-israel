@@ -1192,7 +1192,7 @@ export function VideoWizardFlow({
     try {
       const workingScenes = generatedScript?.scenes?.length
         ? generatedScript.scenes
-        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle);
+        : buildFallbackScenesFromText(generatedScript?.script || prompt, videoStyle, targetDurationSec);
       const fullScript = workingScenes.map(s => s.spokenText).join(' ');
       const narrationText = toNarrationText(fullScript);
       const totalScenes = workingScenes.length;
