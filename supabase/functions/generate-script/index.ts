@@ -288,10 +288,28 @@ ${chosenStyle}
 **אל תתקבע על תחום אחד! זהה את התחום מהתיאור של המשתמש והתאם הכל.**
 
 ## מבנה הסרטון
-- צור תסריט של **3 עד 6 סצנות**, כל סצנה בת **10 שניות** בדיוק
-- סך הכל הסרטון יהיה **30 עד 60 שניות**
+${(() => {
+  const dur = typeof targetDurationSec === 'number' && targetDurationSec > 0 ? targetDurationSec : 60;
+  const sceneCount = Math.max(3, Math.min(60, Math.round(dur / 10)));
+  const minScenes = Math.max(3, sceneCount - 2);
+  const maxScenes = sceneCount + 2;
+  const vType = videoType || 'marketing';
+  
+  let structureNote = '';
+  if (vType === 'podcast') {
+    structureNote = `\n- זהו סרטון פודקאסט / Talking Head — רוב הסצנות הן קריינות עם B-Roll ויזואלי תומך. שמור על טון שיחתי, הסבר מעמיק, ותחושת ראיון/שיחה.`;
+  } else if (vType === 'episode') {
+    structureNote = `\n- זהו אפיזודה AI — סצנות מסופרות (storyboarded) עם קריינות. כל סצנה צריכה להרגיש כמו חלק מסדרה, עם קשר נרטיבי בין הסצנות.`;
+  }
+  
+  return `- צור תסריט של **${minScenes} עד ${maxScenes} סצנות**, כל סצנה בת **10 שניות** בדיוק
+- סך הכל הסרטון צריך להיות **${formatDuration(dur)}** (${dur} שניות)
 - כל סצנה תיוצר כקליפ וידאו עצמאי ותחובר לסרטון אחד שלם
-- התאם את מספר הסצנות לעומק התוכן — תוכן עשיר = יותר סצנות (עדיף 5-6)
+- התאם את מספר הסצנות לעומק התוכן — אם צריך, הוסף סצנות של הוכחות, FAQ, המלצות, דוגמאות ו-CTA נוספים כדי למלא את משך הזמן המבוקש
+- **אל תעצור מוקדם!** אם התוכן קצר, מלא בתוכן נוסף: יתרונות, שימושים, המלצות, שאלות נפוצות, תוצאות, סיפור לקוח, before/after${structureNote}`;
+})()}
+
+## סוג הסרטון: ${videoType === 'podcast' ? 'פודקאסט / Talking Head' : videoType === 'episode' ? 'אפיזודה AI' : 'שיווקי קצר'}
 
 ## מבנה מומלץ:
 1. **סצנת פתיחה (Hook)**: הוק מסקרן שתופס תשומת לב — שאלה, טענה מפתיעה, או סיטואציה מוכרת מהתחום
