@@ -252,8 +252,9 @@ const toSceneChunks = (text: string): string[] => {
   return chunks;
 };
 
-const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptScene[] => {
+const buildFallbackScenesFromText = (sourceText: string, style: string, targetSec?: number): ScriptScene[] => {
   const chunks = toSceneChunks(sourceText);
+  const targetSceneCount = targetSec ? Math.max(3, Math.round(targetSec / 10)) : 3;
   const safeChunks = chunks.length > 0
     ? chunks
     : [
@@ -262,7 +263,19 @@ const buildFallbackScenesFromText = (sourceText: string, style: string): ScriptS
         'סיום עם קריאה לפעולה ממוקדת וברורה.',
       ];
 
-  return safeChunks.slice(0, 6).map((chunk, idx) => ({
+  const result = [...safeChunks];
+  while (result.length < targetSceneCount && result.length < 60) {
+    const fillers = [
+      'הוכחה חברתית — ציטוט לקוח מרוצה.',
+      'יתרון נוסף — מה מבדיל אותנו.',
+      'שאלה נפוצה — תשובה ברורה ופשוטה.',
+      'Before/After — ההבדל לפני ואחרי.',
+      'קריאה לפעולה נוספת.',
+    ];
+    result.push(fillers[result.length % fillers.length]);
+  }
+
+  return result.slice(0, targetSceneCount).map((chunk, idx) => ({
     id: idx + 1,
     title: `סצנה ${idx + 1}`,
     speaker: 'קריין',
