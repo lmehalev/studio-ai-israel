@@ -565,10 +565,15 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
 
       parsed.scenes = normalizedScenes.length > 0 ? normalizedScenes : buildFallbackScenes(fallbackBaseText, videoStyle);
 
-      if (parsed.scenes.length < 3) {
+      const targetSceneCount = typeof targetDurationSec === 'number' && targetDurationSec > 0
+        ? Math.max(3, Math.round(targetDurationSec / 10))
+        : 6;
+      const minScenes = Math.max(3, targetSceneCount - 2);
+
+      if (parsed.scenes.length < minScenes) {
         const fillers = buildFallbackScenes(fallbackBaseText, videoStyle);
         const existingCount = parsed.scenes.length;
-        const needed = 3 - existingCount;
+        const needed = minScenes - existingCount;
         const additions = fillers.slice(0, needed).map((scene: any, idx: number) => ({
           ...scene,
           id: existingCount + idx + 1,
@@ -576,8 +581,9 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
         parsed.scenes = [...parsed.scenes, ...additions];
       }
 
-      if (parsed.scenes.length > 6) {
-        parsed.scenes = parsed.scenes.slice(0, 6);
+      const maxScenes = targetSceneCount + 2;
+      if (parsed.scenes.length > maxScenes) {
+        parsed.scenes = parsed.scenes.slice(0, maxScenes);
       }
 
       if (typeof parsed.title !== "string" || !parsed.title.trim()) {

@@ -1574,7 +1574,7 @@ export function VideoWizardFlow({
           {/* Info about duration */}
           <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
             <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-            <span>הסרטון יהיה <strong className="text-foreground">30-60 שניות</strong> עם מספר סצנות קולנועיות. המערכת תוסיף קריינות בעברית, כתוביות, לוגו ואייקונים אוטומטית.</span>
+            <span>הסרטון יהיה <strong className="text-foreground">{formatDuration(targetDurationSec)}</strong> (~{Math.round(targetDurationSec / 10)} סצנות). המערכת תוסיף קריינות בעברית, כתוביות, לוגו ואייקונים אוטומטית.</span>
           </div>
 
           {/* Avatars multi-select */}
