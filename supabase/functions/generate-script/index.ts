@@ -204,6 +204,14 @@ const buildFallbackScriptPayload = (rawContent: string, promptText: string, sele
   };
 };
 
+  const formatDuration = (sec: number): string => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m === 0) return `${s} שניות`;
+    if (s === 0) return m === 1 ? 'דקה' : `${m} דקות`;
+    return `${m}:${String(s).padStart(2, '0')} דקות`;
+  };
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
