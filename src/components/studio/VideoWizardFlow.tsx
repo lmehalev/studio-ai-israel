@@ -360,12 +360,12 @@ export function VideoWizardFlow({
     const session: VideoWizardSession = {
       step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
       generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
-      websiteUrl, improvePrompt,
+      websiteUrl, improvePrompt, videoType, targetDurationSec,
     };
     onSessionChange(session);
   }, [step, prompt, selectedAvatarIds, selectedVoiceIds, useAiVoice, videoStyle,
       generatedScript, uploadedImages, resultVideoUrl, selectedCategory, customCategory,
-      websiteUrl, improvePrompt, loading]);
+      websiteUrl, improvePrompt, loading, videoType, targetDurationSec]);
 
   const handleScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
