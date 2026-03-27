@@ -894,7 +894,9 @@ export function VideoWizardFlow({
         toast.info('בדיקת הספקים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
       }
 
-      const shouldGenerateNarration = !forceDidOnlyMode;
+      // Narration is ALWAYS generated for explainer/marketing/episode videos.
+      // forceDidOnlyMode only changes video provider routing, NOT narration.
+      const shouldGenerateNarration = true;
 
       // === Stage 1: generate narration (skip in forced D-ID mode) ===
       setProgressStage(shouldGenerateNarration ? 'מייצר קריינות בעברית...' : 'מכין מסלול אווטאר חלופי...');
@@ -936,9 +938,14 @@ export function VideoWizardFlow({
           toast.success('קריינות AI בעברית מוכנה!');
         } catch (ttsErr: any) {
           addDebugLog(runId, 'narration', 'error', `AI TTS failed: ${ttsErr?.message}`);
-          console.warn('TTS failed:', ttsErr?.message);
-          toast.info('לא הצלחתי ליצור קריינות, ממשיך ללא קול...');
+          // FAIL-FAST: Do NOT continue without narration
+          throw new Error(`קריינות נכשלה (text-to-speech): ${ttsErr?.message || 'שגיאה לא ידועה'}. לא ניתן להמשיך ללא קריינות.`);
         }
+      }
+
+      // FAIL-FAST: If narration was expected but missing, stop
+      if (shouldGenerateNarration && narrationText && !narrationAudioUrl) {
+        throw new Error('לא הצלחתי ליצור קריינות. אין אפשרות להמשיך ללא קול — בדוק את הגדרות הקול.');
       }
       setRunwayProgress(15);
 
@@ -1105,9 +1112,19 @@ export function VideoWizardFlow({
         );
       }
 
+      // DURATION ENFORCEMENT: Check if successful scenes can reach target duration
+      const achievedDuration = successfulResults.reduce((sum, r) => sum + (Number(r.scene.duration) || 10), 0);
+      const minAcceptableDuration = targetDurationSec - 2;
+      const maxAcceptableDuration = targetDurationSec + 2;
+
+      if (achievedDuration < minAcceptableDuration * 0.5) {
+        // Less than half the target — fail hard
+        throw new Error(`משך הסצנות שהצליחו (${achievedDuration}s) רחוק מהיעד (${targetDurationSec}s). יש לבדוק את הספקים.`);
+      }
+
       if (successfulResults.length < sceneResults.length) {
         const missing = sceneResults.length - successfulResults.length;
-        toast.warning(`${missing} סצנות לא הצליחו — ממשיך עם ${successfulResults.length} סצנות שהצליחו.`);
+        toast.warning(`${missing} סצנות לא הצליחו — ממשיך עם ${successfulResults.length} סצנות (${achievedDuration}s מתוך ${targetDurationSec}s).`);
       }
 
       const finalScenes = successfulResults.map((result) => result.scene);
@@ -1142,8 +1159,41 @@ export function VideoWizardFlow({
           const status = await composeService.checkStatus(renderResult.renderId, renderResult.shotstackEnv);
           if (status.status === 'done' && status.url) {
             const totalDuration = finalScenes.reduce((sum, scene) => sum + (Number(scene.duration) || 10), 0);
+
+            // DURATION ENFORCEMENT: Verify output is within acceptable range
+            if (totalDuration < minAcceptableDuration) {
+              addDebugLog(runId, 'complete', 'warn', `Duration ${totalDuration}s below target ${targetDurationSec}s`, { outputUrl: status.url });
+              toast.warning(`אזהרה: הסרטון (${totalDuration}s) קצר מהיעד (${targetDurationSec}s).`);
+            }
+
             addDebugLog(runId, 'complete', 'success', `Video ready: ${totalDuration}s`, { outputUrl: status.url });
             setResultVideoUrl(status.url);
+
+            // AUTO-SAVE: Save output immediately after successful render
+            if (activeBrandId && activeBrand) {
+              try {
+                setProgressStage('שומר תוצר בפרויקט...');
+                const cat = effectiveCategory || undefined;
+                const project = await projectService.findOrCreateByBrand(activeBrandId, activeBrand.name, cat);
+                await projectService.addOutput(project.id, {
+                  name: `סרטון — ${activeBrand.name}${cat ? ` — ${cat}` : ''}`,
+                  description: generatedScript?.title || prompt,
+                  video_url: status.url,
+                  thumbnail_url: selectedAvatars[0]?.image_url || null,
+                  prompt: prompt || null,
+                  script: generatedScript?.script || null,
+                  provider: 'Shotstack',
+                  aspect_ratio: '16:9',
+                  estimated_length: `${totalDuration}s`,
+                });
+                addDebugLog(runId, 'save', 'success', `Output saved to project "${activeBrand.name}"`);
+                toast.success(`📁 נשמר אוטומטית בפרויקט "${activeBrand.name}${cat ? ` — ${cat}` : ''}"`);
+              } catch (saveErr: any) {
+                addDebugLog(runId, 'save', 'error', `Auto-save failed: ${saveErr?.message}`);
+                toast.error(`שגיאה בשמירה אוטומטית: ${saveErr?.message}. ניתן לשמור ידנית.`);
+              }
+            }
+
             setStep(4);
             setProgressStage('');
             toast.success(`🎬 סרטון של ${totalDuration} שניות מוכן!`);
@@ -1159,17 +1209,9 @@ export function VideoWizardFlow({
 
         throw new Error('תם הזמן להרכבת הסרטון הסופי');
       } catch (composeErr: any) {
-        console.warn('Shotstack compositing failed:', composeErr?.message);
-
-        if (sceneVideoUrls.length > 0) {
-          toast.warning('שלב ההרכבה המלאה נכשל — מציג תוצר חלקי כדי שלא תאבד עבודה.');
-          setResultVideoUrl(sceneVideoUrls[0]);
-          setStep(4);
-          setProgressStage('');
-          return;
-        }
-
-        throw new Error('שלב ההרכבה הסופית נכשל ולא נוצר אף קליפ זמין להצגה.');
+        addDebugLog(runId, 'compose', 'error', `Shotstack compositing FAILED: ${composeErr?.message}`);
+        // FAIL-FAST: Do NOT return a partial clip as success
+        throw new Error(`שלב ההרכבה הסופית נכשל: ${composeErr?.message || 'שגיאה ב-Shotstack'}. לא ניתן להציג תוצר חלקי.`);
       }
     } catch (e: any) {
       toast.error(e.message || 'שגיאה ביצירת סרטון');
@@ -1217,11 +1259,12 @@ export function VideoWizardFlow({
           } else {
             narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
           }
-        } catch {
+        } catch (cloneErr: any) {
           try {
             narrationAudioUrl = await voiceService.generateAndUpload(narrationText);
-          } catch {
-            // continue without narration
+          } catch (ttsErr: any) {
+            // FAIL-FAST: Do NOT continue without narration
+            throw new Error(`קריינות נכשלה בשיפור: ${ttsErr?.message || cloneErr?.message || 'שגיאה לא ידועה'}`);
           }
         }
       }
@@ -1359,12 +1402,12 @@ export function VideoWizardFlow({
                 newVideoUrl = status.url;
                 break;
               }
-              if (status.status === 'failed') break;
+              if (status.status === 'failed') throw new Error('Shotstack render failed');
               await sleep(3000);
             }
           }
-        } catch {
-          // Use video without compositing
+        } catch (compErr: any) {
+          throw new Error(`שלב ההרכבה בשיפור נכשל: ${compErr?.message || 'שגיאה ב-Shotstack'}`);
         }
       }
 
