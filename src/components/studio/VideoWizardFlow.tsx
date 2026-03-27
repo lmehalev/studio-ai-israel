@@ -1402,12 +1402,12 @@ export function VideoWizardFlow({
                 newVideoUrl = status.url;
                 break;
               }
-              if (status.status === 'failed') break;
+              if (status.status === 'failed') throw new Error('Shotstack render failed');
               await sleep(3000);
             }
           }
-        } catch {
-          // Use video without compositing
+        } catch (compErr: any) {
+          throw new Error(`שלב ההרכבה בשיפור נכשל: ${compErr?.message || 'שגיאה ב-Shotstack'}`);
         }
       }
 
