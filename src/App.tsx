@@ -39,6 +39,7 @@ function AppRoutes() {
       <Route path="/capabilities/voices" element={<ProtectedRoute><VoicesManagePage /></ProtectedRoute>} />
       <Route path="/capabilities/scripts" element={<ProtectedRoute><ScriptsManagePage /></ProtectedRoute>} />
       <Route path="/trends" element={<ProtectedRoute><TrendsPage /></ProtectedRoute>} />
+      <Route path="/proof-test" element={<ProtectedRoute><ProofTestPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
     </Routes>
