@@ -15,6 +15,7 @@ import VoicesManagePage from "./pages/capabilities/VoicesPage";
 import ScriptsManagePage from "./pages/capabilities/ScriptsPage";
 import TrendsPage from "./pages/TrendsPage";
 import LoginPage from "./pages/LoginPage";
+import ProofTestPage from "./pages/ProofTestPage";
 
 const queryClient = new QueryClient();
 
