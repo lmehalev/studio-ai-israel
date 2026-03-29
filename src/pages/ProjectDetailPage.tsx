@@ -724,6 +724,7 @@ export default function ProjectDetailPage() {
           onNewVersion={(newOutput) => {
             setOutputs(prev => [newOutput, ...prev]);
             setActiveTab('outputs');
+            toast.success(`✅ גרסה חדשה: ${newOutput.id.slice(0, 8)}`);
           }}
         />
       )}
