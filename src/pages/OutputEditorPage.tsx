@@ -69,7 +69,9 @@ export default function OutputEditorPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleDownload = async (o: ProjectOutputRow) => {
-    const url = o.thumbnail_url || o.video_url;
+    // For videos, prioritize video_url (not thumbnail_url which could be a still image)
+    const isVid = isVideoOutput(o);
+    const url = isVid ? (o.video_url || o.thumbnail_url) : (o.thumbnail_url || o.video_url);
     if (!url) return;
     try {
       const res = await fetch(url);
@@ -77,7 +79,7 @@ export default function OutputEditorPage() {
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      const ext = isVideoOutput(o) ? 'mp4' : 'png';
+      const ext = isVid ? 'mp4' : 'png';
       link.download = `${o.name}.${ext}`;
       document.body.appendChild(link);
       link.click();
