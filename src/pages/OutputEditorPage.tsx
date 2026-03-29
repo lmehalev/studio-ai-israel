@@ -305,18 +305,28 @@ export default function OutputEditorPage() {
             {isVideo && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
-                  onClick={() => navigate(`/projects/${projectId}`, { state: { openSubtitleEditor: mediaUrl } })}
+                  onClick={() => navigate(`/creative-studio?projectId=${projectId}&editVideoUrl=${encodeURIComponent(output.video_url || mediaUrl || '')}&action=subtitles`)}
                   className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors group"
                 >
                   <Video className="w-8 h-8 mx-auto text-primary mb-3 group-hover:scale-110 transition-transform" />
                   <h3 className="font-semibold text-sm mb-1">🎬 כתוביות / לוגו / מוזיקה</h3>
-                  <p className="text-xs text-muted-foreground">פתח את עורך הכתוביות עם הוידאו הנוכחי</p>
+                  <p className="text-xs text-muted-foreground">עורך כתוביות, שכבות, סטיקרים ורינדור — הגרסה החדשה תישמר באותו פרויקט</p>
                 </button>
-                <div className="bg-card border border-border rounded-xl p-6 text-center opacity-60">
-                  <Video className="w-8 h-8 mx-auto text-muted-foreground mb-3" />
-                  <h3 className="font-semibold text-sm mb-1">✂️ Trim / Split</h3>
-                  <p className="text-xs text-muted-foreground">חיתוך ופיצול קליפים — בקרוב</p>
-                </div>
+                <button
+                  onClick={() => {
+                    const vUrl = output.video_url || mediaUrl || '';
+                    if (vUrl) {
+                      // Open video editor for trim
+                      setImageEditorOpen(false);
+                      navigate(`/creative-studio?projectId=${projectId}&editVideoUrl=${encodeURIComponent(vUrl)}&action=subtitles`);
+                    }
+                  }}
+                  className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors group"
+                >
+                  <Edit className="w-8 h-8 mx-auto text-primary mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="font-semibold text-sm mb-1">✂️ חיתוך + שכבות</h3>
+                  <p className="text-xs text-muted-foreground">חתוך, הוסף אייקונים/סטיקרים/לוגו בתזמון שונה — ורנדר גרסה חדשה</p>
+                </button>
               </div>
             )}
 
