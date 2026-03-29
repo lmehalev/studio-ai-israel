@@ -6,7 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CostApprovalDialog, type CostEstimate } from '@/components/studio/CostApprovalDialog';
-import { imageService, storageService } from '@/services/creativeService';
+import { imageService } from '@/services/creativeService';
+import { supabase } from '@/integrations/supabase/client';
 import { projectService, type ProjectOutputRow } from '@/services/projectService';
 import { toast } from 'sonner';
 
@@ -35,6 +36,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
   const [saving, setSaving] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
   const [savedOutput, setSavedOutput] = useState<ProjectOutputRow | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const pendingAction = useRef<'preview' | 'save'>('preview');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,6 +50,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
     setGenerating(false);
     setSaving(false);
     setSavedOutput(null);
+    setErrorDetails(null);
   };
 
   const handleClose = () => {
@@ -74,28 +77,67 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
   const executeEdit = async (): Promise<string> => {
     const sourceUrl = previewUrl || originalUrl;
     const arParam = aspectRatio === 'auto' ? undefined : aspectRatio;
-    const result = await imageService.edit(
-      editPrompt,
-      sourceUrl,
-      referenceImages.length > 0 ? referenceImages : undefined,
-      arParam,
-    );
-    if (!result.imageUrl) throw new Error('לא התקבלה תמונה מהספק');
-    return result.imageUrl;
+    try {
+      const result = await imageService.edit(
+        editPrompt,
+        sourceUrl,
+        referenceImages.length > 0 ? referenceImages : undefined,
+        arParam,
+      );
+      if (!result.imageUrl) throw new Error('generate-image: לא התקבלה תמונה מהספק');
+      return result.imageUrl;
+    } catch (e: any) {
+      // Extract detailed error info
+      const msg = e.message || 'שגיאה לא ידועה';
+      throw new Error(`generate-image | ${msg}`);
+    }
   };
 
-  /** Upload base64/blob to storage, return public URL */
+  /** Upload base64/URL to storage — direct to Supabase storage, bypass edge function for large payloads */
   const uploadToStorage = async (imageUrl: string): Promise<string> => {
     if (imageUrl.startsWith('data:')) {
+      // Extract base64 directly and upload via edge function
+      const base64Match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (base64Match) {
+        const [, mimeType, base64Data] = base64Match;
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        const fileName = `ai-edit-${Date.now()}.${ext}`;
+
+        const { data, error } = await supabase.functions.invoke("storage-manager", {
+          body: {
+            action: "upload",
+            fileName,
+            fileType: mimeType,
+            fileBase64: base64Data,
+          },
+        });
+        if (error) throw new Error(`storage-manager | status: invoke error | ${error.message}`);
+        if (data?.error) throw new Error(`storage-manager | ${data.error}`);
+        if (!data?.publicUrl) throw new Error('storage-manager | לא התקבל URL לאחר העלאה');
+        return data.publicUrl;
+      }
+      // Fallback: blob conversion
       const blob = await fetch(imageUrl).then(r => r.blob());
       const file = new File([blob], `ai-edit-${Date.now()}.png`, { type: 'image/png' });
-      return await storageService.upload(file);
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      const { data, error } = await supabase.functions.invoke("storage-manager", {
+        body: { action: "upload", fileName: file.name, fileType: file.type, fileBase64: base64 },
+      });
+      if (error) throw new Error(`storage-manager | ${error.message}`);
+      if (data?.error) throw new Error(`storage-manager | ${data.error}`);
+      return data.publicUrl;
     }
+    // Already a URL — use as-is
     return imageUrl;
   };
 
   const handleApprove = async () => {
     setCostOpen(false);
+    setErrorDetails(null);
     const action = pendingAction.current;
 
     if (action === 'preview') {
@@ -106,6 +148,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
         toast.success('תצוגה מקדימה מוכנה — בדוק את התוצאה');
       } catch (e: any) {
         const msg = e.message || 'שגיאה בעריכת התמונה';
+        setErrorDetails(msg);
         toast.error(`שגיאה: ${msg}`, { duration: 8000 });
         console.error('[AiImageEdit] preview error:', e);
       } finally {
@@ -140,6 +183,7 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
         toast.success(`✅ גרסה חדשה נשמרה בפרויקט — ${newOutput.id.slice(0, 8)}`, { duration: 6000 });
       } catch (e: any) {
         const msg = e.message || 'שגיאה בשמירת הגרסה';
+        setErrorDetails(msg);
         toast.error(`שגיאה בשמירה: ${msg}`, { duration: 8000 });
         console.error('[AiImageEdit] save error:', e);
       } finally {
@@ -153,10 +197,18 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
     if (!files) return;
     for (const file of Array.from(files).slice(0, 5 - referenceImages.length)) {
       try {
-        const url = await storageService.upload(file);
-        setReferenceImages(prev => [...prev, url]);
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        const { data, error } = await supabase.functions.invoke("storage-manager", {
+          body: { action: "upload", fileName: file.name, fileType: file.type, fileBase64: base64 },
+        });
+        if (error || data?.error) throw new Error(error?.message || data?.error);
+        setReferenceImages(prev => [...prev, data.publicUrl]);
       } catch (err: any) {
-        toast.error(`שגיאה בהעלאת ${file.name}`);
+        toast.error(`שגיאה בהעלאת ${file.name}: ${err.message}`);
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -242,6 +294,14 @@ export function AiImageEditDialog({ open, onClose, output, projectId, projectNam
                   <div className="font-medium text-green-400">✅ נשמר בפרויקט{projectName ? `: ${projectName}` : ''}</div>
                   <div className="text-muted-foreground text-xs mt-0.5">מזהה: {savedOutput.id.slice(0, 8)} · {savedOutput.name}</div>
                 </div>
+              </div>
+            )}
+
+            {/* Error details */}
+            {errorDetails && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="font-medium mb-1">❌ שגיאה:</div>
+                <div className="text-xs font-mono break-all whitespace-pre-wrap">{errorDetails}</div>
               </div>
             )}
 
