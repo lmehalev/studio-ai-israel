@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell, Zap, Wand2, ShieldCheck, ShieldAlert, ShieldX, CircleDot, Route, DollarSign, Lock, Unlock, Info } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Check, Loader2, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, Sparkles, Mic, UserCircle, Video, ImageIcon, Subtitles, Bell, Zap, Wand2, ShieldCheck, ShieldAlert, ShieldX, CircleDot, Route, DollarSign, Lock, Unlock, Info, Coins } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -23,6 +23,16 @@ interface ProviderStatus {
   error?: string;
 }
 
+interface BalanceResult {
+  ok: boolean;
+  remaining: number | null;
+  total: number | null;
+  used: number | null;
+  unit: string;
+  resetAt?: string | null;
+  reason?: string;
+}
+
 // ═══════════════════════════════════════════════════════════
 //  PRODUCTION ROUTING — explicit safe stack definition
 // ═══════════════════════════════════════════════════════════
@@ -31,20 +41,19 @@ type ProviderRole = 'ברירת מחדל' | 'גיבוי' | 'חסום ידנית'
 
 interface ProviderMeta {
   id: string;
+  balanceKey: string; // key in provider-balances response
   name: string;
   desc: string;
   icon: any;
   free: boolean;
   plan: string;
   hasCredits: boolean;
-  // Operational routing
   role: ProviderRole;
   category: string;
   safeForGeneration: boolean;
   blockedManually: boolean;
   requiresApproval: boolean;
   noAutoGeneration: boolean;
-  // Billing
   billingType: string;
   monthlyCost: string;
   extraCreditsNeeded: boolean;
@@ -52,34 +61,34 @@ interface ProviderMeta {
 }
 
 const serviceConfig: ProviderMeta[] = [
-  { id: 'gemini', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים + שיפור פרומפטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)',
+  { id: 'gemini', balanceKey: 'lovable_ai', name: 'Gemini AI', desc: 'תמונות + טקסט + תסריטים + שיפור פרומפטים', icon: Sparkles, free: true, plan: 'חינם (מובנה)',
     hasCredits: false, role: 'ברירת מחדל', category: 'תמונות / תסריטים / פרומפטים', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'Lovable AI — ללא עלות נוספת', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב, שכפול קול, מוזיקה, SFX', icon: Mic, free: false, plan: 'חינם (מוגבל)',
+  { id: 'elevenlabs', balanceKey: 'elevenlabs', name: 'ElevenLabs', desc: 'דיבוב, שכפול קול, מוזיקה, SFX', icon: Mic, free: false, plan: 'חינם (מוגבל)',
     hasCredits: true, role: 'ברירת מחדל', category: 'קול / דיבוב בעברית', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'מנוי חודשי + תוים', monthlyCost: '$5–$22', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר, Photo Avatar, תבניות', icon: UserCircle, free: false, plan: 'חינם (Trial)',
+  { id: 'heygen', balanceKey: 'heygen', name: 'HeyGen', desc: 'אווטאר מדבר, Photo Avatar, תבניות', icon: UserCircle, free: false, plan: 'חינם (Trial)',
     hasCredits: true, role: 'ברירת מחדל', category: 'אווטאר מדבר / וידאו', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'קרדיטים — 591 נותרו', monthlyCost: 'Trial חינם', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'runway', name: 'RunwayML', desc: 'וידאו AI קולנועי (Image/Text → Video)', icon: Video, free: false, plan: 'Fallback בלבד',
+  { id: 'runway', balanceKey: 'runway', name: 'RunwayML', desc: 'וידאו AI קולנועי (Image/Text → Video)', icon: Video, free: false, plan: 'Fallback בלבד',
     hasCredits: true, role: 'גיבוי', category: 'וידאו AI', safeForGeneration: true, blockedManually: false, requiresApproval: true, noAutoGeneration: true,
     billingType: 'קרדיטים — Fallback', monthlyCost: '$12/month', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'krea', name: 'Krea AI', desc: '40+ מודלים: Flux, Veo 3, Kling 2.5, Upscale', icon: Wand2, free: false, plan: 'API מחובר',
+  { id: 'krea', balanceKey: 'krea', name: 'Krea AI', desc: '40+ מודלים: Flux, Veo 3, Kling 2.5, Upscale', icon: Wand2, free: false, plan: 'API מחובר',
     hasCredits: true, role: 'גיבוי', category: 'תמונות / וידאו (Fallback)', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'תשלום לפי שימוש', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
-  { id: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו, רינדור רב-שכבתי, כתוביות', icon: Video, free: false, plan: 'Production',
+  { id: 'shotstack', balanceKey: 'shotstack', name: 'Shotstack', desc: 'עריכת וידאו, רינדור רב-שכבתי, כתוביות', icon: Video, free: false, plan: 'Production',
     hasCredits: true, role: 'ברירת מחדל', category: 'הרכבה / רינדור סופי', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'תשלום לפי רינדור', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
-  { id: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)',
+  { id: 'cloudinary', balanceKey: 'cloudinary', name: 'Cloudinary', desc: 'ניהול מדיה, עיבוד תמונות ווידאו', icon: ImageIcon, free: false, plan: 'חינם (מוגבל)',
     hasCredits: true, role: 'לא פעיל', category: 'אחסון מדיה', safeForGeneration: false, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'חינם עד 25GB', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'perplexity', name: 'Perplexity AI', desc: 'ניתוח טרנדים ויראליים בזמן אמת', icon: Zap, free: false, plan: 'API מחובר',
+  { id: 'perplexity', balanceKey: 'perplexity', name: 'Perplexity AI', desc: 'ניתוח טרנדים ויראליים בזמן אמת', icon: Zap, free: false, plan: 'API מחובר',
     hasCredits: false, role: 'ברירת מחדל', category: 'ניתוח טרנדים', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'תשלום לפי שימוש', monthlyCost: 'משתנה', extraCreditsNeeded: false, costConfirmed: false },
-  { id: 'whisper', name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, free: true, plan: 'חינם (מובנה)',
+  { id: 'whisper', balanceKey: '', name: 'Whisper AI', desc: 'כתוביות אוטומטיות בעברית', icon: Subtitles, free: true, plan: 'חינם (מובנה)',
     hasCredits: false, role: 'ברירת מחדל', category: 'כתוביות / תמלול', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'Lovable AI — ללא עלות נוספת', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
-  { id: 'storage', name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, free: true, plan: 'חינם (מובנה)',
+  { id: 'storage', balanceKey: '', name: 'אחסון מדיה', desc: 'העלאה ושמירת קבצים', icon: ImageIcon, free: true, plan: 'חינם (מובנה)',
     hasCredits: false, role: 'ברירת מחדל', category: 'אחסון', safeForGeneration: true, blockedManually: false, requiresApproval: false, noAutoGeneration: true,
     billingType: 'כלול ב-Lovable Cloud', monthlyCost: '$0', extraCreditsNeeded: false, costConfirmed: true },
 ];
@@ -103,12 +112,15 @@ const roleBadge: Record<ProviderRole, { bg: string; text: string }> = {
   'לא פעיל': { bg: 'bg-muted', text: 'text-muted-foreground' },
 };
 
-const AUTO_REFRESH_INTERVAL = 60_000;
+const BALANCE_REFRESH_INTERVAL = 5 * 60_000; // 5 minutes
 
 export function ConnectionsTab() {
   const [credits, setCredits] = useState<Record<string, ProviderStatus>>({});
+  const [balances, setBalances] = useState<Record<string, BalanceResult>>({});
   const [loading, setLoading] = useState(false);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [balanceUpdatedAt, setBalanceUpdatedAt] = useState<Date | null>(null);
   const prevCreditsRef = useRef<Record<string, ProviderStatus>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
@@ -143,9 +155,28 @@ export function ConnectionsTab() {
     }
   };
 
+  const loadBalances = useCallback(async (silent = false) => {
+    if (!silent) setBalanceLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('provider-balances');
+      if (error) throw error;
+      setBalances(data?.providers || {});
+      setBalanceUpdatedAt(new Date(data?.updatedAt || Date.now()));
+    } catch (err: any) {
+      console.error('Error loading balances:', err);
+      if (!silent) toast.error('שגיאה בטעינת יתרות ספקים');
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadCredits();
-    intervalRef.current = setInterval(() => loadCredits(true), AUTO_REFRESH_INTERVAL);
+    loadBalances();
+    intervalRef.current = setInterval(() => {
+      loadCredits(true);
+      loadBalances(true);
+    }, BALANCE_REFRESH_INTERVAL);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
@@ -183,7 +214,6 @@ export function ConnectionsTab() {
         <p className="text-xs text-muted-foreground">המסלול הבטוח הנוכחי ליצירת תוכן — ללא שינויים אוטומטיים, ללא קריאות רקע.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Default providers */}
           <div className="bg-muted/30 rounded-lg p-3 space-y-2">
             <p className="text-xs font-semibold text-primary flex items-center gap-1.5"><Unlock className="w-3.5 h-3.5" /> ספקי ברירת מחדל</p>
             <ul className="text-xs space-y-1.5 text-foreground">
@@ -194,7 +224,6 @@ export function ConnectionsTab() {
             </ul>
           </div>
 
-          {/* Fallback + blocked */}
           <div className="space-y-3">
             <div className="bg-info/5 border border-info/20 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-semibold text-info flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> שרשרת גיבוי (Fallback)</p>
@@ -209,7 +238,6 @@ export function ConnectionsTab() {
           </div>
         </div>
 
-        {/* Safety guarantees */}
         <div className="bg-success/5 border border-success/20 rounded-lg p-3">
           <p className="text-xs font-semibold text-success flex items-center gap-1.5 mb-1.5"><ShieldCheck className="w-3.5 h-3.5" /> הבטחות בטיחות פעילות</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[11px] text-foreground">
@@ -247,33 +275,38 @@ export function ConnectionsTab() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {lastUpdated && <span className="text-xs text-muted-foreground">עודכן {formatTimeAgo(lastUpdated)}</span>}
-            <button onClick={() => loadCredits()} disabled={loading}
+            {balanceUpdatedAt && <span className="text-xs text-muted-foreground">יתרות עודכנו {formatTimeAgo(balanceUpdatedAt)}</span>}
+            <button onClick={() => { loadCredits(); loadBalances(); }} disabled={loading || balanceLoading}
               className="text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted flex items-center gap-1.5 transition-colors">
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              בדוק ספקים
+              {(loading || balanceLoading) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              רענן הכל
             </button>
           </div>
         </div>
 
         <div className="space-y-3">
           {serviceConfig.map(s => (
-            <ServiceCard key={s.id} config={s} Icon={s.icon} credit={credits[s.id]} loading={loading}
-              getUsagePercent={getUsagePercent} getUsageColor={getUsageColor} />
+            <ServiceCard key={s.id} config={s} Icon={s.icon} credit={credits[s.id]}
+              balance={s.balanceKey ? balances[s.balanceKey] : undefined}
+              loading={loading} balanceLoading={balanceLoading}
+              getUsagePercent={getUsagePercent} getUsageColor={getUsageColor}
+              onRefreshBalance={loadBalances} />
           ))}
         </div>
 
         <p className="text-xs text-muted-foreground mt-4">
-          💡 בדיקת ספקים משתמשת רק בקריאות אימות — ללא יצירות, ללא שריפת קרדיטים.
+          💡 בדיקת ספקים ויתרות משתמשת רק בקריאות אימות/מכסה — ללא יצירות, ללא שריפת קרדיטים. רענון אוטומטי כל 5 דקות.
         </p>
       </div>
     </div>
   );
 }
 
-function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsageColor }: {
-  config: ProviderMeta; Icon: any; credit?: ProviderStatus; loading: boolean;
+function ServiceCard({ config: s, Icon, credit, balance, loading, balanceLoading, getUsagePercent, getUsageColor, onRefreshBalance }: {
+  config: ProviderMeta; Icon: any; credit?: ProviderStatus; balance?: BalanceResult;
+  loading: boolean; balanceLoading: boolean;
   getUsagePercent: (c: ProviderStatus) => number; getUsageColor: (p: number, can: boolean) => string;
+  onRefreshBalance: () => void;
 }) {
   const readiness = credit?.readiness || (s.free ? 'credits_ok' : 'not_configured');
   const rConfig = readinessColors[readiness] || readinessColors.not_configured;
@@ -302,15 +335,12 @@ function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsa
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Role badge */}
           <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", rBadge.bg, rBadge.text)}>
             {s.role}
           </span>
-          {/* Category */}
           <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
             {s.category}
           </span>
-          {/* Readiness */}
           <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1", rConfig.bg, rConfig.text,
             (readiness === 'blocked_credits' || readiness === 'auth_failed' || s.blockedManually) && "animate-pulse"
           )}>
@@ -319,6 +349,56 @@ function ServiceCard({ config: s, Icon, credit, loading, getUsagePercent, getUsa
           </span>
         </div>
       </div>
+
+      {/* ═══ BALANCE / QUOTA ROW ═══ */}
+      {s.balanceKey && (
+        <div className="mr-13 bg-card border border-border rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-primary" />
+              <span className="text-xs font-semibold">יתרת קרדיטים:</span>
+              {balanceLoading && !balance ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" /> טוען...</span>
+              ) : balance ? (
+                balance.remaining !== null ? (
+                  <span className={cn("text-sm font-bold", balance.remaining === 0 ? "text-destructive" : balance.remaining < 100 ? "text-warning" : "text-success")}>
+                    {typeof balance.remaining === 'number' ? balance.remaining.toLocaleString() : balance.remaining}
+                    <span className="text-xs font-normal text-muted-foreground mr-1">{balance.unit}</span>
+                    {balance.total !== null && (
+                      <span className="text-xs font-normal text-muted-foreground"> / {balance.total.toLocaleString()}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Info className="w-3 h-3" /> לא ידוע
+                    {balance.reason && <span className="text-[10px]">({balance.reason})</span>}
+                  </span>
+                )
+              ) : (
+                <span className="text-xs text-muted-foreground">לא נבדק</span>
+              )}
+            </div>
+            <button onClick={() => onRefreshBalance()} disabled={balanceLoading}
+              className="text-[10px] px-2 py-1 border border-border rounded hover:bg-muted flex items-center gap-1 transition-colors">
+              {balanceLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+              רענן
+            </button>
+          </div>
+          {/* Balance bar when we have numeric data */}
+          {balance && balance.remaining !== null && balance.total !== null && balance.total > 0 && (
+            <div className="mt-2 space-y-1">
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                <div className={cn("h-full rounded-full transition-all duration-500",
+                  balance.remaining === 0 ? "bg-destructive" : (balance.remaining / balance.total) < 0.2 ? "bg-warning" : "bg-success"
+                )} style={{ width: `${Math.min(100, Math.round(((balance.total - (balance.used ?? 0)) / balance.total) * 100))}%` }} />
+              </div>
+            </div>
+          )}
+          {balance?.resetAt && (
+            <p className="text-[10px] text-muted-foreground mt-1">איפוס: {new Date(balance.resetAt).toLocaleDateString('he-IL')} {new Date(balance.resetAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</p>
+          )}
+        </div>
+      )}
 
       {/* Operational labels row */}
       <div className="mr-13 flex flex-wrap gap-1.5">
