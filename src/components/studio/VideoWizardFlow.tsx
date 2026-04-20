@@ -643,9 +643,9 @@ export function VideoWizardFlow({
     if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
     onProgress(40);
     try {
-      // Start Krea job - returns jobId immediately (async, avoids edge function timeout)
+      // kling-2.5 = image-to-video (animates the generated image)
       const kreaStart = await kreaService.generateVideo(scenePrompt, {
-        model: 'veo-3', width: 1280, height: 720,
+        model: 'kling-2.5', width: 1280, height: 720,
         duration: Math.max(8, Math.min(10, sceneDuration)),
         imageUrl: imgData.imageUrl,
       });
@@ -672,11 +672,13 @@ export function VideoWizardFlow({
     imageUrlOverride?: string | null
   ): Promise<string> => {
     onProgress(5);
-    // Start Krea job - returns jobId immediately (async, avoids edge function timeout)
+    // Smart model selection: kling-2.5 for image-to-video, veo-3 for text-to-video
+    const kreaImageUrl = imageUrlOverride ?? uploadedImages[0] ?? undefined;
+    const kreaModel = kreaImageUrl ? 'kling-2.5' : 'veo-3';
     const kreaStart = await kreaService.generateVideo(scenePrompt, {
-      model: 'veo-3', width: 1280, height: 720,
+      model: kreaModel, width: 1280, height: 720,
       duration: Math.max(8, Math.min(10, sceneDuration)),
-      imageUrl: imageUrlOverride ?? uploadedImages[0] ?? undefined,
+      imageUrl: kreaImageUrl,
     });
     if (!kreaStart?.jobId) throw new Error('Krea video start failed - no jobId returned');
     const jobId = kreaStart.jobId;
@@ -835,6 +837,16 @@ export function VideoWizardFlow({
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
+      // Detect if selected avatar is a cartoon/illustration (not a real photo)
+      // HeyGen talking photo requires a real human face — skip it for non-photo styles
+      const avatarStyle = (selectedAvatars[0]?.style || '').toLowerCase();
+      const isCartoonAvatar = /disney|cartoon|anime|manga|illustra|קריקט|אנימ|דיסנ|רישום|ציור|תלת.מימד|3d/.test(avatarStyle);
+      // If cartoon avatar → skip HeyGen entirely, go straight to Krea image-to-video
+      if (isCartoonAvatar && avatarImage) {
+        heygenFallbackEnabled = false;
+        addDebugLog(runId || 'init', 'avatar-routing', 'info',
+          , { avatarStyle });
+      }
       const workingScenes = generatedScript.scenes.length > 0
         ? generatedScript.scenes
         : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle, targetDurationSec);
