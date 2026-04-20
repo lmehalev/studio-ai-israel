@@ -651,14 +651,14 @@ export function VideoWizardFlow({
       });
       if (kreaStart?.jobId) {
         const pollStart = Date.now();
-        while (Date.now() - pollStart < 300000) {
+        while (Date.now() - pollStart < 180000) {
           await sleep(5000);
           const status = await kreaService.checkStatus(kreaStart.jobId);
           if (status?.videoUrl) { onProgress(100); return status.videoUrl; }
           if (status?.status === 'failed') throw new Error('Krea animation failed: ' + (status?.error || 'unknown'));
           onProgress(40 + Math.min(55, ((Date.now() - pollStart) / 300000) * 55));
         }
-        throw new Error('Krea animation timeout');
+        throw new Error('Krea animation timeout after 3 minutes');
       }
     } catch (kreaAnimErr) {
       console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
@@ -680,14 +680,14 @@ export function VideoWizardFlow({
     if (!kreaStart?.jobId) throw new Error('Krea video start failed - no jobId returned');
     const jobId = kreaStart.jobId;
     const pollStart = Date.now();
-    while (Date.now() - pollStart < 300000) {
+    while (Date.now() - pollStart < 180000) {
       await sleep(5000);
       const status = await kreaService.checkStatus(jobId);
       if (status?.videoUrl) { onProgress(100); return status.videoUrl; }
       if (status?.status === 'failed') throw new Error('Krea video failed: ' + (status?.error || 'unknown'));
       onProgress(10 + Math.min(85, ((Date.now() - pollStart) / 300000) * 85));
     }
-    throw new Error('Krea video timeout after 5 minutes');
+    throw new Error('Krea video timeout after 3 minutes');
   };
 
   // ===== Debug log helper =====
@@ -715,7 +715,7 @@ export function VideoWizardFlow({
     try {
       const [heygenRes, creditsRes] = await Promise.allSettled([
         withTimeout(supabase.functions.invoke('heygen-video', { body: { action: 'health_check' } }), 8000, 'HeyGen timeout'),
-        withTimeout(supabase.functions.invoke('check-credits', { body: {} }), 10000, 'Credits timeout'),
+        withTimeout(supabase.functions.invoke('check-credits', { body: {} }), 25000, 'Credits timeout'),
       ]);
       if (creditsRes.status === 'fulfilled') {
         health.credits = 'healthy';
@@ -735,6 +735,12 @@ export function VideoWizardFlow({
       if (health.heygen === 'unavailable') {
         if (heygenRes.status === 'fulfilled' && heygenRes.value?.data?.ok) health.heygen = 'healthy';
         else health.heygen = 'degraded';
+      }
+      // If credits check timed out, show degraded (not X) for unchecked providers
+      if (creditsRes.status !== 'fulfilled') {
+        if (health.krea === 'unavailable') health.krea = 'degraded';
+        if (health.runway === 'unavailable') health.runway = 'degraded';
+        if (health.credits === 'unavailable') health.credits = 'degraded';
       }
       // Shotstack is always available if key exists
       health.compose = 'healthy';
