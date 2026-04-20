@@ -336,6 +336,9 @@ export function VideoWizardFlow({
   const [improvePrompt, setImprovePrompt] = useState(restoredSession?.improvePrompt ?? '');
   const [isImproving, setIsImproving] = useState(false);
 
+  // Error modal (persistent — replaces disappearing toast for generation errors)
+  const [videoError, setVideoError] = useState<string | null>(null);
+
   // Save
   const [savingOutput, setSavingOutput] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(restoredSession?.selectedCategory ?? initialCategory ?? '');
@@ -1267,7 +1270,7 @@ export function VideoWizardFlow({
         throw new Error(`שלב ההרכבה הסופית נכשל: ${composeErr?.message || 'שגיאה ב-Shotstack'}. לא ניתן להציג תוצר חלקי.`);
       }
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה ביצירת סרטון');
+      setVideoError(e.message || 'שגיאה ביצירת סרטון');
       setStep(2);
       setProgressStage('');
     } finally {
@@ -1473,7 +1476,7 @@ export function VideoWizardFlow({
       setImprovePrompt('');
       toast.success('🎬 הסרטון המשופר מוכן!');
     } catch (e: any) {
-      toast.error(e.message || 'שגיאה בשיפור הסרטון');
+      setVideoError(e.message || 'שגיאה בשיפור הסרטון');
       setStep(4);
       setProgressStage('');
     } finally {
@@ -1543,6 +1546,62 @@ export function VideoWizardFlow({
 
   return (
     <div className="space-y-4">
+
+      {/* ===== Persistent Error Modal ===== */}
+      {videoError && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          dir="rtl"
+          onClick={(e) => { if (e.target === e.currentTarget) setVideoError(null); }}
+        >
+          <div className="bg-background border border-red-500/50 rounded-2xl shadow-2xl p-6 max-w-lg w-full space-y-4 animate-in fade-in-0 zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <X className="w-5 h-5 text-red-500" />
+                </div>
+                <h3 className="font-bold text-base text-red-500">שגיאה — יצירת סרטון נכשלה</h3>
+              </div>
+              <button
+                onClick={() => setVideoError(null)}
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Error body */}
+            <div className="bg-muted/60 border border-border rounded-xl p-4 max-h-60 overflow-y-auto">
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed font-mono">
+                {videoError}
+              </p>
+            </div>
+
+            {/* Hint */}
+            <p className="text-xs text-muted-foreground text-right">
+              💡 העתק את השגיאה ושלח לתמיכה טכנית, או נסה שוב
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { navigator.clipboard?.writeText(videoError).catch(() => {}); toast.success('הועתק!'); }}
+                className="px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors flex items-center gap-1.5"
+              >
+                📋 העתק שגיאה
+              </button>
+              <button
+                onClick={() => setVideoError(null)}
+                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity font-medium"
+              >
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Progress */}
       <div className="flex items-center gap-1.5">
         {Array.from({ length: totalSteps }).map((_, i) => (

@@ -107,7 +107,18 @@ export const voiceService = {
         let apiError = `שגיאה ביצירת קריינות: ${response.status}`;
         try {
           const data = await response.json();
-          if (data?.error) apiError = data.error;
+          if (data?.error) {
+            apiError = data.error;
+            // Append provider error details if available
+            if (data?.providerError) {
+              const detail = typeof data.providerError === 'string'
+                ? data.providerError
+                : JSON.stringify(data.providerError);
+              if (detail && detail !== 'null' && detail !== '{}') {
+                apiError += `\nפרטים: ${detail.slice(0, 400)}`;
+              }
+            }
+          }
         } catch {
           // ignore json parsing issues
         }
