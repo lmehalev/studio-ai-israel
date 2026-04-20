@@ -668,14 +668,15 @@ export function VideoWizardFlow({
   };
 
   const createKreaSceneClipShared = async (
-    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
+    scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void,
+    imageUrlOverride?: string | null
   ): Promise<string> => {
     onProgress(5);
     // Start Krea job - returns jobId immediately (async, avoids edge function timeout)
     const kreaStart = await kreaService.generateVideo(scenePrompt, {
       model: 'veo-3', width: 1280, height: 720,
       duration: Math.max(8, Math.min(10, sceneDuration)),
-      imageUrl: uploadedImages[0],
+      imageUrl: imageUrlOverride ?? uploadedImages[0] ?? undefined,
     });
     if (!kreaStart?.jobId) throw new Error('Krea video start failed - no jobId returned');
     const jobId = kreaStart.jobId;
@@ -999,7 +1000,7 @@ export function VideoWizardFlow({
         createAIImageToVideoClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
 
       const createKreaSceneClip = (scenePrompt: string, sceneIdx: number, sceneDuration: number) =>
-        createKreaSceneClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p));
+        createKreaSceneClipShared(scenePrompt, sceneIdx, sceneDuration, (p) => updateSceneProgress(sceneIdx, p), normalizedAvatarUrl ?? uploadedImages[0]);
 
       // Runway starts blocked; only unblocked if credit check confirmed it's ready.
       // This ensures no Runway calls if credit check times out or fails.
@@ -1363,7 +1364,7 @@ export function VideoWizardFlow({
         if (!clipUrl && kreaFallbackEnabled) {
           try {
             clipUrl = await withTimeout(
-              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}),
+              createKreaSceneClipShared(scenePrompt, i, sceneDuration, () => {}, normalizedAvatarUrl ?? uploadedImages[0]),
               KREA_FALLBACK_TIMEOUT_MS, 'Krea timeout'
             );
           } catch (kreaErr: any) {
