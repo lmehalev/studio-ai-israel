@@ -841,11 +841,16 @@ export function VideoWizardFlow({
       // HeyGen talking photo requires a real human face — skip it for non-photo styles
       const avatarStyle = (selectedAvatars[0]?.style || '').toLowerCase();
       const isCartoonAvatar = /disney|cartoon|anime|manga|illustra|קריקט|אנימ|דיסנ|רישום|ציור|תלת.מימד|3d/.test(avatarStyle);
-      // If cartoon avatar → skip HeyGen entirely, go straight to Krea image-to-video
+      // Smart HeyGen routing based on avatar type
       if (isCartoonAvatar && avatarImage) {
+        // Cartoon/illustration avatar → HeyGen requires real face, skip it
         heygenFallbackEnabled = false;
-        addDebugLog(runId || 'init', 'avatar-routing', 'info',
-          , { avatarStyle });
+        addDebugLog(runId || 'init', 'avatar-routing', 'info', 'Cartoon avatar detected, skipping HeyGen → Krea image-to-video', { avatarStyle });
+      }
+      if (!avatarImage) {
+        // No avatar selected → pure cinematic Krea veo-3 mode (no talking head)
+        heygenFallbackEnabled = false;
+        addDebugLog(runId || 'init', 'avatar-routing', 'info', 'No avatar selected → cinematic veo-3 mode');
       }
       const workingScenes = generatedScript.scenes.length > 0
         ? generatedScript.scenes
