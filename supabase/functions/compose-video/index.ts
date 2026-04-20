@@ -1019,7 +1019,7 @@ Deno.serve(async (req) => {
         renderErrors.push(`${env}:${response.status}`);
         console.error(`Shotstack render error (${env}):`, response.status, providerError.slice(0, 220));
 
-        if (![401, 403, 404].includes(response.status)) {
+        if (![401, 402, 403, 404].includes(response.status)) {
           break;
         }
       }
