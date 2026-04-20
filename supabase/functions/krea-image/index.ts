@@ -135,10 +135,10 @@ Deno.serve(async (req) => {
       }
 
       const job = await res.json();
-      // Video jobs take longer — poll with extended timeout
-      const result = await pollJob(job.job_id, apiToken, 300000);
+      // Return immediately — frontend polls check_status (avoids edge function timeout)
+      console.log(`Krea video job started: jobId=${job.job_id}`);
       return new Response(
-        JSON.stringify({ success: true, videoUrl: result.urls?.[0] || null, jobId: job.job_id }),
+        JSON.stringify({ success: true, videoUrl: null, jobId: job.job_id, status: 'pending' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -201,12 +201,15 @@ Deno.serve(async (req) => {
       }
 
       const job = await res.json();
+      const completed = !!job.completed_at;
+      const urls: string[] = job.result?.urls || [];
       return new Response(
         JSON.stringify({
           success: true,
           status: job.status,
-          completed: !!job.completed_at,
-          urls: job.result?.urls || [],
+          completed,
+          videoUrl: completed && job.status === 'completed' ? (urls[0] || null) : null,
+          urls,
           error: job.result?.error || null,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -806,15 +806,15 @@ export const kreaService = {
     height?: number;
     duration?: number;
     imageUrl?: string;
-  }): Promise<{ videoUrl: string; jobId: string }> => {
+  }): Promise<{ videoUrl: string | null; jobId: string }> => {
     const { data, error } = await supabase.functions.invoke('krea-image', {
       body: {
         action: 'generate_video',
         prompt,
-        model: options?.model || 'kling-2.5',
+        model: options?.model || 'veo-3',
         width: options?.width || 1280,
         height: options?.height || 720,
-        duration: options?.duration || 5,
+        duration: options?.duration || 8,
         imageUrl: options?.imageUrl,
       },
     });

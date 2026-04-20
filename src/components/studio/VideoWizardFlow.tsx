@@ -132,7 +132,7 @@ const HEYGEN_MAX_POLL_ATTEMPTS = 180;
 const CREDITS_CHECK_TIMEOUT_MS = 20000;
 const KREA_GENERATION_TIMEOUT_MS = 360000;
 const HEYGEN_GENERATION_TIMEOUT_MS = 900000;
-const KREA_FALLBACK_TIMEOUT_MS = 360000; // Must match edge function's 5min poll
+const KREA_FALLBACK_TIMEOUT_MS = 360000; // 6min outer timeout (inner loop polls every 5s for 5min)
 
 const DUMMY_RUNWAY_TASK_ID = '00000000-0000-0000-0000-000000000000';
 const DUMMY_COMPOSE_RENDER_ID = '00000000-0000-0000-0000-000000000000';
@@ -643,13 +643,23 @@ export function VideoWizardFlow({
     if (imgError || !imgData?.imageUrl) throw new Error('AI image generation failed');
     onProgress(40);
     try {
-      const kreaResult = await kreaService.generateVideo(scenePrompt, {
-        model: 'kling-2.5', width: 1280, height: 720,
-        duration: Math.max(5, Math.min(10, sceneDuration)),
+      // Start Krea job - returns jobId immediately (async, avoids edge function timeout)
+      const kreaStart = await kreaService.generateVideo(scenePrompt, {
+        model: 'veo-3', width: 1280, height: 720,
+        duration: Math.max(8, Math.min(10, sceneDuration)),
         imageUrl: imgData.imageUrl,
       });
-      onProgress(100);
-      if (kreaResult?.videoUrl) return kreaResult.videoUrl;
+      if (kreaStart?.jobId) {
+        const pollStart = Date.now();
+        while (Date.now() - pollStart < 300000) {
+          await sleep(5000);
+          const status = await kreaService.checkStatus(kreaStart.jobId);
+          if (status?.videoUrl) { onProgress(100); return status.videoUrl; }
+          if (status?.status === 'failed') throw new Error('Krea animation failed: ' + (status?.error || 'unknown'));
+          onProgress(40 + Math.min(55, ((Date.now() - pollStart) / 300000) * 55));
+        }
+        throw new Error('Krea animation timeout');
+      }
     } catch (kreaAnimErr) {
       console.warn('Krea animation failed, using still image as clip:', kreaAnimErr);
     }
@@ -661,14 +671,23 @@ export function VideoWizardFlow({
     scenePrompt: string, _sceneIdx: number, sceneDuration: number, onProgress: (p: number) => void
   ): Promise<string> => {
     onProgress(5);
-    const kreaResult = await kreaService.generateVideo(scenePrompt, {
-      model: 'kling-2.5', width: 1280, height: 720,
-      duration: Math.max(5, Math.min(10, sceneDuration)),
+    // Start Krea job - returns jobId immediately (async, avoids edge function timeout)
+    const kreaStart = await kreaService.generateVideo(scenePrompt, {
+      model: 'veo-3', width: 1280, height: 720,
+      duration: Math.max(8, Math.min(10, sceneDuration)),
       imageUrl: uploadedImages[0],
     });
-    onProgress(100);
-    if (!kreaResult?.videoUrl) throw new Error('Krea video failed');
-    return kreaResult.videoUrl;
+    if (!kreaStart?.jobId) throw new Error('Krea video start failed - no jobId returned');
+    const jobId = kreaStart.jobId;
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < 300000) {
+      await sleep(5000);
+      const status = await kreaService.checkStatus(jobId);
+      if (status?.videoUrl) { onProgress(100); return status.videoUrl; }
+      if (status?.status === 'failed') throw new Error('Krea video failed: ' + (status?.error || 'unknown'));
+      onProgress(10 + Math.min(85, ((Date.now() - pollStart) / 300000) * 85));
+    }
+    throw new Error('Krea video timeout after 5 minutes');
   };
 
   // ===== Debug log helper =====
