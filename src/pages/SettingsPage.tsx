@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Trash2, Download, Plug, Eye, X, Database } from 'lucide-react';
 import { ConnectionsTab } from '@/components/settings/ConnectionsTab';
+import { ApiKeysSetupTab } from '@/components/settings/ApiKeysSetupTab';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { DataExportButton, DomainMigrationBanner } from '@/components/DataMigration';
@@ -154,13 +155,18 @@ export default function SettingsPage() {
           <p className="text-muted-foreground text-sm mt-1">ניהול חיבורים, אחסון והגדרות מערכת</p>
         </div>
 
-        <Tabs defaultValue="connections" dir="rtl">
-        <TabsList className="bg-muted/50">
-            <TabsTrigger value="connections" className="flex items-center gap-2"><Plug className="w-4 h-4" /> חיבורים</TabsTrigger>
+        <Tabs defaultValue="apikeys" dir="rtl">
+        <TabsList className="bg-muted/50 flex-wrap h-auto gap-1">
+            <TabsTrigger value="apikeys" className="flex items-center gap-2">🔑 מפתחות API</TabsTrigger>
+            <TabsTrigger value="connections" className="flex items-center gap-2"><Plug className="w-4 h-4" /> סטטוס מפורט</TabsTrigger>
             <TabsTrigger value="storage" className="flex items-center gap-2"><ImageIcon className="w-4 h-4" /> אחסון</TabsTrigger>
             <TabsTrigger value="data" className="flex items-center gap-2"><Database className="w-4 h-4" /> נתונים</TabsTrigger>
             <TabsTrigger value="system" className="flex items-center gap-2"><Shield className="w-4 h-4" /> מערכת</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="apikeys" className="mt-4">
+            <ApiKeysSetupTab />
+          </TabsContent>
 
           <TabsContent value="connections" className="mt-4 space-y-4">
             <ConnectionsTab />
