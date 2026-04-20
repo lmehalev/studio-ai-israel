@@ -429,7 +429,7 @@ ${avatarContext}${voiceContext}${imageContext}${brandInfo}${websiteInfo}
     const modelsToTry = [
       "google/gemini-2.5-flash",
       "google/gemini-2.5-pro",
-      "openai/gpt-5-mini",
+      "openai/gpt-4o-mini",
     ];
 
     let response: Response | null = null;
