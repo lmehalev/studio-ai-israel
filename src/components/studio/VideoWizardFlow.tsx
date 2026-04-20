@@ -1035,7 +1035,7 @@ export function VideoWizardFlow({
             setProgressStage(`סצנה ${sceneIdx + 1}: מייצר עם HeyGen...`);
             return await withTimeout(
               createHeygenSceneClip(scene.spokenText || scene.title, sceneIdx, narrationAudioUrl),
-              120000, 'HeyGen timeout'
+              HEYGEN_GENERATION_TIMEOUT_MS, 'HeyGen timeout'
             );
           } catch (heygenErr: any) {
             const msg = heygenErr?.message || '';
@@ -1370,7 +1370,7 @@ export function VideoWizardFlow({
           try {
             clipUrl = await withTimeout(
               createHeygenSceneClipShared(scene.spokenText || scene.title, i, narrationAudioUrl, normalizedAvatarUrl, () => {}),
-              120000, 'HeyGen timeout'
+              HEYGEN_GENERATION_TIMEOUT_MS, 'HeyGen timeout'
             );
           } catch (heygenErr: any) {
             errors.push(`HeyGen: ${heygenErr?.message || ''}`);
@@ -1419,7 +1419,7 @@ export function VideoWizardFlow({
           try {
             clipUrl = await withTimeout(
               createAIImageToVideoClipShared(scenePrompt, i, sceneDuration, () => {}),
-              60000, 'AI Image timeout'
+              260000, 'AI Image timeout'
             );
           } catch (aiErr: any) {
             errors.push(`AI Image: ${aiErr?.message || ''}`);
@@ -1433,6 +1433,9 @@ export function VideoWizardFlow({
         }
       }
 
+      if (sceneVideoUrls.length === 0) {
+        throw new Error('לא הצלחתי ליצור אף סצנה בשיפור הסרטון — בדוק את חיבורי הספקים.');
+      }
       let newVideoUrl = sceneVideoUrls[0] || resultVideoUrl || '';
 
       // Composite with narration + subtitles + logo

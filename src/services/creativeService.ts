@@ -847,6 +847,7 @@ export const kreaService = {
       body: { action: 'check_status', jobId },
     });
     if (error) throw new Error(error.message || 'שגיאה בבדיקת סטטוס');
+    if (data?.success === false) throw new Error(data.error || 'כשל בבדיקת סטטוס Krea');
     return data;
   },
 };
