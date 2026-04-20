@@ -1094,11 +1094,13 @@ export function VideoWizardFlow({
         }
 
         // Provider 4: AI Image + Animation (last resort — always available)
+        // NOTE: createAIImageToVideoClipShared has a 3-min internal Krea poll + still-image fallback.
+        // Outer timeout must exceed internal timeout (180s poll + ~30s image gen = ~210s total).
         try {
           setProgressStage(`סצנה ${sceneIdx + 1}: מייצר תמונת AI + אנימציה...`);
           return await withTimeout(
             createAIImageToVideoClip(scenePrompt, sceneIdx, sceneDuration),
-            60000, 'AI Image timeout'
+            260000, 'AI Image timeout'
           );
         } catch (aiErr: any) {
           errors.push(`AI Image: ${aiErr?.message || 'unknown'}`);
