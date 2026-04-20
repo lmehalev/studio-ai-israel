@@ -280,6 +280,7 @@ export const composeService = {
     subtitleCount: number;
     logoPlacementSummary: any;
     shotstackEnv?: 'production' | 'stage';
+    providerErrorDetail?: string | null;
   }> => {
     const { data, error } = await supabase.functions.invoke("compose-video", {
       body: { action: "render", ...params },
@@ -294,6 +295,7 @@ export const composeService = {
       subtitleCount: Number(data?.subtitleCount) || 0,
       logoPlacementSummary: data?.logoPlacementSummary ?? null,
       shotstackEnv: data?.shotstackEnv,
+      providerErrorDetail: data?.providerErrorDetail ?? null,
     };
   },
 

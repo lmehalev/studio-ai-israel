@@ -87,6 +87,7 @@ interface ComposeRenderResponse {
   thumbnailUrl: string | null;
   subtitleCount: number;
   logoPlacementSummary: LogoPlacementSummary | null;
+  providerErrorDetail?: string;
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
@@ -992,6 +993,7 @@ Deno.serve(async (req) => {
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
+      let providerErrorDetail: string | null = null;
 
       for (const env of envOrder) {
         const baseUrl = SHOTSTACK_ENDPOINTS[env];
@@ -1014,10 +1016,20 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Always consume provider body but never echo it back to the client
+        // Capture provider error body for debugging
         const providerError = await response.text();
         renderErrors.push(`${env}:${response.status}`);
-        console.error(`Shotstack render error (${env}):`, response.status, providerError.slice(0, 220));
+        console.error(`Shotstack render error (${env}):`, response.status, providerError.slice(0, 500));
+
+        // Store first meaningful error for client-side display
+        if (!providerErrorDetail) {
+          try {
+            const parsed = JSON.parse(providerError);
+            providerErrorDetail = parsed?.message || parsed?.error || parsed?.detail || providerError.slice(0, 400);
+          } catch {
+            providerErrorDetail = providerError.slice(0, 400);
+          }
+        }
 
         if (![401, 402, 403, 404].includes(response.status)) {
           break;
@@ -1027,6 +1039,7 @@ Deno.serve(async (req) => {
       const failedResponse: ComposeRenderResponse = {
         renderId: null,
         status: `failed:${renderErrors.join(",") || "unknown"}`,
+        providerErrorDetail: providerErrorDetail || undefined,
         ...responseSummary,
       };
 

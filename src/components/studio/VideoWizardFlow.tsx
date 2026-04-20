@@ -83,6 +83,7 @@ interface DurationPreset {
 const DURATION_PRESETS: DurationPreset[] = [
   { label: '30 שניות', seconds: 30, videoTypes: ['marketing'] },
   { label: '40 שניות', seconds: 40, videoTypes: ['marketing'] },
+  { label: '50 שניות', seconds: 50, videoTypes: ['marketing'] },
   { label: '60 שניות', seconds: 60, videoTypes: ['marketing'] },
   { label: '2 דקות', seconds: 120, videoTypes: ['podcast', 'episode'] },
   { label: '3 דקות', seconds: 180, videoTypes: ['podcast', 'episode'] },
@@ -1205,8 +1206,15 @@ export function VideoWizardFlow({
         });
 
         addDebugLog(runId, 'compose', renderResult?.renderId ? 'success' : 'error',
-          renderResult?.renderId ? `Render started: ${renderResult.renderId}` : 'No renderId returned');
-        if (!renderResult?.renderId) throw new Error('Shotstack error');
+          renderResult?.renderId
+            ? `Render started: ${renderResult.renderId} (${renderResult.shotstackEnv || 'unknown env'})`
+            : `Shotstack rejected render — status: ${renderResult?.status} | ${renderResult?.providerErrorDetail || 'no detail'}`
+        );
+        if (!renderResult?.renderId) {
+          const statusCode = renderResult?.status || 'unknown';
+          const detail = renderResult?.providerErrorDetail ? `\nפרטים: ${renderResult.providerErrorDetail}` : '';
+          throw new Error(`Shotstack דחה את הבקשה (${statusCode})${detail}`);
+        }
 
         const composeMaxAttempts = Math.max(240, sceneVideoUrls.length * 120);
         setProgressStage('מעבד וידאו סופי עם כתוביות ולוגו...');
@@ -1255,9 +1263,9 @@ export function VideoWizardFlow({
             toast.success(`🎬 סרטון של ${totalDuration} שניות מוכן!`);
             return;
           }
-          if (status.status === 'failed') {
-            addDebugLog(runId, 'compose', 'error', 'Shotstack render failed');
-            throw new Error('Shotstack render failed');
+          if (status.status === 'failed' || (status.status && status.status.startsWith('failed:'))) {
+            addDebugLog(runId, 'compose', 'error', `Shotstack render failed: ${status.status}`);
+            throw new Error(`Shotstack render failed (${status.status})`);
           }
           setRunwayProgress(70 + (i / composeMaxAttempts) * 28);
           await sleep(COMPOSE_STATUS_POLL_MS);
@@ -1729,10 +1737,41 @@ export function VideoWizardFlow({
             </div>
           </div>
 
-          {/* Info about duration */}
-          <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-start gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-            <span>הסרטון יהיה <strong className="text-foreground">{formatDuration(targetDurationSec)}</strong> (~{Math.round(targetDurationSec / 10)} סצנות). המערכת תוסיף קריינות בעברית, כתוביות, לוגו ואייקונים אוטומטית.</span>
+          {/* Scene count quick-selector */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              🎞️ מספר סצנות בסרטון
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { scenes: 3, seconds: 30, label: '3 סצנות', sub: '~30 שניות' },
+                { scenes: 4, seconds: 40, label: '4 סצנות', sub: '~40 שניות' },
+                { scenes: 5, seconds: 50, label: '5 סצנות', sub: '~50 שניות' },
+                { scenes: 6, seconds: 60, label: '6 סצנות', sub: '~60 שניות' },
+              ].map(opt => {
+                const selected = Math.round(targetDurationSec / 10) === opt.scenes ||
+                  (opt.scenes === 6 && targetDurationSec >= 55 && targetDurationSec <= 65) ||
+                  (opt.scenes === 3 && targetDurationSec >= 25 && targetDurationSec <= 35) ||
+                  targetDurationSec === opt.seconds;
+                return (
+                  <button key={opt.scenes}
+                    onClick={() => setTargetDurationSec(opt.seconds)}
+                    className={cn(
+                      'text-center p-2.5 rounded-lg border text-xs transition-all',
+                      targetDurationSec === opt.seconds
+                        ? 'border-primary bg-primary/10 text-foreground shadow-sm font-semibold'
+                        : 'border-border hover:border-primary/30 text-muted-foreground'
+                    )}>
+                    <div className="font-medium text-sm">{opt.scenes}</div>
+                    <div className="text-[10px] mt-0.5 opacity-70">{opt.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground pt-0.5">
+              <Sparkles className="w-3 h-3 inline-block ml-1 text-primary" />
+              כל סצנה ~10 שניות. פחות סצנות = יצירה מהירה יותר + עלות נמוכה יותר.
+            </p>
           </div>
 
           {/* Avatars multi-select */}
