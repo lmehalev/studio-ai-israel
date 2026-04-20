@@ -717,15 +717,24 @@ export function VideoWizardFlow({
         withTimeout(supabase.functions.invoke('heygen-video', { body: { action: 'health_check' } }), 8000, 'HeyGen timeout'),
         withTimeout(supabase.functions.invoke('check-credits', { body: {} }), 10000, 'Credits timeout'),
       ]);
-      if (heygenRes.status === 'fulfilled' && heygenRes.value?.data?.ok) health.heygen = 'healthy';
-      else health.heygen = 'degraded';
       if (creditsRes.status === 'fulfilled') {
         health.credits = 'healthy';
         const items = (creditsRes.value?.data as any)?.credits || [];
         for (const c of items) {
           if (c.service === 'runway' && c.canGenerate) health.runway = 'healthy';
           if (c.service === 'krea' && c.canGenerate) health.krea = 'healthy';
+          // Use check-credits as primary HeyGen source (more reliable than health_check)
+          if (c.service === 'heygen') {
+            if (c.canGenerate) health.heygen = 'healthy';
+            else if (c.readiness !== 'auth_failed') health.heygen = 'degraded';
+            else health.heygen = 'unavailable';
+          }
         }
+      }
+      // Fallback: if heygen not in credits (key not configured), use health_check result
+      if (health.heygen === 'unavailable') {
+        if (heygenRes.status === 'fulfilled' && heygenRes.value?.data?.ok) health.heygen = 'healthy';
+        else health.heygen = 'degraded';
       }
       // Shotstack is always available if key exists
       health.compose = 'healthy';
