@@ -711,12 +711,17 @@ Deno.serve(async (req) => {
     const SHOTSTACK_API_KEY = Deno.env.get("SHOTSTACK_API_KEY");
     if (!SHOTSTACK_API_KEY) throw new Error("SHOTSTACK_API_KEY is not configured");
 
+    // Sandbox key is optional — falls back to production key if not set.
+    // Shotstack uses DIFFERENT keys per environment (production vs sandbox).
+    const SHOTSTACK_SANDBOX_KEY = Deno.env.get("SHOTSTACK_SANDBOX_API_KEY") || SHOTSTACK_API_KEY;
+
     const { action, ...params } = await req.json();
 
-    const headers = {
-      "x-api-key": SHOTSTACK_API_KEY,
+    // Build per-environment headers so each key matches its endpoint
+    const getHeaders = (env: ShotstackEnv) => ({
+      "x-api-key": env === "stage" ? SHOTSTACK_SANDBOX_KEY : SHOTSTACK_API_KEY,
       "Content-Type": "application/json",
-    };
+    });
 
     if (action === "render") {
       const {
@@ -999,7 +1004,7 @@ Deno.serve(async (req) => {
         const baseUrl = SHOTSTACK_ENDPOINTS[env];
         const response = await fetch(`${baseUrl}/render`, {
           method: "POST",
-          headers,
+          headers: getHeaders(env),
           body: JSON.stringify(renderBody),
         });
 
@@ -1056,7 +1061,7 @@ Deno.serve(async (req) => {
 
       for (const env of envOrder) {
         const baseUrl = SHOTSTACK_ENDPOINTS[env];
-        const response = await fetch(`${baseUrl}/render/${renderId}`, { headers });
+        const response = await fetch(`${baseUrl}/render/${renderId}`, { headers: getHeaders(env) });
 
         if (response.ok) {
           data = await response.json();
