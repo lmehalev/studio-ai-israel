@@ -837,21 +837,6 @@ export function VideoWizardFlow({
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
-      // Detect if selected avatar is a cartoon/illustration (not a real photo)
-      // HeyGen talking photo requires a real human face — skip it for non-photo styles
-      const avatarStyle = (selectedAvatars[0]?.style || '').toLowerCase();
-      const isCartoonAvatar = /disney|cartoon|anime|manga|illustra|קריקט|אנימ|דיסנ|רישום|ציור|תלת.מימד|3d/.test(avatarStyle);
-      // Smart HeyGen routing based on avatar type
-      if (isCartoonAvatar && avatarImage) {
-        // Cartoon/illustration avatar → HeyGen requires real face, skip it
-        heygenFallbackEnabled = false;
-        addDebugLog(runId || 'init', 'avatar-routing', 'info', 'Cartoon avatar detected, skipping HeyGen → Krea image-to-video', { avatarStyle });
-      }
-      if (!avatarImage) {
-        // No avatar selected → pure cinematic Krea veo-3 mode (no talking head)
-        heygenFallbackEnabled = false;
-        addDebugLog(runId || 'init', 'avatar-routing', 'info', 'No avatar selected → cinematic veo-3 mode');
-      }
       const workingScenes = generatedScript.scenes.length > 0
         ? generatedScript.scenes
         : buildFallbackScenesFromText(generatedScript.script || prompt, videoStyle, targetDurationSec);
@@ -919,6 +904,20 @@ export function VideoWizardFlow({
         heygenFallbackEnabled = heygenReady;
         kreaFallbackEnabled = kreaReady;
         runwayFallbackEnabled = runwayReady && !runwayBlocked;
+
+        // Smart avatar routing — applied AFTER credits check so it takes final priority
+        const avatarStyle = (selectedAvatars[0]?.style || '').toLowerCase();
+        const isCartoonAvatar = /disney|cartoon|anime|manga|illustra|קריקט|אנימ|דיסנ|רישום|ציור|תלת.מימד|3d/.test(avatarStyle);
+        if (isCartoonAvatar && avatarImage) {
+          // Cartoon/illustration avatar → HeyGen requires real face, skip it
+          heygenFallbackEnabled = false;
+          addDebugLog(runId, 'avatar-routing', 'info', 'Cartoon avatar detected — skipping HeyGen, using Krea image-to-video', { avatarStyle });
+        }
+        if (!avatarImage) {
+          // No avatar → pure cinematic veo-3 (text-to-video, no talking head)
+          heygenFallbackEnabled = false;
+          addDebugLog(runId, 'avatar-routing', 'info', 'No avatar selected — cinematic veo-3 mode');
+        }
 
         addDebugLog(runId, 'provider-routing', 'info',
           `Readiness: Runway=${creditsMap.runway?.readiness || 'N/A'} | HeyGen=${creditsMap.heygen?.readiness || 'N/A'} | Krea=${creditsMap.krea?.readiness || 'N/A'}`,
