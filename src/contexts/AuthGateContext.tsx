@@ -35,7 +35,7 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string): Promise<string | null> => {
     try {
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "yfezjihpwlooktxyxfdt";
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/auth-gate`,
         {
