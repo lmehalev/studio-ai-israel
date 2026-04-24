@@ -131,8 +131,8 @@ Deno.serve(async (req) => {
     const truncatedMarkdown = markdown.slice(0, 8000);
 
     // Step 2: Extract structured content via AI
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
+    const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+    if (!PERPLEXITY_API_KEY) {
       // Return raw scrape data without AI extraction
       return new Response(JSON.stringify({
         success: true,
@@ -171,14 +171,14 @@ OG Description: ${metadata.ogDescription || metadata['og:description'] || 'N/A'}
 Website content (markdown):
 ${truncatedMarkdown}`;
 
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'sonar-pro',
         messages: [
           { role: 'system', content: 'You are a marketing content extractor. Return ONLY valid JSON, no markdown fences, no explanation.' },
           { role: 'user', content: extractionPrompt },

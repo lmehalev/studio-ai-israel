@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
         default: return '';
       }
     })();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const KREA_API_KEY_PRIMARY = Deno.env.get("KREA_API_KEY");
+    if (!KREA_API_KEY_PRIMARY) throw new Error("KREA_API_KEY is not configured");
 
     const mediaUrls = [
       ...(action === "edit" && imageUrl ? [imageUrl] : []),
@@ -104,99 +104,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Try models in order: flash (cheaper) → pro (higher quality)
-    const modelsToTry = [
-      "google/gemini-3.1-flash-image-preview",
-      "google/gemini-3-pro-image-preview",
-    ];
+    // Use Krea as primary image generation provider
+    console.log("Generating image via Krea");
+    const kreaRes = await fetch("https://api.krea.ai/v2/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${KREA_API_KEY_PRIMARY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: prompt || "Professional high quality image",
+        model: "flux",
+        width: aspectRatio === "9:16" ? 720 : aspectRatio === "1:1" ? 1080 : 1280,
+        height: aspectRatio === "9:16" ? 1280 : aspectRatio === "1:1" ? 1080 : 720,
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+      }),
+    });
 
-    let response: Response | null = null;
-    let lastRaw = "";
-
-    for (const model of modelsToTry) {
-      console.log(`Trying image model: ${model}`);
-      const attempt = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          modalities: ["image", "text"],
-        }),
-      });
-
-      if (attempt.ok) {
-        response = attempt;
-        break;
-      }
-
-      lastRaw = await attempt.text();
-      console.warn(`Model ${model} failed: ${attempt.status} ${lastRaw.slice(0, 200)}`);
-
-      // Only retry on 402/429, not on 400 (bad request)
-      if (attempt.status === 400) {
-        const gatewayMessage = extractGatewayMessage(lastRaw);
-        const invalidImageMsg =
-          gatewayMessage.includes("did not return an image") ||
-          (gatewayMessage.includes("image") && gatewayMessage.includes("URL"));
-
-        return new Response(
-          JSON.stringify({
-            error: invalidImageMsg
-              ? "הקישור אינו תמונה ישירה. הדבק קישור ישיר לקובץ תמונה (jpg/png/webp)."
-              : "בקשה לא תקינה ליצירת תמונה. בדוק את הטקסט/הקישור ונסה שוב.",
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Continue to next model on 402/429/5xx
-    }
-
-    if (!response) {
-      // All models failed — try Krea as final fallback for image generation
-      const KREA_API_KEY = Deno.env.get("KREA_API_KEY");
-      if (KREA_API_KEY) {
-        console.log("All Lovable AI models exhausted, falling back to Krea image generation");
-        try {
-          const kreaRes = await fetch("https://api.krea.ai/v2/images/generations", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${KREA_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: prompt || "Professional high quality image",
-              model: "flux",
-              width: 1280, height: 720,
-            }),
-          });
-          if (kreaRes.ok) {
-            const kreaData = await kreaRes.json();
-            const kreaImageUrl = kreaData?.generations?.[0]?.image?.url || kreaData?.image_url;
-            if (kreaImageUrl) {
-              return new Response(
-                JSON.stringify({ imageUrl: kreaImageUrl, text: "Generated via Krea fallback" }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
-            }
-          }
-        } catch (kreaErr) {
-          console.warn("Krea image fallback also failed:", kreaErr);
-        }
-      }
-
-      console.error("All image generation models failed. Last error:", lastRaw.slice(0, 300));
-      return new Response(JSON.stringify({ error: "שגיאה בשירות יצירת התמונות — כל המודלים נכשלו" }), {
+    if (!kreaRes.ok) {
+      const errRaw = await kreaRes.text();
+      console.error("Krea image generation failed:", kreaRes.status, errRaw.slice(0, 300));
+      return new Response(JSON.stringify({ error: "שגיאה בשירות יצירת התמונות (Krea)" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
-    const message = data.choices?.[0]?.message;
-    const imageData = message?.images?.[0]?.image_url?.url;
-    const text = message?.content || "";
+    const kreaData = await kreaRes.json();
+    const imageData = kreaData?.generations?.[0]?.image?.url || kreaData?.image_url;
+    const text = "";
 
     if (!imageData) {
       return new Response(JSON.stringify({ error: "לא הצלחתי ליצור תמונה, נסה תיאור אחר", text }), {
