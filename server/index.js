@@ -207,7 +207,7 @@ app.post("/functions/v1/text-to-speech", async (req, res) => {
   if (!KEY) return err(res, "ELEVENLABS_API_KEY חסר", 400);
   const { text, voiceId, modelId, stability, similarityBoost, style } = req.body;
   if (!text) return err(res, "חסר טקסט", 400);
-  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || "21m00Tcm4TlvDq8ikWAM"}`, {
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || "J1xFxuLLC179EfEjbCax"}`, {
     method: "POST",
     headers: { "xi-api-key": KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ text, model_id: modelId || "eleven_multilingual_v2", voice_settings: { stability: stability ?? 0.5, similarity_boost: similarityBoost ?? 0.75, style: style ?? 0, use_speaker_boost: true } }),
@@ -511,7 +511,7 @@ app.post("/functions/v1/elevenlabs-music", async (req, res) => {
   const headers = { "xi-api-key": KEY, "Content-Type": "application/json" };
 
   if (action === "text_to_speech" || action === "generate") {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || "21m00Tcm4TlvDq8ikWAM"}`, {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || "J1xFxuLLC179EfEjbCax"}`, {
       method: "POST", headers,
       body: JSON.stringify({ text: text || "", model_id: modelId || "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
     });
