@@ -19,6 +19,9 @@ const FUNCTIONS_URL = import.meta.env.DEV
   ? "http://localhost:3001/functions/v1"
   : "https://yfezjihpwlooktxyxfdt.supabase.co/functions/v1";
 
-if ((supabase as any).functions?.url !== undefined) {
+// Force-override — functions are deployed on yfezjihpwlooktxyxfdt
+try {
   (supabase as any).functions.url = FUNCTIONS_URL;
+} catch {
+  // ignore if property is not writable
 }

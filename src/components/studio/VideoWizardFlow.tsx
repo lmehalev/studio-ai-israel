@@ -417,7 +417,8 @@ export function VideoWizardFlow({
   };
 
   const selectedAvatars = avatars.filter(a => selectedAvatarIds.includes(a.id));
-  const eligibleVoices = voices.filter(v => Boolean(v.provider_voice_id && v.is_verified));
+  // is_verified may not exist in DB schema — treat any voice with provider_voice_id as eligible
+  const eligibleVoices = voices.filter(v => Boolean(v.provider_voice_id));
   const selectedVoices = eligibleVoices.filter(v => selectedVoiceIds.includes(v.id));
 
   useEffect(() => {
@@ -436,8 +437,8 @@ export function VideoWizardFlow({
 
   const toggleVoice = (id: string) => {
     const voice = voices.find((v) => v.id === id);
-    if (!voice?.provider_voice_id || !voice?.is_verified) {
-      toast.error('הקול לא מאומת עדיין. בצע איפוס/שכפול ואימות בדף הקולות.');
+    if (!voice?.provider_voice_id) {
+      toast.error('לקול זה אין מזהה ספק. הוסף קול מדף הקולות.');
       return;
     }
 

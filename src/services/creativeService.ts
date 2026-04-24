@@ -162,29 +162,26 @@ export const avatarGenService = {
 // ====== Avatar DB Service (CRUD) ======
 export const avatarDbService = {
   list: async () => {
-    const { data, error } = await supabase.functions.invoke("avatar-manager", {
-      body: { action: "list" },
-    });
+    // Direct DB query — data lives in Lovable project (fyfqyeouyxotohtxlbdg)
+    const { data, error } = await supabase.from("avatars").select("*").order("created_at", { ascending: false });
     if (error) throw new Error(error.message || "שגיאה בטעינת אווטארים");
-    if (data?.error) throw new Error(data.error);
-    return data.avatars || [];
+    return data || [];
   },
 
   save: async (name: string, imageUrl: string, style: string, sourcePhotos: string[]) => {
-    const { data, error } = await supabase.functions.invoke("avatar-manager", {
-      body: { action: "save", name, image_url: imageUrl, style, source_photos: sourcePhotos },
-    });
+    const { data, error } = await supabase.from("avatars").insert({
+      name,
+      image_url: imageUrl,
+      style,
+      source_photos: sourcePhotos,
+    }).select().single();
     if (error) throw new Error(error.message || "שגיאה בשמירת אווטאר");
-    if (data?.error) throw new Error(data.error);
-    return data.avatar;
+    return data;
   },
 
   remove: async (id: string) => {
-    const { data, error } = await supabase.functions.invoke("avatar-manager", {
-      body: { action: "delete", id },
-    });
+    const { error } = await supabase.from("avatars").delete().eq("id", id);
     if (error) throw new Error(error.message || "שגיאה במחיקת אווטאר");
-    if (data?.error) throw new Error(data.error);
   },
 };
 
