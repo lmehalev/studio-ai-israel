@@ -1088,6 +1088,14 @@ Deno.serve(async (req) => {
       const isDone = r.status === "done" || r.status === "rendered";
       const normalizedStatus = isDone ? "done" : r.status;
 
+      // Capture error detail when Shotstack fails
+      let providerErrorDetail: string | undefined;
+      if (r.status === "failed") {
+        const errorDetail = r.error || r.message || r.details || JSON.stringify(r).slice(0, 300);
+        console.error("Shotstack render failed details:", errorDetail);
+        providerErrorDetail = typeof errorDetail === "string" ? errorDetail : JSON.stringify(errorDetail).slice(0, 300);
+      }
+
       const statusResponse: ComposeRenderResponse = {
         renderId: String(renderId),
         status: normalizedStatus,
@@ -1095,6 +1103,7 @@ Deno.serve(async (req) => {
         thumbnailUrl: r.poster || null,
         subtitleCount: Number(params.subtitleCount) || 0,
         logoPlacementSummary: null,
+        providerErrorDetail,
       };
 
       return new Response(JSON.stringify(statusResponse), {

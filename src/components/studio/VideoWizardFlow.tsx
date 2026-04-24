@@ -332,6 +332,8 @@ export function VideoWizardFlow({
   const [runwayPolling, setRunwayPolling] = useState(false);
   const [runwayProgress, setRunwayProgress] = useState(0);
   const [progressStage, setProgressStage] = useState('');
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Improve / refine
   const [improvePrompt, setImprovePrompt] = useState(restoredSession?.improvePrompt ?? '');
@@ -368,6 +370,15 @@ export function VideoWizardFlow({
   const [showCostApproval, setShowCostApproval] = useState(false);
   const [costEstimates, setCostEstimates] = useState<CostEstimate[]>([]);
   const [pendingAction, setPendingAction] = useState<'generate' | 'improve' | null>(null);
+
+  // Elapsed time timer during generation
+  useEffect(() => {
+    if (step !== 3 || generationStartTime === null) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - generationStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [step, generationStartTime]);
 
   // Emit session changes to parent for persistence
   useEffect(() => {
@@ -839,6 +850,8 @@ export function VideoWizardFlow({
     setRunwayPolling(true);
     setRunwayProgress(0);
     setProgressStage('מכין את הייצור...');
+    setGenerationStartTime(Date.now());
+    setElapsedSeconds(0);
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
@@ -1265,8 +1278,9 @@ export function VideoWizardFlow({
             return;
           }
           if (status.status === 'failed' || (status.status && status.status.startsWith('failed:'))) {
-            addDebugLog(runId, 'compose', 'error', `Shotstack render failed: ${status.status}`);
-            throw new Error(`Shotstack render failed (${status.status})`);
+            const detail = (status as any).providerErrorDetail ? ` — ${(status as any).providerErrorDetail}` : '';
+            addDebugLog(runId, 'compose', 'error', `Shotstack render failed: ${status.status}${detail}`);
+            throw new Error(`הרכבת הסרטון נכשלה ב-Shotstack${detail || ` (${status.status})`}`);
           }
           setRunwayProgress(70 + (i / composeMaxAttempts) * 28);
           await sleep(COMPOSE_STATUS_POLL_MS);
@@ -2171,7 +2185,21 @@ export function VideoWizardFlow({
           <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
             <div className="bg-gradient-to-r from-primary to-primary/70 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${runwayProgress}%` }} />
           </div>
-          <p className="text-xs text-muted-foreground">{Math.round(runwayProgress)}% הושלם</p>
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+            <span>{Math.round(runwayProgress)}% הושלם</span>
+            <span className="font-mono" dir="ltr">
+              {elapsedSeconds >= 60
+                ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')} עברו`
+                : `${elapsedSeconds}s עברו`}
+              {runwayProgress > 5 && runwayProgress < 95 && (() => {
+                const totalEst = (elapsedSeconds / Math.max(runwayProgress, 1)) * 100;
+                const remaining = Math.max(0, Math.round(totalEst - elapsedSeconds));
+                return remaining > 0
+                  ? ` · ~${remaining >= 60 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : `${remaining}s`} נותר`
+                  : null;
+              })()}
+            </span>
+          </div>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             {[
               { label: 'בדיקת ספקים', done: runwayProgress > 5 },
