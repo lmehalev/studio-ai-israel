@@ -321,6 +321,24 @@ async function checkPerplexityAI(apiKey: string): Promise<ProviderStatus> {
   } catch (e) { return toError("perplexity", "בקשות", "https://www.perplexity.ai/account/details", e); }
 }
 
+async function checkAnthropic(apiKey: string): Promise<ProviderStatus> {
+  const base: Partial<ProviderStatus> = { service: "anthropic", unit: "tokens", dashboardUrl: "https://console.anthropic.com/", environment: "production" };
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "ping" }] }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { ...base, readiness: "auth_failed", authValid: false, creditsAvailable: null, modelsAccessible: null, liveGenerationPassed: null, used: 0, limit: 0, plan: "unknown", canGenerate: false, statusLabel: hebrewLabels.auth_failed } as ProviderStatus;
+    }
+    if (res.ok || res.status === 429) {
+      return { ...base, readiness: "generation_verified", authValid: true, creditsAvailable: true, modelsAccessible: true, liveGenerationPassed: true, used: 0, limit: -1, plan: "API", canGenerate: true, statusLabel: hebrewLabels.generation_verified } as ProviderStatus;
+    }
+    throw new Error(`HTTP ${res.status}`);
+  } catch (e) { return toError("anthropic", "tokens", "https://console.anthropic.com/", e); }
+}
+
 /* ════════════════════════════════════════════════════
    Main handler
    ════════════════════════════════════════════════════ */
@@ -339,9 +357,11 @@ Deno.serve(async (req) => {
     const cloudinarySecret = Deno.env.get("CLOUDINARY_API_SECRET");
     const kreaKey = Deno.env.get("KREA_API_KEY");
     const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
     const promises: Promise<ProviderStatus>[] = [];
 
+    if (anthropicKey) promises.push(withTimeout("anthropic", "tokens", "https://console.anthropic.com/", checkAnthropic(anthropicKey)));
     if (elevenLabsKey) promises.push(withTimeout("elevenlabs", "תווים", ELEVENLABS_DASHBOARD_URL, checkElevenLabs(elevenLabsKey)));
     if (heygenKey) promises.push(withTimeout("heygen", "קרדיטים", "https://app.heygen.com/settings", checkHeyGen(heygenKey)));
     if (runwayKey) promises.push(withTimeout("runway", "קרדיטים", RUNWAY_DASHBOARD_URL, checkRunway(runwayKey)));
