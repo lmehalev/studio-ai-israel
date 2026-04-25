@@ -208,13 +208,14 @@ export function StudioWizardDialog({ open, onOpenChange, activeBrand, activeBran
     }
   };
 
-  // Load avatars & voices when dialog opens — direct DB queries to Lovable project
+  // Load avatars & voices when dialog opens
   useEffect(() => {
     if (open) {
       avatarDbService.list().then(list => setAvailableAvatars(list)).catch(() => {});
-      supabase.from('voices').select('*').order('created_at', { ascending: false })
+      // Voices live in yfezjihpwlooktxyxfdt — read via voice-manager edge function
+      supabase.functions.invoke('voice-manager', { body: { action: 'list' } })
         .then(({ data }) => {
-          if (data) setAvailableVoices(data);
+          if (data?.voices) setAvailableVoices(data.voices);
         })
         .catch(() => {});
     }
