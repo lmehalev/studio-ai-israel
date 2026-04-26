@@ -1821,19 +1821,18 @@ export function VideoWizardFlow({
             </div>
           )}
 
-          {/* Voices multi-select */}
-          {voices.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5" /> בחר קולות (ניתן לבחור כמה)
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => setUseAiVoice(!useAiVoice)}
-                  className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-1.5',
-                    useAiVoice ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/30 text-muted-foreground')}>
-                  <Sparkles className="w-3 h-3" /> קול AI אוטומטי
-                </button>
-                {voices.map(voice => {
+          {/* Voices multi-select — always show AI voice option */}
+          <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Volume2 className="w-3.5 h-3.5" /> בחר קול
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setUseAiVoice(!useAiVoice)}
+                className={cn('px-3 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-1.5',
+                  useAiVoice ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/30 text-muted-foreground')}>
+                <Sparkles className="w-3 h-3" /> קול AI אוטומטי (נתנאל)
+              </button>
+              {voices.length > 0 && voices.map(voice => {
                   const selected = selectedVoiceIds.includes(voice.id);
                   return (
                     <button key={voice.id} onClick={() => toggleVoice(voice.id)}
@@ -1846,8 +1845,7 @@ export function VideoWizardFlow({
                   );
                 })}
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Images */}
           <div className="bg-card border border-border rounded-xl p-3 space-y-2">
