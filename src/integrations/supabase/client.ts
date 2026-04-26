@@ -15,9 +15,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 
 // Edge functions are deployed on our project (yfezjihpwlooktxyxfdt)
 // Data stays on the Lovable project — only function calls are redirected
-const FUNCTIONS_URL = import.meta.env.DEV
-  ? "http://localhost:3001/functions/v1"
-  : "https://yfezjihpwlooktxyxfdt.supabase.co/functions/v1";
+const FUNCTIONS_URL = "https://yfezjihpwlooktxyxfdt.supabase.co/functions/v1";
 
 // Force-override — functions are deployed on yfezjihpwlooktxyxfdt
 try {
