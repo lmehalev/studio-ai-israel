@@ -29,6 +29,12 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Auto-authenticate in local development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      setIsAuthenticated(true);
+      setLoading(false);
+      return;
+    }
     setIsAuthenticated(!!getSession());
     setLoading(false);
   }, []);
