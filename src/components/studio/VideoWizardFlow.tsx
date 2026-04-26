@@ -2186,15 +2186,18 @@ export function VideoWizardFlow({
           <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
             <span>{Math.round(runwayProgress)}% הושלם</span>
             <span className="font-mono" dir="ltr">
-              {elapsedSeconds >= 60
-                ? `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')} עברו`
-                : `${elapsedSeconds}s עברו`}
-              {runwayProgress > 5 && runwayProgress < 95 && (() => {
-                const totalEst = (elapsedSeconds / Math.max(runwayProgress, 1)) * 100;
+              {(() => {
+                const m = Math.floor(elapsedSeconds / 60);
+                const s = elapsedSeconds % 60;
+                const elapsedFmt = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                if (runwayProgress < 30 || runwayProgress >= 95) {
+                  return `${elapsedFmt} עברו`;
+                }
+                const totalEst = Math.max((elapsedSeconds / runwayProgress) * 100, elapsedSeconds + 30);
                 const remaining = Math.max(0, Math.round(totalEst - elapsedSeconds));
-                return remaining > 0
-                  ? ` · ~${remaining >= 60 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : `${remaining}s`} נותר`
-                  : null;
+                const rm = Math.floor(remaining / 60);
+                const rs = remaining % 60;
+                return `${elapsedFmt} עברו · ~${String(rm).padStart(2, '0')}:${String(rs).padStart(2, '0')} נותר`;
               })()}
             </span>
           </div>
