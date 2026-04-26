@@ -334,6 +334,7 @@ export function VideoWizardFlow({
   const [progressStage, setProgressStage] = useState('');
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [generationLogs, setGenerationLogs] = useState<{ type: 'info' | 'warning' | 'error'; msg: string }[]>([]);
 
   // Improve / refine
   const [improvePrompt, setImprovePrompt] = useState(restoredSession?.improvePrompt ?? '');
@@ -852,6 +853,10 @@ export function VideoWizardFlow({
     setProgressStage('מכין את הייצור...');
     setGenerationStartTime(Date.now());
     setElapsedSeconds(0);
+    setGenerationLogs([]);
+    const logGen = (type: 'info' | 'warning' | 'error', msg: string) => {
+      setGenerationLogs(prev => [...prev, { type, msg }]);
+    };
 
     try {
       const avatarImage = selectedAvatars[0]?.image_url;
@@ -945,14 +950,16 @@ export function VideoWizardFlow({
         if (runwayBlocked || !runwayReady) {
           if (heygenReady) {
             forceDidOnlyMode = true;
+            logGen('warning', `Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר אוטומטית למסלול HeyGen.`);
             toast.warning(`Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר אוטומטית למסלול HeyGen.`);
           } else if (kreaReady) {
             forceKreaOnlyMode = true;
+            logGen('warning', `Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר למסלול Krea.`);
             toast.warning(`Runway: ${getStatusLabel('runway') || 'לא זמין'} — עובר למסלול Krea.`);
           } else if (runwayBlocked && heygenBlocked && kreaBlocked) {
             throw new Error(`כל ספקי הווידאו חסומים:\n• Runway: ${getStatusLabel('runway')}\n• HeyGen: ${getStatusLabel('heygen')}\n• Krea: ${getStatusLabel('krea')}\nיש לחדש קרדיטים ואז לנסות שוב.`);
           } else {
-            // Providers are "authenticated" but not verified — try anyway with warning
+            logGen('warning', 'הספקים מחוברים אבל היצירה לא אומתה — מנסה עם מנגנון גיבוי אוטומטי.');
             toast.warning('הספקים מחוברים אבל היצירה לא אומתה — מנסה עם מנגנון גיבוי אוטומטי.');
           }
         }
@@ -960,6 +967,7 @@ export function VideoWizardFlow({
         const msg = creditsErr?.message || '';
         if (msg.includes('חסומים') || msg.includes('אין קרדיטים')) throw creditsErr;
         console.warn('Credit check skipped:', msg);
+        logGen('info', 'בדיקת הספקים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
         toast.info('בדיקת הספקים מתעכבת, ממשיכים לייצור עם מנגנון גיבוי אוטומטי.');
       }
 
@@ -992,9 +1000,11 @@ export function VideoWizardFlow({
           addDebugLog(runId, 'narration', 'warn', `Voice clone failed: ${msg}`);
           console.warn('Voice clone failed, falling back to AI TTS:', msg);
           if (msg.includes('קובץ הקול לא נמצא')) {
+            logGen('error', 'קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
             toast.error('קובץ הדגימה של הקול השמור לא נמצא. העלה/הקלט קול מחדש, בינתיים ממשיך עם קריין AI.');
             setSelectedVoiceIds(prev => prev.filter(id => id !== selectedVoice.id));
           } else {
+            logGen('warning', 'לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
             toast.info('לא הצלחתי לשכפל את הקול, משתמש בקריין AI...');
           }
         }
@@ -1106,6 +1116,7 @@ export function VideoWizardFlow({
             console.warn(`Scene ${sceneIdx + 1} Runway failed:`, msg);
             if (isRunwayCreditsErrorMessage(msg)) {
               runwayBlocked = true;
+              logGen('warning', 'Runway לא זמין, עובר לספק חלופי...');
               toast.warning('Runway לא זמין, עובר לספק חלופי...');
             }
           }
@@ -1148,6 +1159,7 @@ export function VideoWizardFlow({
           sceneErrors.push(`סצנה ${sceneNum}: ${errMsg}`);
           failedSceneIndexes.push(sceneIdx);
           console.error(`Scene ${sceneNum} all providers failed:`, errMsg);
+          logGen('error', `סצנה ${sceneNum} נכשלה — ${errMsg}`);
           toast.error(`סצנה ${sceneNum} נכשלה — ${errMsg}`);
         }
       }
@@ -1195,6 +1207,7 @@ export function VideoWizardFlow({
 
       if (successfulResults.length < sceneResults.length) {
         const missing = sceneResults.length - successfulResults.length;
+        logGen('warning', `${missing} סצנות לא הצליחו — ממשיך עם ${successfulResults.length} סצנות (${achievedDuration}s מתוך ${targetDurationSec}s).`);
         toast.warning(`${missing} סצנות לא הצליחו — ממשיך עם ${successfulResults.length} סצנות (${achievedDuration}s מתוך ${targetDurationSec}s).`);
       }
 
@@ -1241,6 +1254,7 @@ export function VideoWizardFlow({
             // DURATION ENFORCEMENT: Verify output is within acceptable range
             if (totalDuration < minAcceptableDuration) {
               addDebugLog(runId, 'complete', 'warn', `Duration ${totalDuration}s below target ${targetDurationSec}s`, { outputUrl: status.url });
+              logGen('warning', `אזהרה: הסרטון (${totalDuration}s) קצר מהיעד (${targetDurationSec}s).`);
               toast.warning(`אזהרה: הסרטון (${totalDuration}s) קצר מהיעד (${targetDurationSec}s).`);
             }
 
@@ -2224,6 +2238,20 @@ export function VideoWizardFlow({
           )}
           {activeRunId && (
             <p className="text-[10px] text-muted-foreground/40 font-mono" dir="ltr">Run: {activeRunId}</p>
+          )}
+          {/* Persistent generation log */}
+          {generationLogs.length > 0 && (
+            <div className="text-right mt-3 space-y-1 max-h-32 overflow-y-auto border border-border rounded-lg p-2 bg-muted/40">
+              {generationLogs.map((log, i) => (
+                <p key={i} className={`text-[11px] leading-snug ${
+                  log.type === 'error' ? 'text-destructive' :
+                  log.type === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
+                  'text-muted-foreground'
+                }`}>
+                  {log.type === 'error' ? '✗' : log.type === 'warning' ? '⚠' : 'ℹ'} {log.msg}
+                </p>
+              ))}
+            </div>
           )}
           {/* Debug panel toggle */}
           <button onClick={() => setShowDebugPanel(!showDebugPanel)}
