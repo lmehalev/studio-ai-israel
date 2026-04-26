@@ -269,6 +269,7 @@ export const composeService = {
     sourceWidth?: number;
     sourceHeight?: number;
     captionPosition?: string;
+    shotstackEnv?: 'production' | 'stage';
   }): Promise<{
     renderId: string | null;
     status: string;

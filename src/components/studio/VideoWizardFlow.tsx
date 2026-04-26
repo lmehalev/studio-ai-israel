@@ -1223,13 +1223,21 @@ export function VideoWizardFlow({
       const brandColors = activeBrand?.colors || [];
 
       try {
+        // Strip heavy scene fields before sending to compose — reduce payload size
+        const leanScenes = finalScenes.map((s: any) => ({
+          duration: s.duration,
+          subtitleText: s.subtitleText || s.spokenText?.slice(0, 120) || '',
+          title: s.title || '',
+        }));
+
         const renderResult = await composeService.render({
           videoUrl: sceneVideoUrls[0],
           videoUrls: sceneVideoUrls,
-          scenes: finalScenes,
+          scenes: leanScenes,
           logoUrl,
           brandColors,
           audioUrl: narrationAudioUrl,
+          shotstackEnv: 'stage',
         });
 
         addDebugLog(runId, 'compose', renderResult?.renderId ? 'success' : 'error',
