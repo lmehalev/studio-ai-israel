@@ -878,26 +878,6 @@ Deno.serve(async (req) => {
             });
           }
 
-          if (scene.icons && scene.icons.length > 0) {
-            const iconPositions = ["left", "right", "topLeft", "topRight"];
-            scene.icons.slice(0, 4).forEach((icon: string, i: number) => {
-              textClips.push({
-                asset: {
-                  type: "html",
-                  html: `<div style="font-size:56px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.4));">${icon}</div>`,
-                  width: 90,
-                  height: 90,
-                },
-                start: cumulativeTime + 0.8 + i * 0.5,
-                length: Math.min(dur - 1.5, 2.5),
-                position: iconPositions[i % iconPositions.length],
-                offset: { x: i % 2 === 0 ? 0.1 : -0.1, y: -0.18 },
-                scale: 0.85,
-                transition: { in: "zoom", out: "fade" },
-              });
-            });
-          }
-
           cumulativeTime += dur;
         }
 
@@ -938,20 +918,6 @@ Deno.serve(async (req) => {
       tracks.push({ clips: videoClips });
 
       const bgColor = brandColors?.[0] || "#0f0f23";
-      tracks.push({
-        clips: [
-          {
-            asset: {
-              type: "html",
-              html: `<div style="width:100%;height:100%;background:linear-gradient(160deg, ${bgColor} 0%, #1a1a2e 50%, #0d0d1a 100%);"></div>`,
-              width: outputConfig.width,
-              height: outputConfig.height,
-            },
-            start: 0,
-            length: totalDuration,
-          },
-        ],
-      });
 
       const soundtrack: any = {};
       if (audioUrl) {
@@ -994,7 +960,10 @@ Deno.serve(async (req) => {
         logoPlacementSummary,
       };
 
-      console.log("Submitting Shotstack render (payload KB):", Math.round(JSON.stringify(renderBody).length / 1024));
+      const payloadStr = JSON.stringify(renderBody);
+      const payloadKb = Math.round(payloadStr.length / 1024);
+      const totalClips = renderBody.timeline.tracks.reduce((sum: number, t: any) => sum + (t.clips?.length || 0), 0);
+      console.log(`Shotstack render payload: ${payloadKb}KB | tracks: ${renderBody.timeline.tracks.length} | clips: ${totalClips}`);
 
       const envOrder = getShotstackEnvOrder(params.shotstackEnv);
       const renderErrors: string[] = [];
@@ -1005,7 +974,7 @@ Deno.serve(async (req) => {
         const response = await fetch(`${baseUrl}/render`, {
           method: "POST",
           headers: getHeaders(env),
-          body: JSON.stringify(renderBody),
+          body: payloadStr,
         });
 
         if (response.ok) {
@@ -1036,7 +1005,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (![401, 402, 403, 404].includes(response.status)) {
+        // Only continue to next env on auth/quota errors — stop on payload/server errors
+        if (![401, 402, 403, 404, 413].includes(response.status)) {
           break;
         }
       }
