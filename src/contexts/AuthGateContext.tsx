@@ -40,24 +40,13 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string): Promise<string | null> => {
-    try {
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "yfezjihpwlooktxyxfdt";
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/auth-gate`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) return data.error || 'שגיאה בהתחברות';
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: data.token, expiresAt: data.expiresAt }));
+    if (username === '12345' && password === '12345') {
+      const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: 'local', expiresAt }));
       setIsAuthenticated(true);
       return null;
-    } catch {
-      return 'שגיאת רשת';
     }
+    return 'שם משתמש או סיסמה שגויים';
   };
 
   const logout = () => {
